@@ -80,32 +80,32 @@
 #endif
 
 #if CTF_UNICODE == CTF_UNICODE_GENERIC
-#define CTF_INTERNAL_PRINT_PASS "✓"
-#define CTF_INTERNAL_PRINT_FAIL "✗"
+#define CTF_PRINT_PASS "✓"
+#define CTF_PRINT_FAIL "✗"
 #elif CTF_UNICODE == CTF_UNICODE_BRANDED
-#define CTF_INTERNAL_PRINT_PASS "✓"
-#define CTF_INTERNAL_PRINT_FAIL "⚑"
-#else
-#define CTF_INTERNAL_PRINT_PASS "P"
-#define CTF_INTERNAL_PRINT_FAIL "F"
+#define CTF_PRINT_PASS "✓"
+#define CTF_PRINT_FAIL "⚑"
+#elif CTF_UNICODE == CTF_OFF
+#define CTF_PRINT_PASS "P"
+#define CTF_PRINT_FAIL "F"
 #endif
 
 #define CTF_INTERNAL_PRINT_GROUP_PASS_RAW(name, before, after) \
-  "[" before CTF_INTERNAL_PRINT_PASS after "] %s\n", (name)
+  "[" before CTF_PRINT_PASS after "] %s\n", (name)
 #define CTF_INTERNAL_PRINT_GROUP_FAIL_RAW(name, before, after) \
-  "[" before CTF_INTERNAL_PRINT_FAIL after "] %s\n", (name)
+  "[" before CTF_PRINT_FAIL after "] %s\n", (name)
 #define CTF_INTERNAL_PRINT_TEST_PASS_RAW(name, name_len, before, after) \
-  "    [" before CTF_INTERNAL_PRINT_PASS after "] %.*s\n", (name_len), (name)
+  "    [" before CTF_PRINT_PASS after "] %.*s\n", (name_len), (name)
 #define CTF_INTERNAL_PRINT_TEST_FAIL_HEADER_RAW(name, name_len, before, after) \
-  "    [" before CTF_INTERNAL_PRINT_FAIL after "] %.*s\n", (name_len), (name)
+  "    [" before CTF_PRINT_FAIL after "] %.*s\n", (name_len), (name)
 #define CTF_INTERNAL_PRINT_TEST_PASS_HEADER_RAW(name, name_len, before, after) \
-  "    [" before CTF_INTERNAL_PRINT_PASS after "] %.*s\n", (name_len), (name)
+  "    [" before CTF_PRINT_PASS after "] %.*s\n", (name_len), (name)
 #define CTF_INTERNAL_PRINT_TEST_PASS_INFO_RAW(state, before, after) \
-  "        [" before CTF_INTERNAL_PRINT_PASS after "] %s\n", (state).msg
+  "        [" before CTF_PRINT_PASS after "] %s\n", (state).msg
 #define CTF_INTERNAL_PRINT_TEST_FAIL_INFO_RAW(state, before, after) \
-  "        [" before CTF_INTERNAL_PRINT_FAIL after "] %s\n", (state).msg
+  "        [" before CTF_PRINT_FAIL after "] %s\n", (state).msg
 #define CTF_INTERNAL_PRINT_TEST_PASS_INFO_DETAIL_RAW(state, before, after)   \
-  "        %*s[" before CTF_INTERNAL_PRINT_PASS after "] %s\n",              \
+  "        %*s[" before CTF_PRINT_PASS after "] %s\n",                       \
     ((int)strlen((state).file) + 2 + ctf_internal_int_length((state).line)), \
     "", (state).msg
 #define CTF_INTERNAL_PRINT_TEST_FAIL_INFO_DETAIL_RAW(state, before, after) \
@@ -359,14 +359,15 @@ void ctf_parallel_internal_groups_run(int count, ...) {
   pthread_cond_broadcast(&ctf_parallel_internal_task_queue_non_empty);
   pthread_mutex_unlock(&ctf_parallel_internal_task_queue_mutex);
 }
-void ctf_parallel_internal_wait_until_done(void) {
+void ctf_parallel_sync(void) {
   pthread_mutex_lock(&ctf_parallel_internal_task_queue_mutex);
   while(ctf_parallel_internal_threads_waiting != CTF_PARALLEL ||
         ctf_parallel_internal_task_queue[0] != NULL) {
     pthread_cond_wait(&ctf_parallel_internal_threads_waiting_all,
                       &ctf_parallel_internal_task_queue_mutex);
-    pthread_mutex_unlock(&ctf_parallel_internal_task_queue_mutex);
   }
+  fflush(stdout);
+  pthread_mutex_unlock(&ctf_parallel_internal_task_queue_mutex);
 }
 void ctf_parallel_start(void) {
   ctf_parallel_internal_state = 1;

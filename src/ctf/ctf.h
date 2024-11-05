@@ -7,6 +7,7 @@
 #define CTF_AUTO 2
 #define CTF_UNICODE_GENERIC 1
 #define CTF_UNICODE_BRANDED 2
+#define CTF_USER_DEFINED 3
 
 #ifndef CTF_COLOR
 #define CTF_COLOR CTF_AUTO
@@ -52,12 +53,16 @@
       return;                                                  \
     }                                                          \
   } while(0)
+#if CTF_DETAIL == CTF_OFF
+#define CTF_INTERNAL_ASSERT_COPY
+#else
 #define CTF_INTERNAL_ASSERT_COPY                         \
   do {                                                   \
     err[ctf_internal_next_state].line = __LINE__;        \
     strncpy(err[ctf_internal_next_state].file, __FILE__, \
             CTF_CONST_STATE_FILE_SIZE);                  \
   } while(0)
+#endif
 #define CTF_INTERNAL_ASSERT_END                     \
   do {                                              \
     if(err[ctf_internal_next_state].status) return; \
@@ -175,8 +180,10 @@
 /* Types */
 struct ctf_internal_state {
   int status;
+#if CTF_DETAIL != CTF_OFF
   int line;
   char file[CTF_CONST_STATE_FILE_SIZE];
+#endif
   char msg[CTF_CONST_STATE_MSG_SIZE];
 };
 typedef void (*const ctf_internal_test)(
@@ -207,7 +214,6 @@ int ctf_internal_int_length(int a);
 #ifdef CTF_PARALLEL
 void ctf_parallel_internal_group_run(const struct ctf_internal_group *group);
 void ctf_parallel_internal_groups_run(int count, ...);
-void ctf_parallel_internal_wait_until_done(void);
 #endif
 
 /* UI */
@@ -245,6 +251,7 @@ void ctf_parallel_internal_wait_until_done(void);
 #else
 void ctf_parallel_start(void);
 void ctf_parallel_stop(void);
+void ctf_parallel_sync(void);
 #define ctf_group_run(name)                  \
   do {                                       \
     if(ctf_parallel_internal_state) {        \
@@ -267,14 +274,13 @@ void ctf_parallel_stop(void);
         __VA_ARGS__);                                                      \
     }                                                                      \
   } while(0)
-#define ctf_barrier()                        \
-  do {                                       \
-    ctf_parallel_internal_wait_until_done(); \
-    if(ctf_exit_code) {                      \
-      ctf_parallel_stop();                   \
-      return ctf_exit_code;                  \
-    }                                        \
-    fflush(stdout);                          \
+#define ctf_barrier()       \
+  do {                      \
+    ctf_parallel_sync();    \
+    if(ctf_exit_code) {     \
+      ctf_parallel_stop();  \
+      return ctf_exit_code; \
+    }                       \
   } while(0)
 #endif
 
@@ -393,6 +399,8 @@ void ctf_parallel_stop(void);
   CTF_INTERNAL_ASSERT_MEM(a, b, >, void *const, "%p", length)
 #define ctf_assert_memory_ptr_lte(a, b, length) \
   CTF_INTERNAL_ASSERT_MEM(a, b, <=, void *const, "%p", length)
+#define ctf_assert_memory_ptr_gte(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM_RAW(a, b, >=, void *const, "%p", length)
 #define ctf_assert_array_char_eq(a, b) \
   CTF_INTERNAL_ASSERT_ARR(a, b, ==, char, "%c")
 #define ctf_assert_array_char_neq(a, b) \
@@ -471,6 +479,12 @@ void ctf_parallel_stop(void);
     CTF_INTERNAL_EXPECT_END;                                                \
   } while(0);
 #define ctf_expect(test) ctf_expect_msg(test, CTF_INTERNAL_STRINGIFY2(test))
+#define ctf_expect_char_eq(a, b) CTF_INTERNAL_EXPECT(a, b, ==, char, "%c");
+#define ctf_expect_char_neq(a, b) CTF_INTERNAL_EXPECT(a, b, !=, char, "%c");
+#define ctf_expect_char_gt(a, b) CTF_INTERNAL_EXPECT(a, b, >, char, "%c");
+#define ctf_expect_char_lt(a, b) CTF_INTERNAL_EXPECT(a, b, <, char, "%c");
+#define ctf_expect_char_gte(a, b) CTF_INTERNAL_EXPECT(a, b, >=, char, "%c");
+#define ctf_expect_char_lte(a, b) CTF_INTERNAL_EXPECT(a, b, <=, char, "%c");
 #define ctf_expect_int_eq(a, b) CTF_INTERNAL_EXPECT(a, b, ==, intmax_t, "%jd");
 #define ctf_expect_int_neq(a, b) CTF_INTERNAL_EXPECT(a, b, !=, intmax_t, "%jd");
 #define ctf_expect_int_gt(a, b) CTF_INTERNAL_EXPECT(a, b, >, intmax_t, "%jd");
@@ -509,6 +523,18 @@ void ctf_parallel_stop(void);
   CTF_INTERNAL_EXPECT_FUNC(a, b, >=, char *const, "%s", strcmp);
 #define ctf_expect_string_lte(a, b) \
   CTF_INTERNAL_EXPECT_FUNC(a, b, <=, char *const, "%s", strcmp);
+#define ctf_expect_memory_char_eq(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM_RAW(a, b, ==, char, "%c", length)
+#define ctf_expect_memory_char_neq(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM_RAW(a, b, !=, char, "%c", length)
+#define ctf_expect_memory_char_lt(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM_RAW(a, b, <, char, "%c", length)
+#define ctf_expect_memory_char_gt(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM_RAW(a, b, >, char, "%c", length)
+#define ctf_expect_memory_char_lte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM_RAW(a, b, <=, char, "%c", length)
+#define ctf_expect_memory_char_gte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM_RAW(a, b, >=, char, "%c", length)
 #define ctf_expect_memory_int_eq(a, b, length) \
   CTF_INTERNAL_EXPECT_MEM_RAW(a, b, ==, intmax_t, "%jd", length)
 #define ctf_expect_memory_int_neq(a, b, length) \
@@ -543,6 +569,20 @@ void ctf_parallel_stop(void);
   CTF_INTERNAL_EXPECT_MEM(a, b, >, void *const, "%p", length)
 #define ctf_expect_memory_ptr_lte(a, b, length) \
   CTF_INTERNAL_EXPECT_MEM(a, b, <=, void *const, "%p", length)
+#define ctf_expect_memory_ptr_gte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM_RAW(a, b, >=, void *const, "%p", length)
+#define ctf_expect_array_char_eq(a, b) \
+  CTF_INTERNAL_EXPECT_ARR(a, b, ==, char, "%c")
+#define ctf_expect_array_char_neq(a, b) \
+  CTF_INTERNAL_EXPECT_ARR(a, b, !=, char, "%c")
+#define ctf_expect_array_char_lt(a, b) \
+  CTF_INTERNAL_EXPECT_ARR(a, b, <, char, "%c")
+#define ctf_expect_array_char_gt(a, b) \
+  CTF_INTERNAL_EXPECT_ARR(a, b, >, char, "%c")
+#define ctf_expect_array_char_lte(a, b) \
+  CTF_INTERNAL_EXPECT_ARR(a, b, <=, char, "%c")
+#define ctf_expect_array_char_gte(a, b) \
+  CTF_INTERNAL_EXPECT_ARR(a, b, >=, char, "%c")
 #define ctf_expect_array_int_eq(a, b) \
   CTF_INTERNAL_EXPECT_ARR(a, b, ==, intmax_t, "%jd")
 #define ctf_expect_array_int_neq(a, b) \
@@ -603,6 +643,12 @@ void ctf_parallel_stop(void);
 #if CTF_ASSERT_ALIASES == CTF_ON
 #define assert_msg(test, msg) ctf_assert_msg(test, msg)
 #define assert(test) ctf_assert(test)
+#define assert_char_eq(a, b) ctf_assert_char_eq(a, b)
+#define assert_char_neq(a, b) ctf_assert_char_neq(a, b)
+#define assert_char_gt(a, b) ctf_assert_char_gt(a, b)
+#define assert_char_lt(a, b) ctf_assert_char_lt(a, b)
+#define assert_char_gte(a, b) ctf_assert_char_gte(a, b)
+#define assert_char_lte(a, b) ctf_assert_char_lte(a, b)
 #define assert_int_eq(a, b) ctf_assert_int_eq(a, b)
 #define assert_int_neq(a, b) ctf_assert_int_neq(a, b)
 #define assert_int_gt(a, b) ctf_assert_int_gt(a, b)
@@ -627,24 +673,60 @@ void ctf_parallel_stop(void);
 #define assert_string_lt(a, b) ctf_assert_string_lt(a, b)
 #define assert_string_gte(a, b) ctf_assert_string_gte(a, b)
 #define assert_string_lte(a, b) ctf_assert_string_lte(a, b)
-#define assert_memory_int_eq(a, b) ctf_assert_memory_int_eq(a, b)
-#define assert_memory_int_neq(a, b) ctf_assert_memory_int_neq(a, b)
-#define assert_memory_int_gt(a, b) ctf_assert_memory_int_gt(a, b)
-#define assert_memory_int_lt(a, b) ctf_assert_memory_int_lt(a, b)
-#define assert_memory_int_gte(a, b) ctf_assert_memory_int_gte(a, b)
-#define assert_memory_int_lte(a, b) ctf_assert_memory_int_lte(a, b)
-#define assert_memory_uint_eq(a, b) ctf_assert_memory_uint_eq(a, b)
-#define assert_memory_uint_neq(a, b) ctf_assert_memory_uint_neq(a, b)
-#define assert_memory_uint_gt(a, b) ctf_assert_memory_uint_gt(a, b)
-#define assert_memory_uint_lt(a, b) ctf_assert_memory_uint_lt(a, b)
-#define assert_memory_uint_gte(a, b) ctf_assert_memory_uint_gte(a, b)
-#define assert_memory_uint_lte(a, b) ctf_assert_memory_uint_lte(a, b)
-#define assert_memory_ptr_eq(a, b) ctf_assert_memory_ptr_eq(a, b)
-#define assert_memory_ptr_neq(a, b) ctf_assert_memory_ptr_neq(a, b)
-#define assert_memory_ptr_gt(a, b) ctf_assert_memory_ptr_gt(a, b)
-#define assert_memory_ptr_lt(a, b) ctf_assert_memory_ptr_lt(a, b)
-#define assert_memory_ptr_gte(a, b) ctf_assert_memory_ptr_gte(a, b)
-#define assert_memory_ptr_lte(a, b) ctf_assert_memory_ptr_lte(a, b)
+#define assert_memory_char_eq(a, b, length) \
+  ctf_assert_memory_char_eq(a, b, length)
+#define assert_memory_char_neq(a, b, length) \
+  ctf_assert_memory_char_neq(a, b, length)
+#define assert_memory_char_gt(a, b, length) \
+  ctf_assert_memory_char_gt(a, b, length)
+#define assert_memory_char_lt(a, b, length) \
+  ctf_assert_memory_char_lt(a, b, length)
+#define assert_memory_char_gte(a, b, length) \
+  ctf_assert_memory_char_gte(a, b, length)
+#define assert_memory_char_lte(a, b, length) \
+  ctf_assert_memory_char_lte(a, b, length)
+#define assert_memory_int_eq(a, b, length) \
+  ctf_assert_memory_int_eq(a, b, length)
+#define assert_memory_int_neq(a, b, length) \
+  ctf_assert_memory_int_neq(a, b, length)
+#define assert_memory_int_gt(a, b, length) \
+  ctf_assert_memory_int_gt(a, b, length)
+#define assert_memory_int_lt(a, b, length) \
+  ctf_assert_memory_int_lt(a, b, length)
+#define assert_memory_int_gte(a, b, length) \
+  ctf_assert_memory_int_gte(a, b, length)
+#define assert_memory_int_lte(a, b, length) \
+  ctf_assert_memory_int_lte(a, b, length)
+#define assert_memory_uint_eq(a, b, length) \
+  ctf_assert_memory_uint_eq(a, b, length)
+#define assert_memory_uint_neq(a, b, length) \
+  ctf_assert_memory_uint_neq(a, b, length)
+#define assert_memory_uint_gt(a, b, length) \
+  ctf_assert_memory_uint_gt(a, b, length)
+#define assert_memory_uint_lt(a, b, length) \
+  ctf_assert_memory_uint_lt(a, b, length)
+#define assert_memory_uint_gte(a, b, length) \
+  ctf_assert_memory_uint_gte(a, b, length)
+#define assert_memory_uint_lte(a, b, length) \
+  ctf_assert_memory_uint_lte(a, b, length)
+#define assert_memory_ptr_eq(a, b, length) \
+  ctf_assert_memory_ptr_eq(a, b, length)
+#define assert_memory_ptr_neq(a, b, length) \
+  ctf_assert_memory_ptr_neq(a, b, length)
+#define assert_memory_ptr_gt(a, b, length) \
+  ctf_assert_memory_ptr_gt(a, b, length)
+#define assert_memory_ptr_lt(a, b, length) \
+  ctf_assert_memory_ptr_lt(a, b, length)
+#define assert_memory_ptr_gte(a, b, length) \
+  ctf_assert_memory_ptr_gte(a, b, length)
+#define assert_memory_ptr_lte(a, b, length) \
+  ctf_assert_memory_ptr_lte(a, b, length)
+#define assert_array_char_eq(a, b) ctf_assert_array_char_eq(a, b)
+#define assert_array_char_neq(a, b) ctf_assert_array_char_neq(a, b)
+#define assert_array_char_gt(a, b) ctf_assert_array_char_gt(a, b)
+#define assert_array_char_lt(a, b) ctf_assert_array_char_lt(a, b)
+#define assert_array_char_gte(a, b) ctf_assert_array_char_gte(a, b)
+#define assert_array_char_lte(a, b) ctf_assert_array_char_lte(a, b)
 #define assert_array_int_eq(a, b) ctf_assert_array_int_eq(a, b)
 #define assert_array_int_neq(a, b) ctf_assert_array_int_neq(a, b)
 #define assert_array_int_gt(a, b) ctf_assert_array_int_gt(a, b)
