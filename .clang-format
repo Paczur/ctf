@@ -1,0 +1,4 @@
+BasedOnStyle: Google
+SpaceBeforeParens: Never
+IndentCaseLabels: false
+ContinuationIndentWidth: 2
