@@ -173,7 +173,7 @@ int ctf_exit_code = 0;
 #ifdef CTF_PARALLEL
 static pthread_mutex_t ctf_parallel_internal_print_mutex =
   PTHREAD_MUTEX_INITIALIZER;
-static pthread_t ctf_parallel_internal_threads[CTF_PARALLEL];
+pthread_t ctf_parallel_internal_threads[CTF_PARALLEL];
 static int ctf_parallel_internal_threads_waiting = 0;
 static const struct ctf_internal_group
   *ctf_parallel_internal_task_queue[CTF_PARALLEL_CONST_TASK_QUEUE_MAX] = {0};
@@ -186,6 +186,12 @@ static pthread_cond_t ctf_parallel_internal_task_queue_non_empty =
 static pthread_cond_t ctf_parallel_internal_task_queue_non_full =
   PTHREAD_COND_INITIALIZER;
 int ctf_parallel_internal_state = 0;
+struct ctf_internal_state
+  ctf_parallel_internal_states[CTF_PARALLEL][CTF_CONST_STATES_PER_THREAD];
+int ctf_parallel_internal_states_index[CTF_PARALLEL];
+#else
+struct ctf_internal_state ctf_internal_states[CTF_CONST_STATES_PER_THREAD];
+int ctf_internal_state_index = 0;
 #endif
 
 /* Functions */
@@ -194,7 +200,9 @@ void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
 #if CTF_COLOR == CTF_AUTO
   const int tty = CTF_INTERNAL_IS_TTY;
 #endif
-  struct ctf_internal_state err[CTF_CONST_STATES_PER_TEST] = {0};
+#ifdef CTF_PARALLEL
+  CTF_PARALLEL_INTERNAL_THREAD_INDEX;
+#endif
   char *print_buff_p = print_buff;
   int test_passed;
   int all_passed = 1;
@@ -204,17 +212,18 @@ void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
                               group->name);
   for(int i = 0; i < group->length; i++) {
     test_passed = 1;
-    for(int j = 0; j < CTF_CONST_STATES_PER_TEST; j++) {
-      err[j].status = 2;
-    }
-    group->tests[i](err, 0);
+    CTF_INTERNAL_STATE_INDEX_UPDATE(0);
+    group->tests[i]();
+#ifdef CTF_PARALLEL
+    CTF_PARALLEL_INTERNAL_STATE_INDEX_REFRESH;
+#endif
     CTF_INTERNAL_SKIP_SPACE(test_name);
     test_name++; /* skips paren */
     CTF_INTERNAL_SKIP_SPACE(test_name);
     test_name_len = 1;
     CTF_INTERNAL_NEXT_ID(test_name, test_name_len);
-    for(int j = 0; j < CTF_CONST_STATES_PER_TEST; j++) {
-      if(err[j].status == 1) {
+    for(int j = 0; j < ctf_internal_state_index; j++) {
+      if(ctf_internal_states[j].status == 1) {
         test_passed = 0;
         all_passed = 0;
         break;
@@ -223,15 +232,15 @@ void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
     if(!test_passed) {
       CTF_INTERNAL_COLOR_DISPATCH(CTF_INTERNAL_PRINT_TEST_FAIL_HEADER,
                                   print_buff_p, test_name, test_name_len);
-      for(int j = 0; j < CTF_CONST_STATES_PER_TEST && err[j].status != 2; j++) {
-        if(err[j].status == 0) {
+      for(int j = 0; j < ctf_internal_state_index; j++) {
+        if(ctf_internal_states[j].status == 0) {
           CTF_INTERNAL_DETAIL_DISPATCH(CTF_INTERNAL_COLOR_DISPATCH,
                                        CTF_INTERNAL_PRINT_TEST_PASS_INFO,
-                                       print_buff_p, err[j]);
-        } else if(err[j].status == 1) {
+                                       print_buff_p, ctf_internal_states[j]);
+        } else if(ctf_internal_states[j].status == 1) {
           CTF_INTERNAL_DETAIL_DISPATCH(CTF_INTERNAL_COLOR_DISPATCH,
                                        CTF_INTERNAL_PRINT_TEST_FAIL_INFO,
-                                       print_buff_p, err[j]);
+                                       print_buff_p, ctf_internal_states[j]);
         }
       }
     } else {
@@ -358,6 +367,18 @@ void ctf_parallel_internal_groups_run(int count, ...) {
   va_end(args);
   pthread_cond_broadcast(&ctf_parallel_internal_task_queue_non_empty);
   pthread_mutex_unlock(&ctf_parallel_internal_task_queue_mutex);
+}
+int ctf_parallel_internal_thread_index(int *state_index,
+                                       struct ctf_internal_state **states) {
+  const pthread_t thread = pthread_self();
+  for(int i = 0; i < CTF_PARALLEL; i++) {
+    if(pthread_equal(ctf_parallel_internal_threads[i], thread)) {
+      *state_index = ctf_parallel_internal_states_index[i];
+      *states = ctf_parallel_internal_states[i];
+      return i;
+    }
+  }
+  return -1;
 }
 void ctf_parallel_sync(void) {
   pthread_mutex_lock(&ctf_parallel_internal_task_queue_mutex);
