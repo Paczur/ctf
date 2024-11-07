@@ -50,10 +50,8 @@
 #ifdef CTF_PARALLEL
 #if __STDC_VERSION__ == 201112L
 #define CTF_PARALLEL_INTERNAL_THREAD_LOCAL _Thread_local
-#elif defined(__GNUC__)
-#define CTF_PARALLEL_INTERNAL_THREAD_LOCAL __thread
 #else
-#error "Thread local storage not supported"
+#define CTF_PARALLEL_INTERNAL_THREAD_LOCAL __thread
 #endif
 #endif
 
