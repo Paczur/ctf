@@ -46,6 +46,17 @@
 #define CTF_CONST_STATES_PER_THREAD CTF_CONST_STATES_PER_THREAD_DEFAULT
 #endif
 
+/* System specific */
+#ifdef CTF_PARALLEL
+#if __STDC_VERSION__ == 201112L
+#define CTF_PARALLEL_INTERNAL_THREAD_LOCAL _Thread_local
+#elif defined(__GNUC__)
+#define CTF_PARALLEL_INTERNAL_THREAD_LOCAL __thread
+#else
+#error "Thread local storage not supported"
+#endif
+#endif
+
 /* Utility */
 #define CTF_INTERNAL_STRINGIFY(x) #x
 #define CTF_INTERNAL_STRINGIFY2(x) CTF_INTERNAL_STRINGIFY(x)
@@ -54,30 +65,27 @@
 #define CTF_INTERNAL_LENGTH(a) (sizeof(a) / sizeof(*(a)))
 
 #ifdef CTF_PARALLEL
-#define CTF_PARALLEL_INTERNAL_THREAD_INDEX                                    \
-  const int ctf_internal_thread_index = ctf_parallel_internal_thread_index(); \
-  const int ctf_internal_state_index =                                        \
-    ctf_parallel_internal_states_index[ctf_internal_thread_index];            \
-  struct ctf_internal_state *const ctf_internal_states =                      \
-    ctf_parallel_internal_states[ctf_internal_thread_index];
-#define CTF_INTERNAL_ASSERT_BEGIN                                             \
-  CTF_PARALLEL_INTERNAL_THREAD_INDEX;                                         \
-  if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return;         \
-  [[maybe_unused]] const struct ctf_internal_state *ctf_internal_state_curr = \
-    ctf_internal_states + ctf_internal_state_index
-#define CTF_INTERNAL_EXPECT_END \
-  ctf_parallel_internal_states_index[ctf_internal_thread_index]++
+#define CTF_INTERNAL_EXPECT_END                                               \
+  do {                                                                        \
+    ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index]++; \
+    ctf_internal_state_index++;                                               \
+  } while(0);
 #else
-#define CTF_INTERNAL_ASSERT_BEGIN                                             \
-  if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return;         \
-  [[maybe_unused]] const struct ctf_internal_state *ctf_internal_state_curr = \
-    ctf_internal_states + ctf_internal_state_index
-#define CTF_INTERNAL_EXPECT_END ctf_internal_state_index++
+#define CTF_INTERNAL_EXPECT_END \
+  do {                          \
+    ctf_internal_state_index++; \
+  } while(0)
 #endif
 
-#define CTF_INTERNAL_ASSERT_END               \
-  if(ctf_internal_state_curr->status) return; \
-  CTF_INTERNAL_EXPECT_END
+#define CTF_INTERNAL_ASSERT_BEGIN                                       \
+  do {                                                                  \
+    if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return; \
+  } while(0)
+#define CTF_INTERNAL_ASSERT_END                                      \
+  do {                                                               \
+    CTF_INTERNAL_EXPECT_END;                                         \
+    if(ctf_internal_states[ctf_internal_state_index].status) return; \
+  } while(0)
 
 #if CTF_DETAIL == CTF_OFF
 #define CTF_INTERNAL_ASSERT_COPY
@@ -108,8 +116,7 @@
              CTF_CONST_STATE_MSG_SIZE, format, #a, #b, _x, _y);         \
     CTF_INTERNAL_ASSERT_COPY;                                           \
   } while(0)
-#define CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, type, format, length1,      \
-                                        length2)                              \
+#define CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length1, length2)   \
   do {                                                                        \
     _Pragma("GCC diagnostic ignored \"-Wtype-limits\"");                      \
     ctf_internal_assert_mem_print(                                            \
@@ -118,23 +125,23 @@
     CTF_INTERNAL_ASSERT_COPY;                                                 \
     _Pragma("GCC diagnostic pop")                                             \
   } while(0)
-#define CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, type, format, length)          \
-  do {                                                                       \
-    CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, type, format, length, length); \
-    ctf_internal_states[ctf_internal_state_index].status =                   \
-      !(ctf_internal_states[ctf_internal_state_index].status op 0);          \
+#define CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length)          \
+  do {                                                                 \
+    CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length, length); \
+    ctf_internal_states[ctf_internal_state_index].status =             \
+      !(ctf_internal_states[ctf_internal_state_index].status op 0);    \
   } while(0)
-#define CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, type, format)                    \
-  do {                                                                         \
-    CTF_INTERNAL_ASSERT_MEM_ARR_RAW(                                           \
-      a, b, op, type, format, CTF_INTERNAL_LENGTH(a), CTF_INTERNAL_LENGTH(b)); \
-    if(ctf_internal_states[ctf_internal_state_index].status == 0) {            \
-      ctf_internal_states[ctf_internal_state_index].status =                   \
-        !(CTF_INTERNAL_LENGTH(a) op CTF_INTERNAL_LENGTH(b));                   \
-    } else {                                                                   \
-      ctf_internal_states[ctf_internal_state_index].status =                   \
-        !(ctf_internal_states[ctf_internal_state_index].status op 0);          \
-    }                                                                          \
+#define CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format)                         \
+  do {                                                                        \
+    CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, CTF_INTERNAL_LENGTH(a), \
+                                    CTF_INTERNAL_LENGTH(b));                  \
+    if(ctf_internal_states[ctf_internal_state_index].status == 0) {           \
+      ctf_internal_states[ctf_internal_state_index].status =                  \
+        !(CTF_INTERNAL_LENGTH(a) op CTF_INTERNAL_LENGTH(b));                  \
+    } else {                                                                  \
+      ctf_internal_states[ctf_internal_state_index].status =                  \
+        !(ctf_internal_states[ctf_internal_state_index].status op 0);         \
+    }                                                                         \
   } while(0)
 #define CTF_INTERNAL_ASSERT(a, b, op, type, format)  \
   do {                                               \
@@ -148,17 +155,17 @@
     CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f); \
     CTF_INTERNAL_ASSERT_END;                                 \
   } while(0)
-#define CTF_INTERNAL_ASSERT_MEM(a, b, op, type, format, length)  \
-  do {                                                           \
-    CTF_INTERNAL_ASSERT_BEGIN;                                   \
-    CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, type, format, length); \
-    CTF_INTERNAL_ASSERT_END;                                     \
+#define CTF_INTERNAL_ASSERT_MEM(a, b, op, format, length)  \
+  do {                                                     \
+    CTF_INTERNAL_ASSERT_BEGIN;                             \
+    CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length); \
+    CTF_INTERNAL_ASSERT_END;                               \
   } while(0)
-#define CTF_INTERNAL_ASSERT_ARR(a, b, op, type, format)  \
-  do {                                                   \
-    CTF_INTERNAL_ASSERT_BEGIN;                           \
-    CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, type, format); \
-    CTF_INTERNAL_ASSERT_END;                             \
+#define CTF_INTERNAL_ASSERT_ARR(a, b, op, format)  \
+  do {                                             \
+    CTF_INTERNAL_ASSERT_BEGIN;                     \
+    CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format); \
+    CTF_INTERNAL_ASSERT_END;                       \
   } while(0)
 #define CTF_INTERNAL_EXPECT(a, b, op, type, format)  \
   do {                                               \
@@ -172,17 +179,17 @@
     CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f); \
     CTF_INTERNAL_EXPECT_END;                                 \
   } while(0)
-#define CTF_INTERNAL_EXPECT_MEM(a, b, op, type, format, length)  \
-  do {                                                           \
-    CTF_INTERNAL_ASSERT_BEGIN;                                   \
-    CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, type, format, length); \
-    CTF_INTERNAL_EXPECT_END;                                     \
+#define CTF_INTERNAL_EXPECT_MEM(a, b, op, format, length)  \
+  do {                                                     \
+    CTF_INTERNAL_ASSERT_BEGIN;                             \
+    CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length); \
+    CTF_INTERNAL_EXPECT_END;                               \
   } while(0)
-#define CTF_INTERNAL_EXPECT_ARR(a, b, op, type, format)  \
-  do {                                                   \
-    CTF_INTERNAL_ASSERT_BEGIN;                           \
-    CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, type, format); \
-    CTF_INTERNAL_EXPECT_END;                             \
+#define CTF_INTERNAL_EXPECT_ARR(a, b, op, format)  \
+  do {                                             \
+    CTF_INTERNAL_ASSERT_BEGIN;                     \
+    CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format); \
+    CTF_INTERNAL_EXPECT_END;                       \
   } while(0)
 
 /* Types */
@@ -251,6 +258,11 @@ extern pthread_t ctf_parallel_internal_threads[CTF_PARALLEL];
 extern struct ctf_internal_state
   ctf_parallel_internal_states[CTF_PARALLEL][CTF_CONST_STATES_PER_THREAD];
 extern int ctf_parallel_internal_states_index[CTF_PARALLEL];
+extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL int
+  ctf_parallel_internal_thread_index;
+extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
+  *ctf_internal_states;
+extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_internal_state_index;
 #else
 extern struct ctf_internal_state
   ctf_internal_states[CTF_CONST_STATES_PER_THREAD];
@@ -272,7 +284,6 @@ int ctf_internal_int_length(int a);
 #ifdef CTF_PARALLEL
 void ctf_parallel_internal_group_run(const struct ctf_internal_group *group);
 void ctf_parallel_internal_groups_run(int count, ...);
-int ctf_parallel_internal_thread_index(void);
 #endif
 
 /* UI */
@@ -437,117 +448,101 @@ void ctf_parallel_sync(void);
   CTF_INTERNAL_ASSERT_FUNC(a, b, <=, char *const, ctf_internal_print_str_lte, \
                            strcmp)
 #define ctf_assert_memory_char_eq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, ==, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_ASSERT_MEM(a, b, ==, ctf_internal_print_arr_char, length)
 #define ctf_assert_memory_char_neq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, !=, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_ASSERT_MEM(a, b, !=, ctf_internal_print_arr_char, length)
 #define ctf_assert_memory_char_lt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_ASSERT_MEM(a, b, <, ctf_internal_print_arr_char, length)
 #define ctf_assert_memory_char_gt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_ASSERT_MEM(a, b, >, ctf_internal_print_arr_char, length)
 #define ctf_assert_memory_char_lte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <=, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_ASSERT_MEM(a, b, <=, ctf_internal_print_arr_char, length)
 #define ctf_assert_memory_char_gte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >=, char, ctf_internal_print_arr_char, length)
-#define ctf_assert_memory_int_eq(a, b, length)                            \
-  CTF_INTERNAL_ASSERT_MEM(a, b, ==, intmax_t, ctf_internal_print_arr_int, \
-                          length)
-#define ctf_assert_memory_int_neq(a, b, length)                           \
-  CTF_INTERNAL_ASSERT_MEM(a, b, !=, intmax_t, ctf_internal_print_arr_int, \
-                          length)
+  CTF_INTERNAL_ASSERT_MEM(a, b, >=, ctf_internal_print_arr_char, length)
+#define ctf_assert_memory_int_eq(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, ==, ctf_internal_print_arr_int, length)
+#define ctf_assert_memory_int_neq(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, !=, ctf_internal_print_arr_int, length)
 #define ctf_assert_memory_int_lt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <, intmax_t, ctf_internal_print_arr_int, length)
+  CTF_INTERNAL_ASSERT_MEM(a, b, <, ctf_internal_print_arr_int, length)
 #define ctf_assert_memory_int_gt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >, intmax_t, ctf_internal_print_arr_int, length)
-#define ctf_assert_memory_int_lte(a, b, length)                           \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <=, intmax_t, ctf_internal_print_arr_int, \
-                          length)
-#define ctf_assert_memory_int_gte(a, b, length)                           \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >=, intmax_t, ctf_internal_print_arr_int, \
-                          length)
-#define ctf_assert_memory_uint_eq(a, b, length)                             \
-  CTF_INTERNAL_ASSERT_MEM(a, b, ==, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_assert_memory_uint_neq(a, b, length)                            \
-  CTF_INTERNAL_ASSERT_MEM(a, b, !=, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_assert_memory_uint_lt(a, b, length)                            \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_assert_memory_uint_gt(a, b, length)                            \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_assert_memory_uint_lte(a, b, length)                            \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <=, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_assert_memory_uint_gte(a, b, length)                            \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >=, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_assert_memory_ptr_eq(a, b, length)                                \
-  CTF_INTERNAL_ASSERT_MEM(a, b, ==, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_assert_memory_ptr_neq(a, b, length)                               \
-  CTF_INTERNAL_ASSERT_MEM(a, b, !=, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_assert_memory_ptr_lt(a, b, length)                               \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_assert_memory_ptr_gt(a, b, length)                               \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_assert_memory_ptr_lte(a, b, length)                               \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <=, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_assert_memory_ptr_gte(a, b, length)                               \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >=, const void *, ctf_internal_print_arr_ptr, \
-                          length)
+  CTF_INTERNAL_ASSERT_MEM(a, b, >, ctf_internal_print_arr_int, length)
+#define ctf_assert_memory_int_lte(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, <=, ctf_internal_print_arr_int, length)
+#define ctf_assert_memory_int_gte(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, >=, ctf_internal_print_arr_int, length)
+#define ctf_assert_memory_uint_eq(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, ==, ctf_internal_print_arr_uint, length)
+#define ctf_assert_memory_uint_neq(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, !=, ctf_internal_print_arr_uint, length)
+#define ctf_assert_memory_uint_lt(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, <, ctf_internal_print_arr_uint, length)
+#define ctf_assert_memory_uint_gt(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, >, ctf_internal_print_arr_uint, length)
+#define ctf_assert_memory_uint_lte(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, <=, ctf_internal_print_arr_uint, length)
+#define ctf_assert_memory_uint_gte(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, >=, ctf_internal_print_arr_uint, length)
+#define ctf_assert_memory_ptr_eq(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, ==, ctf_internal_print_arr_ptr, length)
+#define ctf_assert_memory_ptr_neq(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, !=, ctf_internal_print_arr_ptr, length)
+#define ctf_assert_memory_ptr_lt(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, <, ctf_internal_print_arr_ptr, length)
+#define ctf_assert_memory_ptr_gt(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, >, ctf_internal_print_arr_ptr, length)
+#define ctf_assert_memory_ptr_lte(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, <=, ctf_internal_print_arr_ptr, length)
+#define ctf_assert_memory_ptr_gte(a, b, length) \
+  CTF_INTERNAL_ASSERT_MEM(a, b, >=, ctf_internal_print_arr_ptr, length)
 #define ctf_assert_array_char_eq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, ==, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_ASSERT_ARR(a, b, ==, ctf_internal_print_arr_char)
 #define ctf_assert_array_char_neq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, !=, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_ASSERT_ARR(a, b, !=, ctf_internal_print_arr_char)
 #define ctf_assert_array_char_lt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_ASSERT_ARR(a, b, <, ctf_internal_print_arr_char)
 #define ctf_assert_array_char_gt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_ASSERT_ARR(a, b, >, ctf_internal_print_arr_char)
 #define ctf_assert_array_char_lte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <=, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_char)
 #define ctf_assert_array_char_gte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >=, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_char)
 #define ctf_assert_array_int_eq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, ==, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_ASSERT_ARR(a, b, ==, ctf_internal_print_arr_int)
 #define ctf_assert_array_int_neq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, !=, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_ASSERT_ARR(a, b, !=, ctf_internal_print_arr_int)
 #define ctf_assert_array_int_lt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_ASSERT_ARR(a, b, <, ctf_internal_print_arr_int)
 #define ctf_assert_array_int_gt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_ASSERT_ARR(a, b, >, ctf_internal_print_arr_int)
 #define ctf_assert_array_int_lte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <=, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_int)
 #define ctf_assert_array_int_gte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >=, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_int)
 #define ctf_assert_array_uint_eq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, ==, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_ASSERT_ARR(a, b, ==, ctf_internal_print_arr_uint)
 #define ctf_assert_array_uint_neq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, !=, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_ASSERT_ARR(a, b, !=, ctf_internal_print_arr_uint)
 #define ctf_assert_array_uint_lt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_ASSERT_ARR(a, b, <, ctf_internal_print_arr_uint)
 #define ctf_assert_array_uint_gt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_ASSERT_ARR(a, b, >, ctf_internal_print_arr_uint)
 #define ctf_assert_array_uint_lte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <=, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_uint)
 #define ctf_assert_array_uint_gte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >=, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_uint)
 #define ctf_assert_array_ptr_eq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, ==, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_ASSERT_ARR(a, b, ==, ctf_internal_print_arr_ptr)
 #define ctf_assert_array_ptr_neq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, !=, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_ASSERT_ARR(a, b, !=, ctf_internal_print_arr_ptr)
 #define ctf_assert_array_ptr_lt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_ASSERT_ARR(a, b, <, ctf_internal_print_arr_ptr)
 #define ctf_assert_array_ptr_gt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_ASSERT_ARR(a, b, >, ctf_internal_print_arr_ptr)
 #define ctf_assert_array_ptr_lte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <=, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_ptr)
 #define ctf_assert_array_ptr_gte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >=, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_ptr)
 #define ctf_assert_true(a)                                              \
   do {                                                                  \
     CTF_INTERNAL_ASSERT_BEGIN;                                          \
@@ -646,117 +641,101 @@ void ctf_parallel_sync(void);
   CTF_INTERNAL_EXPECT_FUNC(a, b, <=, char *const, ctf_internal_print_str_lte, \
                            strcmp)
 #define ctf_expect_memory_char_eq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, ==, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_EXPECT_MEM(a, b, ==, ctf_internal_print_arr_char, length)
 #define ctf_expect_memory_char_neq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, !=, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_EXPECT_MEM(a, b, !=, ctf_internal_print_arr_char, length)
 #define ctf_expect_memory_char_lt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_EXPECT_MEM(a, b, <, ctf_internal_print_arr_char, length)
 #define ctf_expect_memory_char_gt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_EXPECT_MEM(a, b, >, ctf_internal_print_arr_char, length)
 #define ctf_expect_memory_char_lte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <=, char, ctf_internal_print_arr_char, length)
+  CTF_INTERNAL_EXPECT_MEM(a, b, <=, ctf_internal_print_arr_char, length)
 #define ctf_expect_memory_char_gte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >=, char, ctf_internal_print_arr_char, length)
-#define ctf_expect_memory_int_eq(a, b, length)                            \
-  CTF_INTERNAL_EXPECT_MEM(a, b, ==, intmax_t, ctf_internal_print_arr_int, \
-                          length)
-#define ctf_expect_memory_int_neq(a, b, length)                           \
-  CTF_INTERNAL_EXPECT_MEM(a, b, !=, intmax_t, ctf_internal_print_arr_int, \
-                          length)
+  CTF_INTERNAL_EXPECT_MEM(a, b, >=, ctf_internal_print_arr_char, length)
+#define ctf_expect_memory_int_eq(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, ==, ctf_internal_print_arr_int, length)
+#define ctf_expect_memory_int_neq(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, !=, ctf_internal_print_arr_int, length)
 #define ctf_expect_memory_int_lt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <, intmax_t, ctf_internal_print_arr_int, length)
+  CTF_INTERNAL_EXPECT_MEM(a, b, <, ctf_internal_print_arr_int, length)
 #define ctf_expect_memory_int_gt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >, intmax_t, ctf_internal_print_arr_int, length)
-#define ctf_expect_memory_int_lte(a, b, length)                           \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <=, intmax_t, ctf_internal_print_arr_int, \
-                          length)
-#define ctf_expect_memory_int_gte(a, b, length)                           \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >=, intmax_t, ctf_internal_print_arr_int, \
-                          length)
-#define ctf_expect_memory_uint_eq(a, b, length)                             \
-  CTF_INTERNAL_EXPECT_MEM(a, b, ==, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_expect_memory_uint_neq(a, b, length)                            \
-  CTF_INTERNAL_EXPECT_MEM(a, b, !=, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_expect_memory_uint_lt(a, b, length)                            \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_expect_memory_uint_gt(a, b, length)                            \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_expect_memory_uint_lte(a, b, length)                            \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <=, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_expect_memory_uint_gte(a, b, length)                            \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >=, uintmax_t, ctf_internal_print_arr_uint, \
-                          length)
-#define ctf_expect_memory_ptr_eq(a, b, length)                                \
-  CTF_INTERNAL_EXPECT_MEM(a, b, ==, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_expect_memory_ptr_neq(a, b, length)                               \
-  CTF_INTERNAL_EXPECT_MEM(a, b, !=, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_expect_memory_ptr_lt(a, b, length)                               \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_expect_memory_ptr_gt(a, b, length)                               \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_expect_memory_ptr_lte(a, b, length)                               \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <=, const void *, ctf_internal_print_arr_ptr, \
-                          length)
-#define ctf_expect_memory_ptr_gte(a, b, length)                               \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >=, const void *, ctf_internal_print_arr_ptr, \
-                          length)
+  CTF_INTERNAL_EXPECT_MEM(a, b, >, ctf_internal_print_arr_int, length)
+#define ctf_expect_memory_int_lte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, <=, ctf_internal_print_arr_int, length)
+#define ctf_expect_memory_int_gte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, >=, ctf_internal_print_arr_int, length)
+#define ctf_expect_memory_uint_eq(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, ==, ctf_internal_print_arr_uint, length)
+#define ctf_expect_memory_uint_neq(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, !=, ctf_internal_print_arr_uint, length)
+#define ctf_expect_memory_uint_lt(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, <, ctf_internal_print_arr_uint, length)
+#define ctf_expect_memory_uint_gt(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, >, ctf_internal_print_arr_uint, length)
+#define ctf_expect_memory_uint_lte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, <=, ctf_internal_print_arr_uint, length)
+#define ctf_expect_memory_uint_gte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, >=, ctf_internal_print_arr_uint, length)
+#define ctf_expect_memory_ptr_eq(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, ==, ctf_internal_print_arr_ptr, length)
+#define ctf_expect_memory_ptr_neq(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, !=, ctf_internal_print_arr_ptr, length)
+#define ctf_expect_memory_ptr_lt(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, <, ctf_internal_print_arr_ptr, length)
+#define ctf_expect_memory_ptr_gt(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, >, ctf_internal_print_arr_ptr, length)
+#define ctf_expect_memory_ptr_lte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, <=, ctf_internal_print_arr_ptr, length)
+#define ctf_expect_memory_ptr_gte(a, b, length) \
+  CTF_INTERNAL_EXPECT_MEM(a, b, >=, ctf_internal_print_arr_ptr, length)
 #define ctf_expect_array_char_eq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, ==, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_EXPECT_ARR(a, b, ==, ctf_internal_print_arr_char)
 #define ctf_expect_array_char_neq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, !=, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_EXPECT_ARR(a, b, !=, ctf_internal_print_arr_char)
 #define ctf_expect_array_char_lt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_EXPECT_ARR(a, b, <, ctf_internal_print_arr_char)
 #define ctf_expect_array_char_gt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_EXPECT_ARR(a, b, >, ctf_internal_print_arr_char)
 #define ctf_expect_array_char_lte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <=, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_char)
 #define ctf_expect_array_char_gte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >=, char, ctf_internal_print_arr_char)
+  CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_char)
 #define ctf_expect_array_int_eq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, ==, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_EXPECT_ARR(a, b, ==, ctf_internal_print_arr_int)
 #define ctf_expect_array_int_neq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, !=, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_EXPECT_ARR(a, b, !=, ctf_internal_print_arr_int)
 #define ctf_expect_array_int_lt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_EXPECT_ARR(a, b, <, ctf_internal_print_arr_int)
 #define ctf_expect_array_int_gt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_EXPECT_ARR(a, b, >, ctf_internal_print_arr_int)
 #define ctf_expect_array_int_lte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <=, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_int)
 #define ctf_expect_array_int_gte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >=, intmax_t, ctf_internal_print_arr_int)
+  CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_int)
 #define ctf_expect_array_uint_eq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, ==, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_EXPECT_ARR(a, b, ==, ctf_internal_print_arr_uint)
 #define ctf_expect_array_uint_neq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, !=, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_EXPECT_ARR(a, b, !=, ctf_internal_print_arr_uint)
 #define ctf_expect_array_uint_lt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_EXPECT_ARR(a, b, <, ctf_internal_print_arr_uint)
 #define ctf_expect_array_uint_gt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_EXPECT_ARR(a, b, >, ctf_internal_print_arr_uint)
 #define ctf_expect_array_uint_lte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <=, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_uint)
 #define ctf_expect_array_uint_gte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >=, uintmax_t, ctf_internal_print_arr_uint)
+  CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_uint)
 #define ctf_expect_array_ptr_eq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, ==, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_EXPECT_ARR(a, b, ==, ctf_internal_print_arr_ptr)
 #define ctf_expect_array_ptr_neq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, !=, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_EXPECT_ARR(a, b, !=, ctf_internal_print_arr_ptr)
 #define ctf_expect_array_ptr_lt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_EXPECT_ARR(a, b, <, ctf_internal_print_arr_ptr)
 #define ctf_expect_array_ptr_gt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_EXPECT_ARR(a, b, >, ctf_internal_print_arr_ptr)
 #define ctf_expect_array_ptr_lte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <=, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_ptr)
 #define ctf_expect_array_ptr_gte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >=, const void *, ctf_internal_print_arr_ptr)
+  CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_ptr)
 #define ctf_expect_true(a)                                              \
   do {                                                                  \
     CTF_INTERNAL_ASSERT_BEGIN;                                          \

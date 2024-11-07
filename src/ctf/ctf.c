@@ -44,17 +44,6 @@
     }                                                                        \
   } while(0)
 
-#ifdef CTF_PARALLEL
-#define CTF_INTERNAL_STATE_INDEX_UPDATE(val) \
-  ctf_internal_state_index = (val);          \
-  ctf_parallel_internal_states_index[ctf_internal_thread_index] = (val)
-#define CTF_PARALLEL_INTERNAL_STATE_INDEX_REFRESH \
-  ctf_internal_state_index =                      \
-    ctf_parallel_internal_states_index[ctf_internal_thread_index]
-#else
-#define CTF_INTERNAL_STATE_INDEX_UPDATE(val) ctf_internal_state_index = (val)
-#endif
-
 #define CTF_INTERNAL_SPRINTF_ADVANCE(buff, ...) \
   buff += sprintf(buff, __VA_ARGS__)
 #if CTF_COLOR == CTF_AUTO
@@ -244,6 +233,10 @@ int ctf_parallel_internal_state = 0;
 struct ctf_internal_state
   ctf_parallel_internal_states[CTF_PARALLEL][CTF_CONST_STATES_PER_THREAD];
 int ctf_parallel_internal_states_index[CTF_PARALLEL];
+CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_parallel_internal_thread_index;
+CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
+  *ctf_internal_states;
+CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_internal_state_index = 0;
 #else
 struct ctf_internal_state ctf_internal_states[CTF_CONST_STATES_PER_THREAD];
 int ctf_internal_state_index = 0;
@@ -255,13 +248,6 @@ void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
 #if CTF_COLOR == CTF_AUTO
   const int tty = CTF_INTERNAL_IS_TTY;
 #endif
-#ifdef CTF_PARALLEL
-  const int ctf_internal_thread_index = ctf_parallel_internal_thread_index();
-  int ctf_internal_state_index =
-    ctf_parallel_internal_states_index[ctf_internal_thread_index];
-  struct ctf_internal_state *const ctf_internal_states =
-    ctf_parallel_internal_states[ctf_internal_thread_index];
-#endif
   char *print_buff_p = print_buff;
   int test_passed;
   int all_passed = 1;
@@ -271,10 +257,14 @@ void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
                               group->name);
   for(int i = 0; i < group->length; i++) {
     test_passed = 1;
-    CTF_INTERNAL_STATE_INDEX_UPDATE(0);
+#ifdef CTF_PARALLEL
+    ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index] = 0;
+#endif
+    ctf_internal_state_index = 0;
     group->tests[i]();
 #ifdef CTF_PARALLEL
-    CTF_PARALLEL_INTERNAL_STATE_INDEX_REFRESH;
+    ctf_internal_state_index =
+      ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index];
 #endif
     CTF_INTERNAL_SKIP_SPACE(test_name);
     test_name++; /* skips paren */
@@ -439,8 +429,20 @@ int ctf_internal_int_length(int a) {
 #endif
 
 #ifdef CTF_PARALLEL
+static int ctf_parallel_internal_get_thread_index(void) {
+  const pthread_t thread = pthread_self();
+  for(int i = 0; i < CTF_PARALLEL; i++) {
+    if(pthread_equal(ctf_parallel_internal_threads[i], thread)) {
+      return i;
+    }
+  }
+  return -1;
+}
 static void *ctf_parallel_internal_thread_loop(void *data) {
   (void)data;
+  ctf_parallel_internal_thread_index = ctf_parallel_internal_get_thread_index();
+  ctf_internal_states =
+    ctf_parallel_internal_states[ctf_parallel_internal_thread_index];
   const struct ctf_internal_group *group;
   char print_buff[CTF_CONST_PRINT_BUFF_SIZE];
   while(1) {
@@ -518,15 +520,6 @@ void ctf_parallel_internal_groups_run(int count, ...) {
   va_end(args);
   pthread_cond_broadcast(&ctf_parallel_internal_task_queue_non_empty);
   pthread_mutex_unlock(&ctf_parallel_internal_task_queue_mutex);
-}
-int ctf_parallel_internal_thread_index(void) {
-  const pthread_t thread = pthread_self();
-  for(int i = 0; i < CTF_PARALLEL; i++) {
-    if(pthread_equal(ctf_parallel_internal_threads[i], thread)) {
-      return i;
-    }
-  }
-  return -1;
 }
 void ctf_parallel_sync(void) {
   pthread_mutex_lock(&ctf_parallel_internal_task_queue_mutex);
