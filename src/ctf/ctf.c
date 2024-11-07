@@ -175,42 +175,42 @@ const char ctf_internal_print_arr_uint[] = "%ju, ";
 const char ctf_internal_print_arr_ptr[] = "%p, ";
 
 #define STRING_GENERATE(op, format) \
-  "%s " #op " %s (" #format " " #op " " #format ")"
+  "%s " #op " %s (" format " " #op " " format ")"
 
-const char ctf_internal_print_char_eq[] = STRING_GENERATE(==, '%c');
-const char ctf_internal_print_char_neq[] = STRING_GENERATE(!=, '%c');
-const char ctf_internal_print_char_gt[] = STRING_GENERATE(>, '%c');
-const char ctf_internal_print_char_lt[] = STRING_GENERATE(<, '%c');
-const char ctf_internal_print_char_gte[] = STRING_GENERATE(>=, '%c');
-const char ctf_internal_print_char_lte[] = STRING_GENERATE(<=, '%c');
+const char ctf_internal_print_char_eq[] = STRING_GENERATE(==, "'%c'");
+const char ctf_internal_print_char_neq[] = STRING_GENERATE(!=, "'%c'");
+const char ctf_internal_print_char_gt[] = STRING_GENERATE(>, "'%c'");
+const char ctf_internal_print_char_lt[] = STRING_GENERATE(<, "'%c'");
+const char ctf_internal_print_char_gte[] = STRING_GENERATE(>=, "'%c'");
+const char ctf_internal_print_char_lte[] = STRING_GENERATE(<=, "'%c'");
 
-const char ctf_internal_print_int_eq[] = STRING_GENERATE(==, % jd);
-const char ctf_internal_print_int_neq[] = STRING_GENERATE(!=, % jd);
-const char ctf_internal_print_int_gt[] = STRING_GENERATE(>, % jd);
-const char ctf_internal_print_int_lt[] = STRING_GENERATE(<, % jd);
-const char ctf_internal_print_int_gte[] = STRING_GENERATE(>=, % jd);
-const char ctf_internal_print_int_lte[] = STRING_GENERATE(<=, % jd);
+const char ctf_internal_print_int_eq[] = STRING_GENERATE(==, "%jd");
+const char ctf_internal_print_int_neq[] = STRING_GENERATE(!=, "%jd");
+const char ctf_internal_print_int_gt[] = STRING_GENERATE(>, "%jd");
+const char ctf_internal_print_int_lt[] = STRING_GENERATE(<, "%jd");
+const char ctf_internal_print_int_gte[] = STRING_GENERATE(>=, "%jd");
+const char ctf_internal_print_int_lte[] = STRING_GENERATE(<=, "%jd");
 
-const char ctf_internal_print_uint_eq[] = STRING_GENERATE(==, % ju);
-const char ctf_internal_print_uint_neq[] = STRING_GENERATE(!=, % ju);
-const char ctf_internal_print_uint_gt[] = STRING_GENERATE(>, % ju);
-const char ctf_internal_print_uint_lt[] = STRING_GENERATE(<, % ju);
-const char ctf_internal_print_uint_gte[] = STRING_GENERATE(>=, % ju);
-const char ctf_internal_print_uint_lte[] = STRING_GENERATE(<=, % ju);
+const char ctf_internal_print_uint_eq[] = STRING_GENERATE(==, "%ju");
+const char ctf_internal_print_uint_neq[] = STRING_GENERATE(!=, "%ju");
+const char ctf_internal_print_uint_gt[] = STRING_GENERATE(>, "%ju");
+const char ctf_internal_print_uint_lt[] = STRING_GENERATE(<, "%ju");
+const char ctf_internal_print_uint_gte[] = STRING_GENERATE(>=, "%ju");
+const char ctf_internal_print_uint_lte[] = STRING_GENERATE(<=, "%ju");
 
-const char ctf_internal_print_ptr_eq[] = STRING_GENERATE(==, % p);
-const char ctf_internal_print_ptr_neq[] = STRING_GENERATE(!=, % p);
-const char ctf_internal_print_ptr_gt[] = STRING_GENERATE(>, % p);
-const char ctf_internal_print_ptr_lt[] = STRING_GENERATE(<, % p);
-const char ctf_internal_print_ptr_gte[] = STRING_GENERATE(>=, % p);
-const char ctf_internal_print_ptr_lte[] = STRING_GENERATE(<=, % p);
+const char ctf_internal_print_ptr_eq[] = STRING_GENERATE(==, "%p");
+const char ctf_internal_print_ptr_neq[] = STRING_GENERATE(!=, "%p");
+const char ctf_internal_print_ptr_gt[] = STRING_GENERATE(>, "%p");
+const char ctf_internal_print_ptr_lt[] = STRING_GENERATE(<, "%p");
+const char ctf_internal_print_ptr_gte[] = STRING_GENERATE(>=, "%p");
+const char ctf_internal_print_ptr_lte[] = STRING_GENERATE(<=, "%p");
 
-const char ctf_internal_print_str_eq[] = STRING_GENERATE(==, "%s");
-const char ctf_internal_print_str_neq[] = STRING_GENERATE(!=, "%s");
-const char ctf_internal_print_str_gt[] = STRING_GENERATE(>, "%s");
-const char ctf_internal_print_str_lt[] = STRING_GENERATE(<, "%s");
-const char ctf_internal_print_str_gte[] = STRING_GENERATE(>=, "%s");
-const char ctf_internal_print_str_lte[] = STRING_GENERATE(<=, "%s");
+const char ctf_internal_print_str_eq[] = STRING_GENERATE(==, "\"%s\"");
+const char ctf_internal_print_str_neq[] = STRING_GENERATE(!=, "\"%s\"");
+const char ctf_internal_print_str_gt[] = STRING_GENERATE(>, "\"%s\"");
+const char ctf_internal_print_str_lt[] = STRING_GENERATE(<, "\"%s\"");
+const char ctf_internal_print_str_gte[] = STRING_GENERATE(>=, "\"%s\"");
+const char ctf_internal_print_str_lte[] = STRING_GENERATE(<=, "\"%s\"");
 
 #undef STRING_GENERATE
 
