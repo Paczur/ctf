@@ -16,8 +16,9 @@ MEMORY_DEBUG_FLAGS=-fsanitize=address -fsanitize=pointer-compare -fsanitize=poin
 WARN_FLAGS=-Wall -Wextra -Werror -Wno-error=cpp -Wno-unused-function -Wunused-result -Wvla -Wshadow -Wstrict-prototypes
 SANTIIZER_FLAGS=-fsanitize=undefined -fsanitize-address-use-after-scope -fstack-check -fno-stack-clash-protection
 DEBUG_FLAGS=$(WARN_FLAGS) $(MEMORY_DEBUG_FLAGS) $(SANITIZER_FLAGS) -Og -ggdb3
-OPTIMIZE_FLAGS=-march=native -O2 -s -pipe -flto=4 -D NDEBUG -fwhole-program
-TEST_FLAGS=$(DEBUG_FLAGS) -DCTF_PARALLEL=4 -lpthread -Isrc
+OPTIMIZE_FLAGS=-march=native -O2 -pipe -D NDEBUG
+LINK_FLAGS=$(CFLAGS) -s -flto=4 -fwhole-program
+TEST_FLAGS=$(CFLAGS) $(DEBUG_FLAGS) -lpthread -Isrc
 CFLAGS=-std=gnu99 -MMD -MP
 
 all: debug
@@ -41,6 +42,14 @@ $(VERBOSE).SILENT:
 $(shell mkdir -p $(dir $(DEPENDENCIES)))
 -include $(DEPENDENCIES)
 
+build/test/%.c: test/%.c
+	$(info E   $@)
+	$(CC) -E $(TEST_FLAGS) -o $@ $<
+
+build/src/%.c: src/%.c
+	$(info E   $@)
+	$(CC) -E $(CFLAGS) -o $@ $<
+
 build/src/ctf/ctf.o: src/ctf/ctf.c
 	mkdir -p $(@D)
 	$(info CC  $@)
@@ -55,11 +64,11 @@ $(TEST_RUN): bin/$(TEST_BIN)
 bin/$(TEST_BIN): $(TEST_OBJECTS) build/src/ctf/ctf.o | build/test/$(TEST_BIN).lf
 	mkdir -p $(@D)
 	$(info LN  $@)
-	$(CC) $(TEST_FLAGS) `cat $|` -o $@ $^
+	$(CC) $(LINK_FLAGS) $(TEST_FLAGS) `cat $|` -o $@ $^
 
 build/test/$(TEST_BIN).lf: $(TESTS)
 	$(info FLG $@)
-	grep -ho '__wrap_[^( 	]\+' $^ | sed 's/__wrap_\(.\+\)/,--wrap=\1/' | tr -d '\n' | sed 's/^,/-Wl,/' > $@
+	grep -ho '__wrap_[^( 	]\+' $^ | sort | uniq | sed 's/__wrap_\(.\+\)/,--wrap=\1/' | tr -d '\n' | sed 's/^,/-Wl,/' > $@
 
 build/test/%.o: test/%.c
 	mkdir -p $(@D)

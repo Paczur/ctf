@@ -44,6 +44,17 @@
     }                                                                        \
   } while(0)
 
+#ifdef CTF_PARALLEL
+#define CTF_INTERNAL_STATE_INDEX_UPDATE(val) \
+  ctf_internal_state_index = (val);          \
+  ctf_parallel_internal_states_index[ctf_internal_thread_index] = (val)
+#define CTF_PARALLEL_INTERNAL_STATE_INDEX_REFRESH \
+  ctf_internal_state_index =                      \
+    ctf_parallel_internal_states_index[ctf_internal_thread_index]
+#else
+#define CTF_INTERNAL_STATE_INDEX_UPDATE(val) ctf_internal_state_index = (val)
+#endif
+
 #define CTF_INTERNAL_SPRINTF_ADVANCE(buff, ...) \
   buff += sprintf(buff, __VA_ARGS__)
 #if CTF_COLOR == CTF_AUTO
@@ -169,6 +180,50 @@
 
 /* Variables */
 int ctf_exit_code = 0;
+const char ctf_internal_print_arr_char[] = "'%c', ";
+const char ctf_internal_print_arr_int[] = "%jd, ";
+const char ctf_internal_print_arr_uint[] = "%ju, ";
+const char ctf_internal_print_arr_ptr[] = "%p, ";
+
+#define STRING_GENERATE(op, format) \
+  "%s " #op " %s (" #format " " #op " " #format ")"
+
+const char ctf_internal_print_char_eq[] = STRING_GENERATE(==, '%c');
+const char ctf_internal_print_char_neq[] = STRING_GENERATE(!=, '%c');
+const char ctf_internal_print_char_gt[] = STRING_GENERATE(>, '%c');
+const char ctf_internal_print_char_lt[] = STRING_GENERATE(<, '%c');
+const char ctf_internal_print_char_gte[] = STRING_GENERATE(>=, '%c');
+const char ctf_internal_print_char_lte[] = STRING_GENERATE(<=, '%c');
+
+const char ctf_internal_print_int_eq[] = STRING_GENERATE(==, % jd);
+const char ctf_internal_print_int_neq[] = STRING_GENERATE(!=, % jd);
+const char ctf_internal_print_int_gt[] = STRING_GENERATE(>, % jd);
+const char ctf_internal_print_int_lt[] = STRING_GENERATE(<, % jd);
+const char ctf_internal_print_int_gte[] = STRING_GENERATE(>=, % jd);
+const char ctf_internal_print_int_lte[] = STRING_GENERATE(<=, % jd);
+
+const char ctf_internal_print_uint_eq[] = STRING_GENERATE(==, % ju);
+const char ctf_internal_print_uint_neq[] = STRING_GENERATE(!=, % ju);
+const char ctf_internal_print_uint_gt[] = STRING_GENERATE(>, % ju);
+const char ctf_internal_print_uint_lt[] = STRING_GENERATE(<, % ju);
+const char ctf_internal_print_uint_gte[] = STRING_GENERATE(>=, % ju);
+const char ctf_internal_print_uint_lte[] = STRING_GENERATE(<=, % ju);
+
+const char ctf_internal_print_ptr_eq[] = STRING_GENERATE(==, % p);
+const char ctf_internal_print_ptr_neq[] = STRING_GENERATE(!=, % p);
+const char ctf_internal_print_ptr_gt[] = STRING_GENERATE(>, % p);
+const char ctf_internal_print_ptr_lt[] = STRING_GENERATE(<, % p);
+const char ctf_internal_print_ptr_gte[] = STRING_GENERATE(>=, % p);
+const char ctf_internal_print_ptr_lte[] = STRING_GENERATE(<=, % p);
+
+const char ctf_internal_print_str_eq[] = STRING_GENERATE(==, "%s");
+const char ctf_internal_print_str_neq[] = STRING_GENERATE(!=, "%s");
+const char ctf_internal_print_str_gt[] = STRING_GENERATE(>, "%s");
+const char ctf_internal_print_str_lt[] = STRING_GENERATE(<, "%s");
+const char ctf_internal_print_str_gte[] = STRING_GENERATE(>=, "%s");
+const char ctf_internal_print_str_lte[] = STRING_GENERATE(<=, "%s");
+
+#undef STRING_GENERATE
 
 #ifdef CTF_PARALLEL
 static pthread_mutex_t ctf_parallel_internal_print_mutex =
@@ -201,7 +256,11 @@ void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
   const int tty = CTF_INTERNAL_IS_TTY;
 #endif
 #ifdef CTF_PARALLEL
-  CTF_PARALLEL_INTERNAL_THREAD_INDEX;
+  const int ctf_internal_thread_index = ctf_parallel_internal_thread_index();
+  int ctf_internal_state_index =
+    ctf_parallel_internal_states_index[ctf_internal_thread_index];
+  struct ctf_internal_state *const ctf_internal_states =
+    ctf_parallel_internal_states[ctf_internal_thread_index];
 #endif
   char *print_buff_p = print_buff;
   int test_passed;
@@ -273,6 +332,98 @@ void ctf_internal_groups_run(int count, ...) {
   }
   fflush(stdout);
   va_end(args);
+}
+static size_t ctf_internal_assert_arr_print(struct ctf_internal_state *state,
+                                            size_t index, const void *data,
+                                            size_t size, size_t step, int sign,
+                                            const char *format) {
+  struct {
+    union {
+      const int8_t *i8;
+      const int16_t *i16;
+      const int32_t *i32;
+      const int64_t *i64;
+      const uint8_t *u8;
+      const uint16_t *u16;
+      const uint32_t *u32;
+      const uint64_t *u64;
+    };
+  } iterator;
+  iterator.u8 = data;
+  switch(step) {
+  case 1:
+    if(sign) {
+      for(size_t i = 0; i < size; i++) {
+        index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                          format, (intmax_t)iterator.i8[i]);
+      }
+    } else {
+      for(size_t i = 0; i < size; i++) {
+        index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                          format, (uintmax_t)iterator.u8[i]);
+      }
+    }
+    break;
+  case 2:
+    if(sign) {
+      for(size_t i = 0; i < size; i++) {
+        index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                          format, (intmax_t)iterator.i16[i]);
+      }
+    } else {
+      for(size_t i = 0; i < size; i++) {
+        index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                          format, (uintmax_t)iterator.u16[i]);
+      }
+    }
+    break;
+  case 4:
+    if(sign) {
+      for(size_t i = 0; i < size; i++) {
+        index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                          format, (intmax_t)iterator.i32[i]);
+      }
+    } else {
+      for(size_t i = 0; i < size; i++) {
+        index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                          format, (uintmax_t)iterator.u32[i]);
+      }
+    }
+    break;
+  case 8:
+    if(sign) {
+      for(size_t i = 0; i < size; i++) {
+        index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                          format, (intmax_t)iterator.i64[i]);
+      }
+    } else {
+      for(size_t i = 0; i < size; i++) {
+        index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                          format, (uintmax_t)iterator.u64[i]);
+      }
+    }
+    break;
+  }
+  index -= 2;
+  return index;
+}
+size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
+                                     const void *a, const void *b, size_t la,
+                                     size_t lb, size_t step, int sign,
+                                     const char *a_str, const char *b_str,
+                                     const char *op_str, const char *format) {
+  size_t index;
+  state->status = memcmp(a, b, CTF_INTERNAL_MIN(la, lb) * step);
+  index = snprintf(state->msg, CTF_CONST_STATE_MSG_SIZE, "%s %s %s ({", a_str,
+                   op_str, b_str);
+  index =
+    ctf_internal_assert_arr_print(state, index, a, la, step, sign, format);
+  index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
+                    "} %s {", op_str);
+  index =
+    ctf_internal_assert_arr_print(state, index, a, la, step, sign, format);
+  snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index, "})");
+  return index;
 }
 
 #if CTF_DETAIL != CTF_OFF
@@ -368,13 +519,10 @@ void ctf_parallel_internal_groups_run(int count, ...) {
   pthread_cond_broadcast(&ctf_parallel_internal_task_queue_non_empty);
   pthread_mutex_unlock(&ctf_parallel_internal_task_queue_mutex);
 }
-int ctf_parallel_internal_thread_index(int *state_index,
-                                       struct ctf_internal_state **states) {
+int ctf_parallel_internal_thread_index(void) {
   const pthread_t thread = pthread_self();
   for(int i = 0; i < CTF_PARALLEL; i++) {
     if(pthread_equal(ctf_parallel_internal_threads[i], thread)) {
-      *state_index = ctf_parallel_internal_states_index[i];
-      *states = ctf_parallel_internal_states[i];
       return i;
     }
   }
