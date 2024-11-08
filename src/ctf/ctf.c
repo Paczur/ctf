@@ -237,9 +237,12 @@ CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_parallel_internal_thread_index;
 CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
   *ctf_internal_states;
 CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_internal_state_index = 0;
+CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
+  *ctf_internal_state_p;
 #else
 struct ctf_internal_state ctf_internal_states[CTF_CONST_STATES_PER_THREAD];
 int ctf_internal_state_index = 0;
+struct ctf_internal_state *ctf_internal_state_p;
 #endif
 
 /* Functions */
@@ -261,10 +264,12 @@ void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
     ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index] = 0;
 #endif
     ctf_internal_state_index = 0;
+    ctf_internal_state_p = ctf_internal_states;
     group->tests[i]();
 #ifdef CTF_PARALLEL
     ctf_internal_state_index =
       ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index];
+    ctf_internal_state_p = ctf_internal_states + ctf_internal_state_index;
 #endif
     CTF_INTERNAL_SKIP_SPACE(test_name);
     test_name++; /* skips paren */

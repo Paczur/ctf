@@ -69,11 +69,13 @@
   do {                                                                        \
     ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index]++; \
     ctf_internal_state_index++;                                               \
+    ctf_internal_state_p++;                                                   \
   } while(0);
 #else
 #define CTF_INTERNAL_EXPECT_END \
   do {                          \
     ctf_internal_state_index++; \
+    ctf_internal_state_p++;     \
   } while(0)
 #endif
 
@@ -81,19 +83,18 @@
   do {                                                                  \
     if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return; \
   } while(0)
-#define CTF_INTERNAL_ASSERT_END                                      \
-  do {                                                               \
-    CTF_INTERNAL_EXPECT_END;                                         \
-    if(ctf_internal_states[ctf_internal_state_index].status) return; \
+#define CTF_INTERNAL_ASSERT_END              \
+  do {                                       \
+    CTF_INTERNAL_EXPECT_END;                 \
+    if(ctf_internal_state_p->status) return; \
   } while(0)
 
 #if CTF_DETAIL == CTF_OFF
 #define CTF_INTERNAL_ASSERT_COPY
 #else
-#define CTF_INTERNAL_ASSERT_COPY                                             \
-  do {                                                                       \
-    ctf_internal_assert_copy(ctf_internal_states + ctf_internal_state_index, \
-                             __LINE__, __FILE__);                            \
+#define CTF_INTERNAL_ASSERT_COPY                                        \
+  do {                                                                  \
+    ctf_internal_assert_copy(ctf_internal_state_p, __LINE__, __FILE__); \
   } while(0)
 #endif
 
@@ -101,45 +102,43 @@
   do {                                                                        \
     const type _x = a;                                                        \
     const type _y = b;                                                        \
-    ctf_internal_states[ctf_internal_state_index].status = !(f(_x, _y) op 0); \
-    snprintf(ctf_internal_states[ctf_internal_state_index].msg,               \
-             CTF_CONST_STATE_MSG_SIZE, format, #a, #b, _x, _y);               \
+    ctf_internal_state_p->status = !(f(_x, _y) op 0);                         \
+    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, format, #a, \
+             #b, _x, _y);                                                     \
     CTF_INTERNAL_ASSERT_COPY;                                                 \
   } while(0)
-#define CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format)                 \
-  do {                                                                  \
-    const type _x = a;                                                  \
-    const type _y = b;                                                  \
-    ctf_internal_states[ctf_internal_state_index].status = !(_x op _y); \
-    snprintf(ctf_internal_states[ctf_internal_state_index].msg,         \
-             CTF_CONST_STATE_MSG_SIZE, format, #a, #b, _x, _y);         \
-    CTF_INTERNAL_ASSERT_COPY;                                           \
-  } while(0)
-#define CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length1, length2)   \
+#define CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format)                       \
   do {                                                                        \
-    _Pragma("GCC diagnostic ignored \"-Wtype-limits\"");                      \
-    ctf_internal_assert_mem_print(                                            \
-      ctf_internal_states + ctf_internal_state_index, a, b, length1, length2, \
-      sizeof(*(a)), CTF_INTERNAL_IS_SIGNED(*(a)), #a, #b, #op, format);       \
+    const type _x = a;                                                        \
+    const type _y = b;                                                        \
+    ctf_internal_state_p->status = !(_x op _y);                               \
+    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, format, #a, \
+             #b, _x, _y);                                                     \
     CTF_INTERNAL_ASSERT_COPY;                                                 \
-    _Pragma("GCC diagnostic pop")                                             \
   } while(0)
-#define CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length)          \
-  do {                                                                 \
-    CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length, length); \
-    ctf_internal_states[ctf_internal_state_index].status =             \
-      !(ctf_internal_states[ctf_internal_state_index].status op 0);    \
+#define CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length1, length2) \
+  do {                                                                      \
+    _Pragma("GCC diagnostic ignored \"-Wtype-limits\"");                    \
+    ctf_internal_assert_mem_print(                                          \
+      ctf_internal_state_p, a, b, length1, length2, sizeof(*(a)),           \
+      CTF_INTERNAL_IS_SIGNED(*(a)), #a, #b, #op, format);                   \
+    CTF_INTERNAL_ASSERT_COPY;                                               \
+    _Pragma("GCC diagnostic pop")                                           \
+  } while(0)
+#define CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length)            \
+  do {                                                                   \
+    CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length, length);   \
+    ctf_internal_state_p->status = !(ctf_internal_state_p->status op 0); \
   } while(0)
 #define CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format)                         \
   do {                                                                        \
     CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, CTF_INTERNAL_LENGTH(a), \
                                     CTF_INTERNAL_LENGTH(b));                  \
-    if(ctf_internal_states[ctf_internal_state_index].status == 0) {           \
-      ctf_internal_states[ctf_internal_state_index].status =                  \
+    if(ctf_internal_state_p->status == 0) {                                   \
+      ctf_internal_state_p->status =                                          \
         !(CTF_INTERNAL_LENGTH(a) op CTF_INTERNAL_LENGTH(b));                  \
     } else {                                                                  \
-      ctf_internal_states[ctf_internal_state_index].status =                  \
-        !(ctf_internal_states[ctf_internal_state_index].status op 0);         \
+      ctf_internal_state_p->status = !(ctf_internal_state_p->status op 0);    \
     }                                                                         \
   } while(0)
 #define CTF_INTERNAL_ASSERT(a, b, op, type, format)  \
@@ -262,10 +261,13 @@ extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL int
 extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
   *ctf_internal_states;
 extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_internal_state_index;
+extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
+  *ctf_internal_state_p;
 #else
 extern struct ctf_internal_state
   ctf_internal_states[CTF_CONST_STATES_PER_THREAD];
 extern int ctf_internal_state_index;
+extern struct ctf_internal_state *ctf_internal_state_p;
 #endif
 
 /* Functions */
@@ -354,32 +356,29 @@ void ctf_parallel_sync(void);
   } while(0)
 #endif
 
-#define ctf_fail(msg)                                               \
-  CTF_INTERNAL_ASSERT_BEGIN;                                        \
-  do {                                                              \
-    ctf_internal_states[ctf_internal_state_index].status = 1;       \
-    strncpy(ctf_internal_states[ctf_internal_state_index].msg, msg, \
-            CTF_CONST_STATE_MSG_SIZE);                              \
-    CTF_INTERNAL_ASSERT_COPY;                                       \
-    CTF_INTERNAL_ASSERT_END                                         \
+#define ctf_fail(msg)                                                  \
+  CTF_INTERNAL_ASSERT_BEGIN;                                           \
+  do {                                                                 \
+    ctf_internal_state_p->status = 1;                                  \
+    strncpy(ctf_internal_state_p->msg, msg, CTF_CONST_STATE_MSG_SIZE); \
+    CTF_INTERNAL_ASSERT_COPY;                                          \
+    CTF_INTERNAL_ASSERT_END                                            \
   } while(0);
-#define ctf_pass(msg)                                               \
-  do {                                                              \
-    CTF_INTERNAL_ASSERT_BEGIN;                                      \
-    ctf_internal_states[ctf_internal_state_index].status = 0;       \
-    strncpy(ctf_internal_states[ctf_internal_state_index].msg, msg, \
-            CTF_CONST_STATE_MSG_SIZE);                              \
-    CTF_INTERNAL_ASSERT_COPY;                                       \
-    CTF_INTERNAL_ASSERT_END                                         \
+#define ctf_pass(msg)                                                  \
+  do {                                                                 \
+    CTF_INTERNAL_ASSERT_BEGIN;                                         \
+    ctf_internal_state_p->status = 0;                                  \
+    strncpy(ctf_internal_state_p->msg, msg, CTF_CONST_STATE_MSG_SIZE); \
+    CTF_INTERNAL_ASSERT_COPY;                                          \
+    CTF_INTERNAL_ASSERT_END                                            \
   } while(0);
-#define ctf_assert_msg(test, m)                                            \
-  do {                                                                     \
-    CTF_INTERNAL_ASSERT_BEGIN;                                             \
-    ctf_internal_states[ctf_internal_state_index].status = !((int)(test)); \
-    strncpy(ctf_internal_states[ctf_internal_state_index].msg, m,          \
-            CTF_CONST_STATE_MSG_SIZE);                                     \
-    CTF_INTERNAL_ASSERT_COPY;                                              \
-    CTF_INTERNAL_ASSERT_END                                                \
+#define ctf_assert_msg(test, m)                                      \
+  do {                                                               \
+    CTF_INTERNAL_ASSERT_BEGIN;                                       \
+    ctf_internal_state_p->status = !((int)(test));                   \
+    strncpy(ctf_internal_state_p->msg, m, CTF_CONST_STATE_MSG_SIZE); \
+    CTF_INTERNAL_ASSERT_COPY;                                        \
+    CTF_INTERNAL_ASSERT_END                                          \
   } while(0);
 #define ctf_assert(test) ctf_assert_msg(test, CTF_INTERNAL_STRINGIFY2(test))
 #define ctf_assert_char_eq(a, b) \
@@ -544,35 +543,34 @@ void ctf_parallel_sync(void);
   CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_ptr)
 #define ctf_assert_array_ptr_gte(a, b) \
   CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_ptr)
-#define ctf_assert_true(a)                                              \
-  do {                                                                  \
-    CTF_INTERNAL_ASSERT_BEGIN;                                          \
-    const int _x = a;                                                   \
-    ctf_internal_states[ctf_internal_state_index].status = !_x;         \
-    snprintf(ctf_internal_states[ctf_internal_state_index].msg,         \
-             CTF_CONST_STATE_MSG_SIZE, "%s == true (%d != 0)", #a, _x); \
-    CTF_INTERNAL_ASSERT_COPY;                                           \
-    CTF_INTERNAL_ASSERT_END;                                            \
+#define ctf_assert_true(a)                                        \
+  do {                                                            \
+    CTF_INTERNAL_ASSERT_BEGIN;                                    \
+    const int _x = a;                                             \
+    ctf_internal_state_p->status = !_x;                           \
+    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, \
+             "%s == true (%d != 0)", #a, _x);                     \
+    CTF_INTERNAL_ASSERT_COPY;                                     \
+    CTF_INTERNAL_ASSERT_END;                                      \
   } while(0)
-#define ctf_assert_false(a)                                              \
-  do {                                                                   \
-    CTF_INTERNAL_ASSERT_BEGIN;                                           \
-    const int _x = a;                                                    \
-    ctf_internal_states[ctf_internal_state_index].status = !!_x;         \
-    snprintf(ctf_internal_states[ctf_internal_state_index].msg,          \
-             CTF_CONST_STATE_MSG_SIZE, "%s == false (%d == 0)", #a, _x); \
-    CTF_INTERNAL_ASSERT_COPY;                                            \
-    CTF_INTERNAL_ASSERT_END;                                             \
+#define ctf_assert_false(a)                                       \
+  do {                                                            \
+    CTF_INTERNAL_ASSERT_BEGIN;                                    \
+    const int _x = a;                                             \
+    ctf_internal_state_p->status = !!_x;                          \
+    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, \
+             "%s == false (%d == 0)", #a, _x);                    \
+    CTF_INTERNAL_ASSERT_COPY;                                     \
+    CTF_INTERNAL_ASSERT_END;                                      \
   } while(0)
 
-#define ctf_expect_msg(test, m)                                            \
-  do {                                                                     \
-    CTF_INTERNAL_ASSERT_BEGIN;                                             \
-    ctf_internal_states[ctf_internal_state_index].status = !((int)(test)); \
-    strncpy(ctf_internal_states[ctf_internal_state_index].msg, m,          \
-            CTF_CONST_STATE_MSG_SIZE);                                     \
-    CTF_INTERNAL_ASSERT_COPY;                                              \
-    CTF_INTERNAL_EXPECT_END;                                               \
+#define ctf_expect_msg(test, m)                                      \
+  do {                                                               \
+    CTF_INTERNAL_ASSERT_BEGIN;                                       \
+    ctf_internal_state_p->status = !((int)(test));                   \
+    strncpy(ctf_internal_state_p->msg, m, CTF_CONST_STATE_MSG_SIZE); \
+    CTF_INTERNAL_ASSERT_COPY;                                        \
+    CTF_INTERNAL_EXPECT_END;                                         \
   } while(0);
 #define ctf_expect(test) ctf_expect_msg(test, CTF_INTERNAL_STRINGIFY2(test))
 #define ctf_expect_char_eq(a, b) \
@@ -737,25 +735,25 @@ void ctf_parallel_sync(void);
   CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_ptr)
 #define ctf_expect_array_ptr_gte(a, b) \
   CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_ptr)
-#define ctf_expect_true(a)                                              \
-  do {                                                                  \
-    CTF_INTERNAL_ASSERT_BEGIN;                                          \
-    const int _x = a;                                                   \
-    ctf_internal_states[ctf_internal_state_index].status = !_x;         \
-    snprintf(ctf_internal_states[ctf_internal_state_index].msg,         \
-             CTF_CONST_STATE_MSG_SIZE, "%s == true (%d != 0)", #a, _x); \
-    CTF_INTERNAL_ASSERT_COPY;                                           \
-    CTF_INTERNAL_EXPECT_END;                                            \
+#define ctf_expect_true(a)                                        \
+  do {                                                            \
+    CTF_INTERNAL_ASSERT_BEGIN;                                    \
+    const int _x = a;                                             \
+    ctf_internal_state_p->status = !_x;                           \
+    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, \
+             "%s == true (%d != 0)", #a, _x);                     \
+    CTF_INTERNAL_ASSERT_COPY;                                     \
+    CTF_INTERNAL_EXPECT_END;                                      \
   } while(0)
-#define ctf_expect_false(a)                                              \
-  do {                                                                   \
-    CTF_INTERNAL_ASSERT_BEGIN;                                           \
-    const int _x = a;                                                    \
-    ctf_internal_states[ctf_internal_state_index].status = _x;           \
-    snprintf(ctf_internal_states[ctf_internal_state_index].msg,          \
-             CTF_CONST_STATE_MSG_SIZE, "%s == false (%d == 0)", #a, _x); \
-    CTF_INTERNAL_ASSERT_COPY;                                            \
-    CTF_INTERNAL_EXPECT_END;                                             \
+#define ctf_expect_false(a)                                       \
+  do {                                                            \
+    CTF_INTERNAL_ASSERT_BEGIN;                                    \
+    const int _x = a;                                             \
+    ctf_internal_state_p->status = _x;                            \
+    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, \
+             "%s == false (%d == 0)", #a, _x);                    \
+    CTF_INTERNAL_ASSERT_COPY;                                     \
+    CTF_INTERNAL_EXPECT_END;                                      \
   } while(0)
 
 #if CTF_ASSERT_ALIASES == CTF_ON
