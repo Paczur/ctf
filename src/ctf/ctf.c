@@ -415,6 +415,11 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
   snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index, "})");
   return index;
 }
+void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
+                              const char *file) {
+  state->line = line;
+  strncpy(state->file, file, CTF_CONST_STATE_FILE_SIZE);
+}
 
 #if CTF_DETAIL != CTF_OFF
 int ctf_internal_int_length(int a) {

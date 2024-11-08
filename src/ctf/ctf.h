@@ -90,11 +90,10 @@
 #if CTF_DETAIL == CTF_OFF
 #define CTF_INTERNAL_ASSERT_COPY
 #else
-#define CTF_INTERNAL_ASSERT_COPY                                          \
-  do {                                                                    \
-    ctf_internal_states[ctf_internal_state_index].line = __LINE__;        \
-    strncpy(ctf_internal_states[ctf_internal_state_index].file, __FILE__, \
-            CTF_CONST_STATE_FILE_SIZE);                                   \
+#define CTF_INTERNAL_ASSERT_COPY                                             \
+  do {                                                                       \
+    ctf_internal_assert_copy(ctf_internal_states + ctf_internal_state_index, \
+                             __LINE__, __FILE__);                            \
   } while(0)
 #endif
 
@@ -277,6 +276,8 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
                                      size_t lb, size_t step, int signed,
                                      const char *a_str, const char *b_str,
                                      const char *op_str, const char *format);
+void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
+                              const char *file);
 #if CTF_DETAIL != CTF_OFF
 int ctf_internal_int_length(int a);
 #endif
