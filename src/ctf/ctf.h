@@ -65,37 +65,27 @@
 #define CTF_INTERNAL_LENGTH(a) (sizeof(a) / sizeof(*(a)))
 
 #ifdef CTF_PARALLEL
-#define CTF_INTERNAL_EXPECT_END                                               \
-  do {                                                                        \
-    ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index]++; \
-    ctf_internal_state_index++;                                               \
-    ctf_internal_state_p++;                                                   \
-  } while(0);
+#define CTF_INTERNAL_EXPECT_END                                             \
+  ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index]++; \
+  ctf_internal_state_index++;                                               \
+  ctf_internal_state_p++
 #else
 #define CTF_INTERNAL_EXPECT_END \
-  do {                          \
-    ctf_internal_state_index++; \
-    ctf_internal_state_p++;     \
-  } while(0)
+  ctf_internal_state_index++;   \
+  ctf_internal_state_p++
 #endif
 
-#define CTF_INTERNAL_ASSERT_BEGIN                                       \
-  do {                                                                  \
-    if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return; \
-  } while(0)
-#define CTF_INTERNAL_ASSERT_END              \
-  do {                                       \
-    CTF_INTERNAL_EXPECT_END;                 \
-    if(ctf_internal_state_p->status) return; \
-  } while(0)
+#define CTF_INTERNAL_ASSERT_BEGIN \
+  if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return
+#define CTF_INTERNAL_ASSERT_END \
+  CTF_INTERNAL_EXPECT_END;      \
+  if(ctf_internal_state_p->status) return
 
 #if CTF_DETAIL == CTF_OFF
 #define CTF_INTERNAL_ASSERT_COPY
 #else
-#define CTF_INTERNAL_ASSERT_COPY                                        \
-  do {                                                                  \
-    ctf_internal_assert_copy(ctf_internal_state_p, __LINE__, __FILE__); \
-  } while(0)
+#define CTF_INTERNAL_ASSERT_COPY \
+  ctf_internal_assert_copy(ctf_internal_state_p, __LINE__, __FILE__)
 #endif
 
 #define CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f)               \
@@ -116,79 +106,56 @@
              #b, _x, _y);                                                     \
     CTF_INTERNAL_ASSERT_COPY;                                                 \
   } while(0)
-#define CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length1, length2) \
-  do {                                                                      \
-    _Pragma("GCC diagnostic ignored \"-Wtype-limits\"");                    \
-    ctf_internal_assert_mem_print(                                          \
-      ctf_internal_state_p, a, b, length1, length2, sizeof(*(a)),           \
-      CTF_INTERNAL_IS_SIGNED(*(a)), #a, #b, #op, format);                   \
-    CTF_INTERNAL_ASSERT_COPY;                                               \
-    _Pragma("GCC diagnostic pop")                                           \
-  } while(0)
-#define CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length)            \
-  do {                                                                   \
-    CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length, length);   \
-    ctf_internal_state_p->status = !(ctf_internal_state_p->status op 0); \
-  } while(0)
-#define CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format)                         \
-  do {                                                                        \
-    CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, CTF_INTERNAL_LENGTH(a), \
-                                    CTF_INTERNAL_LENGTH(b));                  \
-    if(ctf_internal_state_p->status == 0) {                                   \
-      ctf_internal_state_p->status =                                          \
-        !(CTF_INTERNAL_LENGTH(a) op CTF_INTERNAL_LENGTH(b));                  \
-    } else {                                                                  \
-      ctf_internal_state_p->status = !(ctf_internal_state_p->status op 0);    \
-    }                                                                         \
-  } while(0)
-#define CTF_INTERNAL_ASSERT(a, b, op, type, format)  \
-  do {                                               \
-    CTF_INTERNAL_ASSERT_BEGIN;                       \
-    CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format); \
-    CTF_INTERNAL_ASSERT_END;                         \
-  } while(0)
-#define CTF_INTERNAL_ASSERT_FUNC(a, b, op, type, format, f)  \
-  do {                                                       \
-    CTF_INTERNAL_ASSERT_BEGIN;                               \
-    CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f); \
-    CTF_INTERNAL_ASSERT_END;                                 \
-  } while(0)
-#define CTF_INTERNAL_ASSERT_MEM(a, b, op, format, length)  \
-  do {                                                     \
-    CTF_INTERNAL_ASSERT_BEGIN;                             \
-    CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length); \
-    CTF_INTERNAL_ASSERT_END;                               \
-  } while(0)
-#define CTF_INTERNAL_ASSERT_ARR(a, b, op, format)  \
-  do {                                             \
-    CTF_INTERNAL_ASSERT_BEGIN;                     \
-    CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format); \
-    CTF_INTERNAL_ASSERT_END;                       \
-  } while(0)
-#define CTF_INTERNAL_EXPECT(a, b, op, type, format)  \
-  do {                                               \
-    CTF_INTERNAL_ASSERT_BEGIN;                       \
-    CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format); \
-    CTF_INTERNAL_EXPECT_END;                         \
-  } while(0)
-#define CTF_INTERNAL_EXPECT_FUNC(a, b, op, type, format, f)  \
-  do {                                                       \
-    CTF_INTERNAL_ASSERT_BEGIN;                               \
-    CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f); \
-    CTF_INTERNAL_EXPECT_END;                                 \
-  } while(0)
-#define CTF_INTERNAL_EXPECT_MEM(a, b, op, format, length)  \
-  do {                                                     \
-    CTF_INTERNAL_ASSERT_BEGIN;                             \
-    CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length); \
-    CTF_INTERNAL_EXPECT_END;                               \
-  } while(0)
-#define CTF_INTERNAL_EXPECT_ARR(a, b, op, format)  \
-  do {                                             \
-    CTF_INTERNAL_ASSERT_BEGIN;                     \
-    CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format); \
-    CTF_INTERNAL_EXPECT_END;                       \
-  } while(0)
+#define CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length1, length2)   \
+  _Pragma("GCC diagnostic ignored \"-Wtype-limits\"");                        \
+  ctf_internal_assert_mem_print(ctf_internal_state_p, a, b, length1, length2, \
+                                sizeof(*(a)), CTF_INTERNAL_IS_SIGNED(*(a)),   \
+                                #a, #b, #op, format, __LINE__, __FILE__);     \
+  _Pragma("GCC diagnostic pop")
+#define CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length)        \
+  CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length, length); \
+  ctf_internal_state_p->status = !(ctf_internal_state_p->status op 0)
+#define CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format)                       \
+  CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, CTF_INTERNAL_LENGTH(a), \
+                                  CTF_INTERNAL_LENGTH(b));                  \
+  if(ctf_internal_state_p->status == 0) {                                   \
+    ctf_internal_state_p->status =                                          \
+      !(CTF_INTERNAL_LENGTH(a) op CTF_INTERNAL_LENGTH(b));                  \
+  } else {                                                                  \
+    ctf_internal_state_p->status = !(ctf_internal_state_p->status op 0);    \
+  }
+#define CTF_INTERNAL_ASSERT(a, b, op, type, format) \
+  CTF_INTERNAL_ASSERT_BEGIN;                        \
+  CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format);  \
+  CTF_INTERNAL_ASSERT_END
+#define CTF_INTERNAL_ASSERT_FUNC(a, b, op, type, format, f) \
+  CTF_INTERNAL_ASSERT_BEGIN;                                \
+  CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f);  \
+  CTF_INTERNAL_ASSERT_END
+#define CTF_INTERNAL_ASSERT_MEM(a, b, op, format, length) \
+  CTF_INTERNAL_ASSERT_BEGIN;                              \
+  CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length);  \
+  CTF_INTERNAL_ASSERT_END
+#define CTF_INTERNAL_ASSERT_ARR(a, b, op, format) \
+  CTF_INTERNAL_ASSERT_BEGIN;                      \
+  CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format);  \
+  CTF_INTERNAL_ASSERT_END
+#define CTF_INTERNAL_EXPECT(a, b, op, type, format) \
+  CTF_INTERNAL_ASSERT_BEGIN;                        \
+  CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format);  \
+  CTF_INTERNAL_EXPECT_END
+#define CTF_INTERNAL_EXPECT_FUNC(a, b, op, type, format, f) \
+  CTF_INTERNAL_ASSERT_BEGIN;                                \
+  CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f);  \
+  CTF_INTERNAL_EXPECT_END
+#define CTF_INTERNAL_EXPECT_MEM(a, b, op, format, length) \
+  CTF_INTERNAL_ASSERT_BEGIN;                              \
+  CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length);  \
+  CTF_INTERNAL_EXPECT_END
+#define CTF_INTERNAL_EXPECT_ARR(a, b, op, format) \
+  CTF_INTERNAL_ASSERT_BEGIN;                      \
+  CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format);  \
+  CTF_INTERNAL_EXPECT_END
 
 /* Types */
 struct ctf_internal_state {
@@ -277,7 +244,8 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
                                      const void *a, const void *b, size_t la,
                                      size_t lb, size_t step, int signed,
                                      const char *a_str, const char *b_str,
-                                     const char *op_str, const char *format);
+                                     const char *op_str, const char *format,
+                                     int line, const char *file);
 void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
                               const char *file);
 #if CTF_DETAIL != CTF_OFF

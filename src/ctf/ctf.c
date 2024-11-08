@@ -406,7 +406,8 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
                                      const void *a, const void *b, size_t la,
                                      size_t lb, size_t step, int sign,
                                      const char *a_str, const char *b_str,
-                                     const char *op_str, const char *format) {
+                                     const char *op_str, const char *format,
+                                     int line, const char *file) {
   size_t index;
   state->status = memcmp(a, b, CTF_INTERNAL_MIN(la, lb) * step);
   index = snprintf(state->msg, CTF_CONST_STATE_MSG_SIZE, "%s %s %s ({", a_str,
@@ -418,6 +419,8 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
   index =
     ctf_internal_assert_arr_print(state, index, a, la, step, sign, format);
   snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index, "})");
+  state->line = line;
+  strncpy(state->file, file, CTF_CONST_STATE_FILE_SIZE);
   return index;
 }
 void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
