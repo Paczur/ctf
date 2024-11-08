@@ -9,6 +9,13 @@
 #define CTF_INTERNAL_IS_TTY isatty(STDOUT_FILENO)
 #endif
 
+#ifndef CTF_ONLY_FAILED
+#define CTF_ONLY_FAILED CTF_OFF
+#else
+#undef CTF_ONLY_FAILED
+#define CTF_ONLY_FAILED CTF_ON
+#endif
+
 /* Const */
 #define CTF_CONST_GROUP_NAME_SIZE_DEFAULT 256
 #define CTF_CONST_PRINT_BUFF_SIZE_DEFAULT 65536
@@ -90,8 +97,12 @@
 #define CTF_PRINT_FAIL "F"
 #endif
 
+#if CTF_ONLY_FAILED == CTF_ON
+#define CTF_INTERNAL_PRINT_GROUP_PASS_RAW(name, before, after) "%s", ""
+#elif CTF_ONLY_FAILED == CTF_OFF
 #define CTF_INTERNAL_PRINT_GROUP_PASS_RAW(name, before, after) \
   "[" before CTF_PRINT_PASS after "] %s\n", (name)
+#endif
 #define CTF_INTERNAL_PRINT_GROUP_FAIL_RAW(name, before, after) \
   "[" before CTF_PRINT_FAIL after "] %s\n", (name)
 #define CTF_INTERNAL_PRINT_TEST_PASS_RAW(name, name_len, before, after) \
