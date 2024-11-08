@@ -128,9 +128,13 @@ ctf_barrier(); // syncs threads and then returns depending on ctf_exit_code
 ```
 #### Configuration
 ```
+// Options specified before header include
+
 // Creates aliases to assert/expect macros without `ctf_` prefix
 #define CTF_ASSERT_ALIASES
-// Enables parallel functions for current file
+
+// Options specified ctf.c compilation
+// Enables parallel features
 #define CTF_PARALLEL
 /* Changes symbols used for passed and failed tests, valid options:
  * CTF_OFF - "P", "F"
@@ -151,6 +155,8 @@ ctf_barrier(); // syncs threads and then returns depending on ctf_exit_code
  * CTF_AUTO - Print color codes only when outputing to terminal
  */
 #define CTF_COLOR CTF_AUTO
+// Displays only groups that failed
+#define CTF_ONLY_FAILED CTF_OFF
 
 // Macros used for specifing internal details, use only when encountering a bug
 
@@ -163,7 +169,7 @@ ctf_barrier(); // syncs threads and then returns depending on ctf_exit_code
 // Size of buffer used to hold test messages
 #define CTF_CONST_STATE_MSG_SIZE CTF_CONST_PRINT_MSG_SIZE_DEFAULT
 // Number of expects + 1 allowed for every test
-#define CTF_CONST_STATES_PER_TEST CTF_CONST_STATES_PER_TEST_DEFAULT
+#define CTF_CONST_STATES_PER_THREAD CTF_CONST_STATES_PER_THREAD_DEFAULT
 // Size of queue used to hold groups to run in parallel
 #define CTF_PARALLEL_CONST_TASK_QUEUE_MAX CTF_PARALLEL_CONST_TASK_QUEUE_MAX_DEFAULT
 ```
