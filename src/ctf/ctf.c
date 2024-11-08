@@ -248,9 +248,12 @@ CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_parallel_internal_thread_index;
 CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
   *ctf_internal_states;
 CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_internal_state_index = 0;
+CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
+  *ctf_internal_state_p;
 #else
 struct ctf_internal_state ctf_internal_states[CTF_CONST_STATES_PER_THREAD];
 int ctf_internal_state_index = 0;
+struct ctf_internal_state *ctf_internal_state_p;
 #endif
 
 /* Functions */
@@ -272,10 +275,12 @@ void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
     ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index] = 0;
 #endif
     ctf_internal_state_index = 0;
+    ctf_internal_state_p = ctf_internal_states;
     group->tests[i]();
 #ifdef CTF_PARALLEL
     ctf_internal_state_index =
       ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index];
+    ctf_internal_state_p = ctf_internal_states + ctf_internal_state_index;
 #endif
     CTF_INTERNAL_SKIP_SPACE(test_name);
     test_name++; /* skips paren */
@@ -412,7 +417,8 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
                                      const void *a, const void *b, size_t la,
                                      size_t lb, size_t step, int sign,
                                      const char *a_str, const char *b_str,
-                                     const char *op_str, const char *format) {
+                                     const char *op_str, const char *format,
+                                     int line, const char *file) {
   size_t index;
   state->status = memcmp(a, b, CTF_INTERNAL_MIN(la, lb) * step);
   index = snprintf(state->msg, CTF_CONST_STATE_MSG_SIZE, "%s %s %s ({", a_str,
@@ -424,7 +430,14 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
   index =
     ctf_internal_assert_arr_print(state, index, a, la, step, sign, format);
   snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index, "})");
+  state->line = line;
+  strncpy(state->file, file, CTF_CONST_STATE_FILE_SIZE);
   return index;
+}
+void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
+                              const char *file) {
+  state->line = line;
+  strncpy(state->file, file, CTF_CONST_STATE_FILE_SIZE);
 }
 
 #if CTF_DETAIL != CTF_OFF

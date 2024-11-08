@@ -18,7 +18,7 @@ SANTIIZER_FLAGS=-fsanitize=undefined -fsanitize-address-use-after-scope -fstack-
 DEBUG_FLAGS=$(WARN_FLAGS) $(MEMORY_DEBUG_FLAGS) $(SANITIZER_FLAGS) -Og -ggdb3
 OPTIMIZE_FLAGS=-march=native -O2 -pipe -D NDEBUG
 LINK_FLAGS=$(CFLAGS) -s -flto=4 -fwhole-program
-TEST_FLAGS=$(CFLAGS) $(DEBUG_FLAGS) -DCTF_PARALLEL=4 -lpthread -Isrc
+TEST_FLAGS=$(CFLAGS) $(DEBUG_FLAGS) -lpthread -Isrc
 CFLAGS=-std=gnu99 -MMD -MP
 
 all: debug
