@@ -2,22 +2,6 @@
 #define CTF_H
 
 /* Parse options */
-#define CTF_OFF 0
-#define CTF_ON 1
-#define CTF_AUTO 2
-#define CTF_UNICODE_GENERIC 1
-#define CTF_UNICODE_BRANDED 2
-#define CTF_USER_DEFINED 3
-
-#ifndef CTF_COLOR
-#define CTF_COLOR CTF_AUTO
-#endif
-#ifndef CTF_DETAIL
-#define CTF_DETAIL CTF_AUTO
-#endif
-#ifndef CTF_UNICODE
-#define CTF_UNICODE CTF_UNICODE_BRANDED
-#endif
 #ifndef CTF_ASSERT_ALIASES
 #define CTF_ASSERT_ALIASES CTF_ON
 #endif
@@ -32,19 +16,9 @@
 #endif
 
 /* Consts */
-#define CTF_CONST_STATE_FILE_SIZE_DEFAULT 256
-#define CTF_CONST_STATE_MSG_SIZE_DEFAULT 4096
-#define CTF_CONST_STATES_PER_THREAD_DEFAULT 64
-
-#ifndef CTF_CONST_STATE_FILE_SIZE
-#define CTF_CONST_STATE_FILE_SIZE CTF_CONST_STATE_FILE_SIZE_DEFAULT
-#endif
-#ifndef CTF_CONST_STATE_MSG_SIZE
-#define CTF_CONST_STATE_MSG_SIZE CTF_CONST_STATE_MSG_SIZE_DEFAULT
-#endif
-#ifndef CTF_CONST_STATES_PER_THREAD
-#define CTF_CONST_STATES_PER_THREAD CTF_CONST_STATES_PER_THREAD_DEFAULT
-#endif
+#define CTF_CONST_STATE_FILE_SIZE 256
+#define CTF_CONST_STATE_MSG_SIZE 4096
+#define CTF_CONST_STATES_PER_THREAD 64
 
 /* System specific */
 #ifdef CTF_PARALLEL
@@ -63,10 +37,10 @@
 #define CTF_INTERNAL_LENGTH(a) (sizeof(a) / sizeof(*(a)))
 
 #ifdef CTF_PARALLEL
-#define CTF_INTERNAL_EXPECT_END                                             \
-  ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index]++; \
-  ctf_internal_state_index++;                                               \
-  ctf_internal_state_p++
+#define CTF_INTERNAL_EXPECT_END \
+  ctf_internal_state_index++;   \
+  ctf_internal_state_p++;       \
+  ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index]++;
 #else
 #define CTF_INTERNAL_EXPECT_END \
   ctf_internal_state_index++;   \
@@ -77,15 +51,10 @@
   if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return
 #define CTF_INTERNAL_ASSERT_END \
   CTF_INTERNAL_EXPECT_END;      \
-  if(ctf_internal_state_p->status) return
+  if((ctf_internal_state_p - 1)->status) return
 
-#if CTF_DETAIL == CTF_OFF
-#define CTF_INTERNAL_ASSERT_COPY
-#else
 #define CTF_INTERNAL_ASSERT_COPY \
   ctf_internal_assert_copy(ctf_internal_state_p, __LINE__, __FILE__)
-#endif
-
 #define CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f)               \
   do {                                                                        \
     const type _x = a;                                                        \
@@ -158,10 +127,8 @@
 /* Types */
 struct ctf_internal_state {
   int status;
-#if CTF_DETAIL != CTF_OFF
   int line;
   char file[CTF_CONST_STATE_FILE_SIZE];
-#endif
   char msg[CTF_CONST_STATE_MSG_SIZE];
 };
 typedef void (*const ctf_internal_test)(void);
@@ -246,9 +213,6 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
                                      int line, const char *file);
 void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
                               const char *file);
-#if CTF_DETAIL != CTF_OFF
-int ctf_internal_int_length(int a);
-#endif
 
 #ifdef CTF_PARALLEL
 void ctf_parallel_internal_group_run(const struct ctf_internal_group *group);
@@ -322,21 +286,21 @@ void ctf_parallel_sync(void);
   } while(0)
 #endif
 
-#define ctf_fail(msg)                                                  \
+#define ctf_fail(m)                                                    \
   CTF_INTERNAL_ASSERT_BEGIN;                                           \
   do {                                                                 \
     ctf_internal_state_p->status = 1;                                  \
-    strncpy(ctf_internal_state_p->msg, msg, CTF_CONST_STATE_MSG_SIZE); \
+    strncpy(ctf_internal_state_p->msg, (m), CTF_CONST_STATE_MSG_SIZE); \
     CTF_INTERNAL_ASSERT_COPY;                                          \
-    CTF_INTERNAL_ASSERT_END                                            \
+    CTF_INTERNAL_ASSERT_END;                                           \
   } while(0);
-#define ctf_pass(msg)                                                  \
+#define ctf_pass(m)                                                    \
   do {                                                                 \
     CTF_INTERNAL_ASSERT_BEGIN;                                         \
     ctf_internal_state_p->status = 0;                                  \
-    strncpy(ctf_internal_state_p->msg, msg, CTF_CONST_STATE_MSG_SIZE); \
+    strncpy(ctf_internal_state_p->msg, (m), CTF_CONST_STATE_MSG_SIZE); \
     CTF_INTERNAL_ASSERT_COPY;                                          \
-    CTF_INTERNAL_ASSERT_END                                            \
+    CTF_INTERNAL_ASSERT_END;                                           \
   } while(0);
 #define ctf_assert_msg(test, m)                                      \
   do {                                                               \

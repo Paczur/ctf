@@ -701,10 +701,15 @@ CTF_GROUP(memory_success, memory_char_expect_success, memory_char_assert,
           memory_uint_expect_success, memory_uint_assert,
           memory_ptr_expect_success, memory_ptr_assert)
 
+CTF_TEST(pass_and_fail) {
+  ctf_pass("pass");
+  ctf_fail("fail");
+}
+
 CTF_GROUP(failure, char_expect_failure, int_expect_failure, uint_expect_failure,
           ptr_expect_failure, string_expect_failure, array_char_expect_failure,
           array_int_expect_failure, array_uint_expect_failure,
           array_ptr_expect_failure, memory_char_expect_failure,
           memory_int_expect_failure, memory_uint_expect_failure,
-          memory_ptr_expect_failure)
+          memory_ptr_expect_failure, pass_and_fail)
 

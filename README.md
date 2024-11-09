@@ -112,7 +112,7 @@ ctf_assert_false(a);
 ctf_expect_true(a);
 ctf_expect_false(a);
 
-ctf_fail(msg); // Adds failed test with message
+ctf_fail(msg); // Failes test with message
 ctf_pass(msg); // Adds passed test with message
 ```
 #### Parallel
@@ -126,50 +126,18 @@ ctf_group_run(&group_name); // adds group to queue
 ctf_groups_run(&group_name1, &group_name2, ...); // adds groups to queue
 ctf_barrier(); // syncs threads and then returns depending on ctf_exit_code
 ```
+#### Enabling parallelism
+1. In every test file before including header add `#define CTF_PARALLEL`.
+2. While compiling ctf.c add `-DCTF_PARALLEL=[thread_num]` to options.
 #### Configuration
+Specified when:
+- including library
+  * `#define CTF_ASSERT_ALIASES CTF_OFF` - removes aliases to assert/expect macros
+- running binary
 ```
-// Options specified before header include
-
-// Creates aliases to assert/expect macros without `ctf_` prefix
-#define CTF_ASSERT_ALIASES
-
-// Options specified ctf.c compilation
-// Enables parallel features
-#define CTF_PARALLEL
-/* Changes symbols used for passed and failed tests, valid options:
- * CTF_OFF - "P", "F"
- * CTF_UNICODE_GENERIC - "✓", "✗"
- * CTF_UNICODE_BRANDED - "✓", "⚑"
- * CTF_USER_DEFINED - requires user to define CTF_PRINT_PASS and CTF_PRINT_FAIL
- */
-#define CTF_UNICODE CTF_UNICODE_BRANDED
-/* Changes printing detailed, parsable info in tests (file,line,status), valid options:
- * CTF_OFF - Always displays simple test passed/failed information
- * CTF_ON - Always displays full test information
- * CTF_AUTO - Display detailed information only on failed tests and when output is not terminal
- */
-#define CTF_DETAIL CTF_AUTO
-/* Changes color coding failed and passed tests, valid options:
- * CTF_OFF - Never print color codes
- * CTF_ON - Always print color codes
- * CTF_AUTO - Print color codes only when outputing to terminal
- */
-#define CTF_COLOR CTF_AUTO
-// Displays only groups that failed
-#define CTF_ONLY_FAILED CTF_OFF
-
-// Macros used for specifing internal details, use only when encountering a bug
-
-// Size of buffer used to hold name of group
-#define CTF_CONST_GROUP_NAME_SIZE CTF_CONST_GROUP_NAME_SIZE_DEFAULT
-// Size of buffer used for printing test status for group
-#define CTF_CONST_PRINT_BUFF_SIZE CTF_CONST_PRINT_BUFF_SIZE_DEFAULT
-// Size of buffer used to hold file name for detailed test info
-#define CTF_CONST_STATE_FILE_SIZE CTF_CONST_PRINT_FILE_SIZE_DEFAULT
-// Size of buffer used to hold test messages
-#define CTF_CONST_STATE_MSG_SIZE CTF_CONST_PRINT_MSG_SIZE_DEFAULT
-// Number of expects + 1 allowed for every test
-#define CTF_CONST_STATES_PER_THREAD CTF_CONST_STATES_PER_THREAD_DEFAULT
-// Size of queue used to hold groups to run in parallel
-#define CTF_PARALLEL_CONST_TASK_QUEUE_MAX CTF_PARALLEL_CONST_TASK_QUEUE_MAX_DEFAULT
+-h, --help     Show this help
+-u, --unicode  (off|generic|branded*) display of unicode symbols
+-c, --color    (off|on|auto*) color coding for failed and passed tests
+-d, --detail   (off|on|auto*) detailed info about failed tests
+-f, --failed   Print only groups that failed
 ```

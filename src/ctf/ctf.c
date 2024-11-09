@@ -1,40 +1,31 @@
 #include "ctf.h"
 
 #include <stdarg.h>
+#include <stdlib.h>
+#include <unistd.h>
 #ifdef CTF_PARALLEL
 #include <pthread.h>
 #endif
-#if CTF_COLOR == CTF_AUTO
-#include <unistd.h>
-#define CTF_INTERNAL_IS_TTY isatty(STDOUT_FILENO)
-#endif
+#define IS_TTY !isatty(STDOUT_FILENO)
 
-#ifndef CTF_ONLY_FAILED
-#define CTF_ONLY_FAILED CTF_OFF
-#else
-#undef CTF_ONLY_FAILED
-#define CTF_ONLY_FAILED CTF_ON
-#endif
+#define HELP_MSG                                                             \
+  "Run tests embedded in this executable.\n"                                 \
+  "\n"                                                                       \
+  "Options:\n"                                                               \
+  "-h, --help     Show this message\n"                                       \
+  "-u, --unicode  (off|generic|branded*) display of unicode symbols\n"       \
+  "-c, --color    (off|on|auto*) color coding for failed and passed tests\n" \
+  "-d, --detail   (off|on|auto*) detailed info about failed tests\n"         \
+  "-f, --failed   Print only groups that failed\n"
 
-/* Const */
-#define CTF_CONST_GROUP_NAME_SIZE_DEFAULT 256
-#define CTF_CONST_PRINT_BUFF_SIZE_DEFAULT 65536
+#define OFF 0
+#define ON 1
+#define AUTO 2
+#define GENERIC 1
+#define BRANDED 2
+#define PRINT_BUFF_SIZE 65536
 
-#ifndef CTF_CONST_GROUP_NAME_SIZE
-#define CTF_CONST_GROUP_NAME_SIZE CTF_CONST_GROUP_NAME_SIZE_DEFAULT
-#endif
-#ifndef CTF_CONST_PRINT_BUFF_SIZE
-#define CTF_CONST_PRINT_BUFF_SIZE CTF_CONST_PRINT_BUFF_SIZE_DEFAULT
-#endif
-
-#ifdef CTF_PARALLEL
-#define CTF_PARALLEL_CONST_TASK_QUEUE_MAX_DEFAULT 64
-
-#ifndef CTF_PARALLEL_CONST_TASK_QUEUE_MAX
-#define CTF_PARALLEL_CONST_TASK_QUEUE_MAX \
-  CTF_PARALLEL_CONST_TASK_QUEUE_MAX_DEFAULT
-#endif
-#endif
+#define TASK_QUEUE_MAX 64
 
 /* Utility */
 #define CTF_INTERNAL_ISSPACE(c) (((c) >= '\t' && (c) <= '\r') || (c) == ' ')
@@ -51,134 +42,13 @@
     }                                                                        \
   } while(0)
 
-#define CTF_INTERNAL_SPRINTF_ADVANCE(buff, ...) \
-  buff += sprintf(buff, __VA_ARGS__)
-#if CTF_COLOR == CTF_AUTO
-#define CTF_INTERNAL_COLOR_DISPATCH(macro, buff, ...)                   \
-  do {                                                                  \
-    if(tty) {                                                           \
-      CTF_INTERNAL_SPRINTF_ADVANCE(buff, macro##_COLORED(__VA_ARGS__)); \
-    } else {                                                            \
-      CTF_INTERNAL_SPRINTF_ADVANCE(buff, macro(__VA_ARGS__));           \
-    }                                                                   \
-  } while(0)
-#elif CTF_COLOR == CTF_ON
-#define CTF_INTERNAL_COLOR_DISPATCH(macro, buff, ...) \
-  CTF_INTERNAL_SPRINTF_ADVANCE(buff, macro##_COLORED(__VA_ARGS__))
-#else
-#define CTF_INTERNAL_COLOR_DISPATCH(macro, buff, ...) \
-  CTF_INTERNAL_SPRINTF_ADVANCE(buff, macro(__VA_ARGS__))
-#endif
-#if CTF_DETAIL == CTF_AUTO
-#define CTF_INTERNAL_DETAIL_DISPATCH(amacro, macro, ...) \
-  do {                                                   \
-    if(tty) {                                            \
-      amacro(macro, __VA_ARGS__);                        \
-    } else {                                             \
-      amacro(macro##_DETAIL, __VA_ARGS__);               \
-    }                                                    \
-  } while(0)
-#elif CTF_DETAIL == CTF_ON
-#define CTF_INTERNAL_DETAIL_DISPATCH(amacro, macro, ...) \
-  amacro(macro##_DETAIL, __VA_ARGS__)
-#else
-#define CTF_INTERNAL_DETAIL_DISPATCH(amacro, macro, ...) \
-  amacro(macro, __VA_ARGS__)
-#endif
+static int opt_unicode = BRANDED;
+static int opt_color = AUTO;
+static int opt_detail = AUTO;
+static int opt_failed = OFF;
+static int tty_present = 0;
+static const char print_color_reset[] = "\x1b[0m";
 
-#if CTF_UNICODE == CTF_UNICODE_GENERIC
-#define CTF_PRINT_PASS "✓"
-#define CTF_PRINT_FAIL "✗"
-#elif CTF_UNICODE == CTF_UNICODE_BRANDED
-#define CTF_PRINT_PASS "✓"
-#define CTF_PRINT_FAIL "⚑"
-#elif CTF_UNICODE == CTF_OFF
-#define CTF_PRINT_PASS "P"
-#define CTF_PRINT_FAIL "F"
-#endif
-
-#if CTF_ONLY_FAILED == CTF_ON
-#define CTF_INTERNAL_PRINT_GROUP_PASS_RAW(name, before, after) "%s", ""
-#elif CTF_ONLY_FAILED == CTF_OFF
-#define CTF_INTERNAL_PRINT_GROUP_PASS_RAW(name, before, after) \
-  "[" before CTF_PRINT_PASS after "] %s\n", (name)
-#endif
-#define CTF_INTERNAL_PRINT_GROUP_FAIL_RAW(name, before, after) \
-  "[" before CTF_PRINT_FAIL after "] %s\n", (name)
-#define CTF_INTERNAL_PRINT_TEST_PASS_RAW(name, name_len, before, after) \
-  "    [" before CTF_PRINT_PASS after "] %.*s\n", (name_len), (name)
-#define CTF_INTERNAL_PRINT_TEST_FAIL_HEADER_RAW(name, name_len, before, after) \
-  "    [" before CTF_PRINT_FAIL after "] %.*s\n", (name_len), (name)
-#define CTF_INTERNAL_PRINT_TEST_PASS_HEADER_RAW(name, name_len, before, after) \
-  "    [" before CTF_PRINT_PASS after "] %.*s\n", (name_len), (name)
-#define CTF_INTERNAL_PRINT_TEST_PASS_INFO_RAW(state, before, after) \
-  "        [" before CTF_PRINT_PASS after "] %s\n", (state).msg
-#define CTF_INTERNAL_PRINT_TEST_FAIL_INFO_RAW(state, before, after) \
-  "        [" before CTF_PRINT_FAIL after "] %s\n", (state).msg
-#define CTF_INTERNAL_PRINT_TEST_PASS_INFO_DETAIL_RAW(state, before, after)   \
-  "        %*s[" before CTF_PRINT_PASS after "] %s\n",                       \
-    ((int)strlen((state).file) + 2 + ctf_internal_int_length((state).line)), \
-    "", (state).msg
-#define CTF_INTERNAL_PRINT_TEST_FAIL_INFO_DETAIL_RAW(state, before, after) \
-  "        [%s|%d|" before "E" after "] %s\n", (state).file, (state).line, \
-    (state).msg
-
-#define CTF_INTERNAL_PRINT_GROUP_PASS(name) \
-  CTF_INTERNAL_PRINT_GROUP_PASS_RAW(name, "", "")
-#define CTF_INTERNAL_PRINT_GROUP_FAIL(name) \
-  CTF_INTERNAL_PRINT_GROUP_FAIL_RAW(name, "", "")
-#define CTF_INTERNAL_PRINT_TEST_PASS(name, name_len) \
-  CTF_INTERNAL_PRINT_TEST_PASS_RAW(name, name_len, "", "")
-#define CTF_INTERNAL_PRINT_TEST_FAIL_HEADER(name, name_len) \
-  CTF_INTERNAL_PRINT_TEST_FAIL_HEADER_RAW(name, name_len, "", "")
-#define CTF_INTERNAL_PRINT_TEST_PASS_HEADER(name, name_len) \
-  CTF_INTERNAL_PRINT_TEST_PASS_HEADER_RAW(name, name_len, "", "")
-#define CTF_INTERNAL_PRINT_TEST_PASS_INFO(state) \
-  CTF_INTERNAL_PRINT_TEST_PASS_INFO_RAW(state, "", "")
-#define CTF_INTERNAL_PRINT_TEST_FAIL_INFO(state) \
-  CTF_INTERNAL_PRINT_TEST_FAIL_INFO_RAW(state, "", "")
-#define CTF_INTERNAL_PRINT_TEST_PASS_INFO_DETAIL(state) \
-  CTF_INTERNAL_PRINT_TEST_PASS_INFO_DETAIL_RAW(state, "", "")
-#define CTF_INTERNAL_PRINT_TEST_FAIL_INFO_DETAIL(state) \
-  CTF_INTERNAL_PRINT_TEST_FAIL_INFO_DETAIL_RAW(state, "", "")
-
-#if CTF_COLOR != CTF_OFF
-#define CTF_INTERNAL_PRINT_COLOR_GREEN "\x1b[32m"
-#define CTF_INTERNAL_PRINT_COLOR_RED "\x1b[31m"
-#define CTF_INTERNAL_PRINT_COLOR_RESET "\x1b[0m"
-#define CTF_INTERNAL_PRINT_GROUP_PASS_COLORED(name)                       \
-  CTF_INTERNAL_PRINT_GROUP_PASS_RAW(name, CTF_INTERNAL_PRINT_COLOR_GREEN, \
-                                    CTF_INTERNAL_PRINT_COLOR_RESET)
-#define CTF_INTERNAL_PRINT_GROUP_FAIL_COLORED(name)                     \
-  CTF_INTERNAL_PRINT_GROUP_FAIL_RAW(name, CTF_INTERNAL_PRINT_COLOR_RED, \
-                                    CTF_INTERNAL_PRINT_COLOR_RESET)
-#define CTF_INTERNAL_PRINT_TEST_PASS_COLORED(name, name_len)       \
-  CTF_INTERNAL_PRINT_TEST_PASS_RAW(name, name_len,                 \
-                                   CTF_INTERNAL_PRINT_COLOR_GREEN, \
-                                   CTF_INTERNAL_PRINT_COLOR_RESET)
-#define CTF_INTERNAL_PRINT_TEST_FAIL_HEADER_COLORED(name, name_len)     \
-  CTF_INTERNAL_PRINT_TEST_FAIL_HEADER_RAW(name, name_len,               \
-                                          CTF_INTERNAL_PRINT_COLOR_RED, \
-                                          CTF_INTERNAL_PRINT_COLOR_RESET)
-#define CTF_INTERNAL_PRINT_TEST_PASS_HEADER_COLORED(name, name_len)       \
-  CTF_INTERNAL_PRINT_TEST_PASS_HEADER_RAW(name, name_len,                 \
-                                          CTF_INTERNAL_PRINT_COLOR_GREEN, \
-                                          CTF_INTERNAL_PRINT_COLOR_RESET)
-#define CTF_INTERNAL_PRINT_TEST_PASS_INFO_COLORED(state)                       \
-  CTF_INTERNAL_PRINT_TEST_PASS_INFO_RAW(state, CTF_INTERNAL_PRINT_COLOR_GREEN, \
-                                        CTF_INTERNAL_PRINT_COLOR_RESET)
-#define CTF_INTERNAL_PRINT_TEST_FAIL_INFO_COLORED(state)                     \
-  CTF_INTERNAL_PRINT_TEST_FAIL_INFO_RAW(state, CTF_INTERNAL_PRINT_COLOR_RED, \
-                                        CTF_INTERNAL_PRINT_COLOR_RESET)
-#define CTF_INTERNAL_PRINT_TEST_PASS_INFO_DETAIL_COLORED(state) \
-  CTF_INTERNAL_PRINT_TEST_PASS_INFO_DETAIL_RAW(                 \
-    state, CTF_INTERNAL_PRINT_COLOR_GREEN, CTF_INTERNAL_PRINT_COLOR_RESET)
-#define CTF_INTERNAL_PRINT_TEST_FAIL_INFO_DETAIL_COLORED(state) \
-  CTF_INTERNAL_PRINT_TEST_FAIL_INFO_DETAIL_RAW(                 \
-    state, CTF_INTERNAL_PRINT_COLOR_RED, CTF_INTERNAL_PRINT_COLOR_RESET)
-#endif
-
-/* Variables */
 int ctf_exit_code = 0;
 const char ctf_internal_print_arr_char[] = "'%c', ";
 const char ctf_internal_print_arr_int[] = "%jd, ";
@@ -187,7 +57,6 @@ const char ctf_internal_print_arr_ptr[] = "%p, ";
 
 #define STRING_GENERATE(op, format) \
   "%s " #op " %s (" format " " #op " " format ")"
-
 const char ctf_internal_print_char_eq[] = STRING_GENERATE(==, "'%c'");
 const char ctf_internal_print_char_neq[] = STRING_GENERATE(!=, "'%c'");
 const char ctf_internal_print_char_gt[] = STRING_GENERATE(>, "'%c'");
@@ -222,7 +91,6 @@ const char ctf_internal_print_str_gt[] = STRING_GENERATE(>, "\"%s\"");
 const char ctf_internal_print_str_lt[] = STRING_GENERATE(<, "\"%s\"");
 const char ctf_internal_print_str_gte[] = STRING_GENERATE(>=, "\"%s\"");
 const char ctf_internal_print_str_lte[] = STRING_GENERATE(<=, "\"%s\"");
-
 #undef STRING_GENERATE
 
 #ifdef CTF_PARALLEL
@@ -231,7 +99,7 @@ static pthread_mutex_t ctf_parallel_internal_print_mutex =
 pthread_t ctf_parallel_internal_threads[CTF_PARALLEL];
 static int ctf_parallel_internal_threads_waiting = 0;
 static const struct ctf_internal_group
-  *ctf_parallel_internal_task_queue[CTF_PARALLEL_CONST_TASK_QUEUE_MAX] = {0};
+  *ctf_parallel_internal_task_queue[TASK_QUEUE_MAX] = {0};
 static pthread_mutex_t ctf_parallel_internal_task_queue_mutex =
   PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t ctf_parallel_internal_threads_waiting_all =
@@ -257,88 +125,205 @@ struct ctf_internal_state *ctf_internal_state_p;
 #endif
 
 /* Functions */
-void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
-                                   char *print_buff) {
-#if CTF_COLOR == CTF_AUTO
-  const int tty = CTF_INTERNAL_IS_TTY;
-#endif
-  char *print_buff_p = print_buff;
-  int test_passed;
-  int all_passed = 1;
-  const char *test_name = group->test_names;
-  int test_name_len = 1;
-  CTF_INTERNAL_COLOR_DISPATCH(CTF_INTERNAL_PRINT_GROUP_FAIL, print_buff_p,
-                              group->name);
-  for(int i = 0; i < group->length; i++) {
-    test_passed = 1;
-#ifdef CTF_PARALLEL
-    ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index] = 0;
-#endif
-    ctf_internal_state_index = 0;
-    ctf_internal_state_p = ctf_internal_states;
-    group->tests[i]();
-#ifdef CTF_PARALLEL
-    ctf_internal_state_index =
-      ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index];
-    ctf_internal_state_p = ctf_internal_states + ctf_internal_state_index;
-#endif
-    CTF_INTERNAL_SKIP_SPACE(test_name);
-    test_name++; /* skips paren */
-    CTF_INTERNAL_SKIP_SPACE(test_name);
-    test_name_len = 1;
-    CTF_INTERNAL_NEXT_ID(test_name, test_name_len);
-    for(int j = 0; j < ctf_internal_state_index; j++) {
-      if(ctf_internal_states[j].status == 1) {
-        test_passed = 0;
-        all_passed = 0;
-        break;
-      }
-    }
-    if(!test_passed) {
-      CTF_INTERNAL_COLOR_DISPATCH(CTF_INTERNAL_PRINT_TEST_FAIL_HEADER,
-                                  print_buff_p, test_name, test_name_len);
-      for(int j = 0; j < ctf_internal_state_index; j++) {
-        if(ctf_internal_states[j].status == 0) {
-          CTF_INTERNAL_DETAIL_DISPATCH(CTF_INTERNAL_COLOR_DISPATCH,
-                                       CTF_INTERNAL_PRINT_TEST_PASS_INFO,
-                                       print_buff_p, ctf_internal_states[j]);
-        } else if(ctf_internal_states[j].status == 1) {
-          CTF_INTERNAL_DETAIL_DISPATCH(CTF_INTERNAL_COLOR_DISPATCH,
-                                       CTF_INTERNAL_PRINT_TEST_FAIL_INFO,
-                                       print_buff_p, ctf_internal_states[j]);
-        }
-      }
-    } else {
-      CTF_INTERNAL_COLOR_DISPATCH(CTF_INTERNAL_PRINT_TEST_PASS_HEADER,
-                                  print_buff_p, test_name, test_name_len);
-    }
-    test_name += test_name_len;
+static int get_value(const char *opt) {
+  if(!strcmp(opt, "on")) return ON;
+  if(!strcmp(opt, "off")) return OFF;
+  if(!strcmp(opt, "auto")) return AUTO;
+  puts(HELP_MSG);
+  exit(0);
+}
+
+static void err(void) {
+  puts(HELP_MSG);
+  exit(0);
+}
+
+static int int_length(int a) {
+  int counter = 1;
+  int i = 1;
+  while(i <= a) {
+    i *= 10;
+    counter++;
   }
-  if(all_passed) {
-    CTF_INTERNAL_COLOR_DISPATCH(CTF_INTERNAL_PRINT_GROUP_PASS, print_buff,
-                                group->name);
+  return counter - 1;
+}
+
+static unsigned print_pass(char *arr, int len) {
+  static const char print_pass_color[] = "\x1b[32m";
+  static const char print_pass_branded[] = "✓";
+  static const char print_pass_generic[] = "✓";
+  static const char print_pass_off[] = "P";
+  int index = 0;
+  arr[index++] = '[';
+  if(opt_color == ON || (opt_color == AUTO && tty_present)) {
+    strncpy(arr + index, print_pass_color, len - index);
+    index += sizeof(print_pass_color) - 1;
+  }
+  if(opt_unicode == OFF) {
+    strncpy(arr + index, print_pass_off, len - index);
+    index += sizeof(print_pass_off) - 1;
+  } else if(opt_unicode == GENERIC) {
+    strncpy(arr + index, print_pass_generic, len - index);
+    index += sizeof(print_pass_generic) - 1;
+  } else if(opt_unicode == BRANDED) {
+    strncpy(arr + index, print_pass_branded, len - index);
+    index += sizeof(print_pass_branded) - 1;
+  }
+  if(opt_color == ON || (opt_color == AUTO && tty_present)) {
+    strncpy(arr + index, print_color_reset, len - index);
+    index += sizeof(print_color_reset) - 1;
+  }
+  if(index < len) {
+    arr[index++] = ']';
+    arr[index] = 0;
   } else {
-    ctf_exit_code = 1;
+    index = -1;
+  }
+  return index;
+}
+
+static unsigned print_fail(char *arr, int len) {
+  static const char print_fail_color[] = "\x1b[31m";
+  static const char print_fail_branded[] = "⚑";
+  static const char print_fail_generic[] = "✗";
+  static const char print_fail_off[] = "F";
+  int index = 0;
+  arr[index++] = '[';
+  if(opt_color == ON || (opt_color == AUTO && tty_present)) {
+    strncpy(arr + index, print_fail_color, len - index);
+    index += sizeof(print_fail_color) - 1;
+  }
+  if(opt_unicode == OFF) {
+    strncpy(arr + index, print_fail_off, len - index);
+    index += sizeof(print_fail_off) - 1;
+  } else if(opt_unicode == GENERIC) {
+    strncpy(arr + index, print_fail_generic, len - index);
+    index += sizeof(print_fail_generic) - 1;
+  } else if(opt_unicode == BRANDED) {
+    strncpy(arr + index, print_fail_branded, len - index);
+    index += sizeof(print_fail_branded) - 1;
+  }
+  if(opt_color == ON || (opt_color == AUTO && tty_present)) {
+    strncpy(arr + index, print_color_reset, len - index);
+    index += sizeof(print_color_reset) - 1;
+  }
+  if(index < len) {
+    arr[index++] = ']';
+    arr[index] = 0;
+  } else {
+    index = -1;
+  }
+  return index;
+}
+
+static unsigned print_simple_fail(char *buff, unsigned buff_len,
+                                  const char *name, unsigned len) {
+  unsigned index;
+  index = print_fail(buff, buff_len);
+  if(index + 3 + len >= buff_len) return index;
+  buff[index++] = ' ';
+  strncpy(buff + index, name, index + len);
+  index += len;
+  buff[index++] = '\n';
+  buff[index] = 0;
+  return index;
+}
+
+static unsigned print_simple_pass(char *buff, unsigned buff_len,
+                                  const char *name, unsigned len) {
+  unsigned index;
+  index = print_pass(buff, buff_len);
+  if(index + 3 + len >= buff_len) return index;
+  buff[index++] = ' ';
+  strncpy(buff + index, name, index + len);
+  index += len;
+  buff[index++] = '\n';
+  buff[index] = 0;
+  return index;
+}
+
+static unsigned print_group_pass(char *buff, unsigned buff_len,
+                                 const char *name, unsigned len) {
+  if(opt_failed == OFF) {
+    return print_simple_pass(buff, buff_len, name, len);
+  } else {
+    buff[0] = 0;
+    return 0;
   }
 }
-void ctf_internal_group_run(const struct ctf_internal_group *group) {
-  char print_buff[CTF_CONST_PRINT_BUFF_SIZE];
-  ctf_internal_group_run_helper(group, print_buff);
-  printf("%s", print_buff);
-  fflush(stdout);
+
+static unsigned print_group_fail(char *buff, unsigned buff_len,
+                                 const char *name, unsigned len) {
+  return print_simple_fail(buff, buff_len, name, len);
 }
-void ctf_internal_groups_run(int count, ...) {
-  char print_buff[CTF_CONST_PRINT_BUFF_SIZE];
-  va_list args;
-  va_start(args, count);
-  for(int i = 0; i < count; i++) {
-    ctf_internal_group_run_helper(
-      va_arg(args, const struct ctf_internal_group *), print_buff);
-    printf("%s", print_buff);
+
+static unsigned print_test_pass(char *buff, unsigned buff_len, const char *name,
+                                unsigned len) {
+  unsigned index = 0;
+  if(index + 4 > buff_len) return index;
+  strncpy(buff, "    ", buff_len);
+  index += sizeof("    ") - 1;
+  index += print_simple_pass(buff + index, buff_len - index, name, len);
+  return index;
+}
+
+static unsigned print_test_fail(char *buff, unsigned buff_len, const char *name,
+                                unsigned len) {
+  unsigned index = 0;
+  if(index + 4 > buff_len) return index;
+  strncpy(buff, "    ", buff_len);
+  index += sizeof("    ") - 1;
+  index += print_simple_fail(buff + index, buff_len - index, name, len);
+  return index;
+}
+
+static unsigned print_test_pass_info(char *buff, unsigned buff_len,
+                                     const struct ctf_internal_state *state) {
+  unsigned index = 0;
+  unsigned spaces = 8;
+  if(opt_detail == ON || (opt_detail == AUTO && !tty_present)) {
+    spaces += strlen(state->file) + 2 + int_length(state->line);
   }
-  fflush(stdout);
-  va_end(args);
+  if(index + spaces > buff_len) return index;
+  while(index < spaces) {
+    buff[index++] = ' ';
+  }
+  index += print_simple_pass(buff + index, buff_len - index, state->msg,
+                             strlen(state->msg));
+  return index;
 }
+
+static unsigned print_test_fail_info(char *buff, unsigned buff_len,
+                                     const struct ctf_internal_state *state) {
+  unsigned index = 0;
+  if(index + 8 > buff_len) return index;
+  while(index < 8) {
+    buff[index++] = ' ';
+  }
+  if(opt_detail == ON || (opt_detail == AUTO && !tty_present)) {
+    if(index + strlen(state->file) + 2 + int_length(state->line) >= buff_len)
+      return index;
+    index += snprintf(buff + index, buff_len - index, "[%s|%d|", state->file,
+                      state->line);
+    if(opt_color == ON || (opt_color == AUTO && tty_present)) {
+      strncpy(buff + index, "\x1b[31mE\x1b[0m", buff_len - index);
+      index += sizeof("\x1b[31mE\x1b[0m") - 1;
+    } else {
+      buff[index++] = 'E';
+    }
+    buff[index++] = ']';
+    buff[index++] = ' ';
+    strncpy(buff + index, state->msg, buff_len - index);
+    index += strlen(state->msg);
+    buff[index++] = '\n';
+    buff[index] = 0;
+  } else {
+    index += print_simple_fail(buff + index, buff_len - index, state->msg,
+                               strlen(state->msg));
+  }
+  return index;
+}
+
 static size_t ctf_internal_assert_arr_print(struct ctf_internal_state *state,
                                             size_t index, const void *data,
                                             size_t size, size_t step, int sign,
@@ -413,6 +398,7 @@ static size_t ctf_internal_assert_arr_print(struct ctf_internal_state *state,
   index -= 2;
   return index;
 }
+
 size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
                                      const void *a, const void *b, size_t la,
                                      size_t lb, size_t step, int sign,
@@ -434,23 +420,127 @@ size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
   strncpy(state->file, file, CTF_CONST_STATE_FILE_SIZE);
   return index;
 }
+
+void ctf_internal_group_run_helper(const struct ctf_internal_group *group,
+                                   char *print_buff) {
+  unsigned buff_index = 0;
+  int test_passed;
+  int all_passed = 1;
+  const char *test_name = group->test_names;
+  int test_name_len = 1;
+  buff_index +=
+    print_group_fail(print_buff + buff_index, PRINT_BUFF_SIZE - buff_index,
+                     group->name, strlen(group->name));
+  for(int i = 0; i < group->length; i++) {
+    test_passed = 1;
+#ifdef CTF_PARALLEL
+    ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index] = 0;
+#endif
+    ctf_internal_state_index = 0;
+    ctf_internal_state_p = ctf_internal_states;
+    group->tests[i]();
+#ifdef CTF_PARALLEL
+    ctf_internal_state_index =
+      ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index];
+    ctf_internal_state_p = ctf_internal_states + ctf_internal_state_index;
+#endif
+    CTF_INTERNAL_SKIP_SPACE(test_name);
+    test_name++; /* skips paren */
+    CTF_INTERNAL_SKIP_SPACE(test_name);
+    test_name_len = 1;
+    CTF_INTERNAL_NEXT_ID(test_name, test_name_len);
+    for(int j = 0; j < ctf_internal_state_index; j++) {
+      if(ctf_internal_states[j].status == 1) {
+        test_passed = 0;
+        all_passed = 0;
+        break;
+      }
+    }
+    if(!test_passed) {
+      buff_index +=
+        print_test_fail(print_buff + buff_index, PRINT_BUFF_SIZE - buff_index,
+                        test_name, test_name_len);
+      for(int j = 0; j < ctf_internal_state_index; j++) {
+        if(ctf_internal_states[j].status == 0) {
+          buff_index += print_test_pass_info(print_buff + buff_index,
+                                             PRINT_BUFF_SIZE - buff_index,
+                                             ctf_internal_states + j);
+        } else if(ctf_internal_states[j].status == 1) {
+          buff_index += print_test_fail_info(print_buff + buff_index,
+                                             PRINT_BUFF_SIZE - buff_index,
+                                             ctf_internal_states + j);
+        }
+      }
+    } else {
+      buff_index +=
+        print_test_pass(print_buff + buff_index, PRINT_BUFF_SIZE - buff_index,
+                        test_name, test_name_len);
+    }
+    test_name += test_name_len;
+  }
+  if(all_passed) {
+    buff_index += print_group_pass(print_buff, PRINT_BUFF_SIZE, group->name,
+                                   strlen(group->name));
+  } else {
+    ctf_exit_code = 1;
+  }
+}
+
+void ctf_internal_group_run(const struct ctf_internal_group *group) {
+  char print_buff[PRINT_BUFF_SIZE];
+  ctf_internal_group_run_helper(group, print_buff);
+  printf("%s", print_buff);
+  fflush(stdout);
+}
+
+void ctf_internal_groups_run(int count, ...) {
+  char print_buff[PRINT_BUFF_SIZE];
+  va_list args;
+  va_start(args, count);
+  for(int i = 0; i < count; i++) {
+    ctf_internal_group_run_helper(
+      va_arg(args, const struct ctf_internal_group *), print_buff);
+    printf("%s", print_buff);
+  }
+  fflush(stdout);
+  va_end(args);
+}
+
 void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
                               const char *file) {
   state->line = line;
   strncpy(state->file, file, CTF_CONST_STATE_FILE_SIZE);
 }
 
-#if CTF_DETAIL != CTF_OFF
-int ctf_internal_int_length(int a) {
-  int counter = 1;
-  int i = 1;
-  while(i <= a) {
-    i *= 10;
-    counter++;
+__attribute__((constructor)) void ctf_internal_premain(int argc, char *argv[]) {
+  for(int i = 1; i < argc; i++) {
+    if(argv[i][0] != '-') err();
+    if(!strcmp(argv[i] + 1, "h") || !strcmp(argv[i] + 1, "-help")) {
+      err();
+    } else if(!strcmp(argv[i] + 1, "u") || !strcmp(argv[i] + 1, "-unicode")) {
+      if(i == argc) err();
+      i++;
+      if(!strcmp(argv[i], "off")) {
+        opt_unicode = OFF;
+      } else if(!strcmp(argv[i], "generic")) {
+        opt_unicode = GENERIC;
+      } else if(!strcmp(argv[i], "branded")) {
+        opt_unicode = BRANDED;
+      }
+    } else if(!strcmp(argv[i] + 1, "c") || !strcmp(argv[i] + 1, "-color")) {
+      if(i == argc) err();
+      i++;
+      opt_color = get_value(argv[i]);
+    } else if(!strcmp(argv[i] + 1, "d") || !strcmp(argv[i] + 1, "-detail")) {
+      if(i == argc) err();
+      i++;
+      opt_detail = get_value(argv[i]);
+    } else if(!strcmp(argv[i] + 1, "f") || !strcmp(argv[i] + 1, "-failed")) {
+      opt_failed = 1;
+    }
   }
-  return counter - 1;
+  tty_present = !IS_TTY;
 }
-#endif
 
 #ifdef CTF_PARALLEL
 static int ctf_parallel_internal_get_thread_index(void) {
@@ -488,8 +578,8 @@ static void *ctf_parallel_internal_thread_loop(void *data) {
       }
     }
     group = ctf_parallel_internal_task_queue[0];
-    for(int i = 0; i < CTF_PARALLEL_CONST_TASK_QUEUE_MAX - 1 &&
-                   ctf_parallel_internal_task_queue[i] != NULL;
+    for(int i = 0;
+        i < TASK_QUEUE_MAX - 1 && ctf_parallel_internal_task_queue[i] != NULL;
         i++) {
       ctf_parallel_internal_task_queue[i] =
         ctf_parallel_internal_task_queue[i + 1];
@@ -505,13 +595,11 @@ static void *ctf_parallel_internal_thread_loop(void *data) {
 }
 void ctf_parallel_internal_group_run(const struct ctf_internal_group *group) {
   pthread_mutex_lock(&ctf_parallel_internal_task_queue_mutex);
-  while(
-    ctf_parallel_internal_task_queue[CTF_PARALLEL_CONST_TASK_QUEUE_MAX - 1] !=
-    NULL) {
+  while(ctf_parallel_internal_task_queue[TASK_QUEUE_MAX - 1] != NULL) {
     pthread_cond_wait(&ctf_parallel_internal_task_queue_non_full,
                       &ctf_parallel_internal_task_queue_mutex);
   }
-  for(int i = 0; i < CTF_PARALLEL_CONST_TASK_QUEUE_MAX; i++) {
+  for(int i = 0; i < TASK_QUEUE_MAX; i++) {
     if(ctf_parallel_internal_task_queue[i] == NULL) {
       ctf_parallel_internal_task_queue[i] = group;
       break;
@@ -528,13 +616,11 @@ void ctf_parallel_internal_groups_run(int count, ...) {
   pthread_mutex_lock(&ctf_parallel_internal_task_queue_mutex);
   for(int j = 0; j < count; j++) {
     group = va_arg(args, const struct ctf_internal_group *);
-    while(
-      ctf_parallel_internal_task_queue[CTF_PARALLEL_CONST_TASK_QUEUE_MAX - 1] !=
-      NULL) {
+    while(ctf_parallel_internal_task_queue[TASK_QUEUE_MAX - 1] != NULL) {
       pthread_cond_wait(&ctf_parallel_internal_task_queue_non_full,
                         &ctf_parallel_internal_task_queue_mutex);
     }
-    for(int i = 0; i < CTF_PARALLEL_CONST_TASK_QUEUE_MAX; i++) {
+    for(int i = 0; i < TASK_QUEUE_MAX; i++) {
       if(ctf_parallel_internal_task_queue[i] == NULL) {
         ctf_parallel_internal_task_queue[i] = group;
         break;
