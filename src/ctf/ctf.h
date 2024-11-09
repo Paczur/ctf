@@ -1,26 +1,21 @@
 #ifndef CTF_H
 #define CTF_H
 
-/* Parse options */
 #ifndef CTF_ASSERT_ALIASES
 #define CTF_ASSERT_ALIASES CTF_ON
 #endif
 
-/* Includes */
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
 #ifdef CTF_PARALLEL
 #include <pthread.h>
 #endif
 
-/* Consts */
 #define CTF_CONST_STATE_FILE_SIZE 256
 #define CTF_CONST_STATE_MSG_SIZE 4096
 #define CTF_CONST_STATES_PER_THREAD 64
 
-/* System specific */
 #ifdef CTF_PARALLEL
 #if __STDC_VERSION__ == 201112L
 #define CTF_PARALLEL_INTERNAL_THREAD_LOCAL _Thread_local
@@ -29,102 +24,20 @@
 #endif
 #endif
 
-/* Utility */
 #define CTF_INTERNAL_STRINGIFY(x) #x
 #define CTF_INTERNAL_STRINGIFY2(x) CTF_INTERNAL_STRINGIFY(x)
-#define CTF_INTERNAL_MIN(x, y) ((x) < (y) ? (x) : (y))
-#define CTF_INTERNAL_IS_SIGNED(a) ((a) - (a) - 1 < 0)
-#define CTF_INTERNAL_LENGTH(a) (sizeof(a) / sizeof(*(a)))
-
-#ifdef CTF_PARALLEL
-#define CTF_INTERNAL_EXPECT_END \
-  ctf_internal_state_index++;   \
-  ctf_internal_state_p++;       \
-  ctf_parallel_internal_states_index[ctf_parallel_internal_thread_index]++;
-#else
-#define CTF_INTERNAL_EXPECT_END \
-  ctf_internal_state_index++;   \
-  ctf_internal_state_p++
-#endif
-
-#define CTF_INTERNAL_ASSERT_BEGIN \
-  if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return
-#define CTF_INTERNAL_ASSERT_END \
-  CTF_INTERNAL_EXPECT_END;      \
-  if((ctf_internal_state_p - 1)->status) return
-
-#define CTF_INTERNAL_ASSERT_COPY \
-  ctf_internal_assert_copy(ctf_internal_state_p, __LINE__, __FILE__)
-#define CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f)               \
-  do {                                                                        \
-    const type _x = a;                                                        \
-    const type _y = b;                                                        \
-    ctf_internal_state_p->status = !(f(_x, _y) op 0);                         \
-    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, format, #a, \
-             #b, _x, _y);                                                     \
-    CTF_INTERNAL_ASSERT_COPY;                                                 \
+#define CTF_INTERNAL_EXPECT(f, ...)                                     \
+  do {                                                                  \
+    if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return; \
+    f(__VA_ARGS__);                                                     \
   } while(0)
-#define CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format)                       \
-  do {                                                                        \
-    const type _x = a;                                                        \
-    const type _y = b;                                                        \
-    ctf_internal_state_p->status = !(_x op _y);                               \
-    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, format, #a, \
-             #b, _x, _y);                                                     \
-    CTF_INTERNAL_ASSERT_COPY;                                                 \
+#define CTF_INTERNAL_ASSERT(f, ...)                                      \
+  do {                                                                   \
+    if(ctf_internal_state_index == CTF_CONST_STATES_PER_THREAD) return;  \
+    f(__VA_ARGS__);                                                      \
+    if(ctf_internal_states[ctf_internal_state_index - 1].status) return; \
   } while(0)
-#define CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length1, length2)   \
-  _Pragma("GCC diagnostic ignored \"-Wtype-limits\"");                        \
-  ctf_internal_assert_mem_print(ctf_internal_state_p, a, b, length1, length2, \
-                                sizeof(*(a)), CTF_INTERNAL_IS_SIGNED(*(a)),   \
-                                #a, #b, #op, format, __LINE__, __FILE__);     \
-  _Pragma("GCC diagnostic pop")
-#define CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length)        \
-  CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, length, length); \
-  ctf_internal_state_p->status = !(ctf_internal_state_p->status op 0)
-#define CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format)                       \
-  CTF_INTERNAL_ASSERT_MEM_ARR_RAW(a, b, op, format, CTF_INTERNAL_LENGTH(a), \
-                                  CTF_INTERNAL_LENGTH(b));                  \
-  if(ctf_internal_state_p->status == 0) {                                   \
-    ctf_internal_state_p->status =                                          \
-      !(CTF_INTERNAL_LENGTH(a) op CTF_INTERNAL_LENGTH(b));                  \
-  } else {                                                                  \
-    ctf_internal_state_p->status = !(ctf_internal_state_p->status op 0);    \
-  }
-#define CTF_INTERNAL_ASSERT(a, b, op, type, format) \
-  CTF_INTERNAL_ASSERT_BEGIN;                        \
-  CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format);  \
-  CTF_INTERNAL_ASSERT_END
-#define CTF_INTERNAL_ASSERT_FUNC(a, b, op, type, format, f) \
-  CTF_INTERNAL_ASSERT_BEGIN;                                \
-  CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f);  \
-  CTF_INTERNAL_ASSERT_END
-#define CTF_INTERNAL_ASSERT_MEM(a, b, op, format, length) \
-  CTF_INTERNAL_ASSERT_BEGIN;                              \
-  CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length);  \
-  CTF_INTERNAL_ASSERT_END
-#define CTF_INTERNAL_ASSERT_ARR(a, b, op, format) \
-  CTF_INTERNAL_ASSERT_BEGIN;                      \
-  CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format);  \
-  CTF_INTERNAL_ASSERT_END
-#define CTF_INTERNAL_EXPECT(a, b, op, type, format) \
-  CTF_INTERNAL_ASSERT_BEGIN;                        \
-  CTF_INTERNAL_ASSERT_RAW(a, b, op, type, format);  \
-  CTF_INTERNAL_EXPECT_END
-#define CTF_INTERNAL_EXPECT_FUNC(a, b, op, type, format, f) \
-  CTF_INTERNAL_ASSERT_BEGIN;                                \
-  CTF_INTERNAL_ASSERT_FUNC_RAW(a, b, op, type, format, f);  \
-  CTF_INTERNAL_EXPECT_END
-#define CTF_INTERNAL_EXPECT_MEM(a, b, op, format, length) \
-  CTF_INTERNAL_ASSERT_BEGIN;                              \
-  CTF_INTERNAL_ASSERT_MEM_RAW(a, b, op, format, length);  \
-  CTF_INTERNAL_EXPECT_END
-#define CTF_INTERNAL_EXPECT_ARR(a, b, op, format) \
-  CTF_INTERNAL_ASSERT_BEGIN;                      \
-  CTF_INTERNAL_ASSERT_ARR_RAW(a, b, op, format);  \
-  CTF_INTERNAL_EXPECT_END
 
-/* Types */
 struct ctf_internal_state {
   int status;
   int line;
@@ -139,70 +52,17 @@ struct ctf_internal_group {
   const char *name;
 };
 
-/* Variables */
 extern int ctf_exit_code;
-extern const char ctf_internal_print_arr_char[];
-extern const char ctf_internal_print_arr_int[];
-extern const char ctf_internal_print_arr_uint[];
-extern const char ctf_internal_print_arr_ptr[];
-
-extern const char ctf_internal_print_char_eq[];
-extern const char ctf_internal_print_char_neq[];
-extern const char ctf_internal_print_char_gt[];
-extern const char ctf_internal_print_char_lt[];
-extern const char ctf_internal_print_char_gte[];
-extern const char ctf_internal_print_char_lte[];
-
-extern const char ctf_internal_print_int_eq[];
-extern const char ctf_internal_print_int_neq[];
-extern const char ctf_internal_print_int_gt[];
-extern const char ctf_internal_print_int_lt[];
-extern const char ctf_internal_print_int_gte[];
-extern const char ctf_internal_print_int_lte[];
-
-extern const char ctf_internal_print_uint_eq[];
-extern const char ctf_internal_print_uint_neq[];
-extern const char ctf_internal_print_uint_gt[];
-extern const char ctf_internal_print_uint_lt[];
-extern const char ctf_internal_print_uint_gte[];
-extern const char ctf_internal_print_uint_lte[];
-
-extern const char ctf_internal_print_ptr_eq[];
-extern const char ctf_internal_print_ptr_neq[];
-extern const char ctf_internal_print_ptr_gt[];
-extern const char ctf_internal_print_ptr_lt[];
-extern const char ctf_internal_print_ptr_gte[];
-extern const char ctf_internal_print_ptr_lte[];
-
-extern const char ctf_internal_print_str_eq[];
-extern const char ctf_internal_print_str_neq[];
-extern const char ctf_internal_print_str_gt[];
-extern const char ctf_internal_print_str_lt[];
-extern const char ctf_internal_print_str_gte[];
-extern const char ctf_internal_print_str_lte[];
-
 #ifdef CTF_PARALLEL
-extern int ctf_parallel_internal_state;
-extern int ctf_parallel_internal_state;
-extern pthread_t ctf_parallel_internal_threads[CTF_PARALLEL];
-extern struct ctf_internal_state
-  ctf_parallel_internal_states[CTF_PARALLEL][CTF_CONST_STATES_PER_THREAD];
-extern int ctf_parallel_internal_states_index[CTF_PARALLEL];
-extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL int
-  ctf_parallel_internal_thread_index;
 extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
   *ctf_internal_states;
 extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_internal_state_index;
-extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
-  *ctf_internal_state_p;
 #else
 extern struct ctf_internal_state
   ctf_internal_states[CTF_CONST_STATES_PER_THREAD];
 extern int ctf_internal_state_index;
-extern struct ctf_internal_state *ctf_internal_state_p;
 #endif
 
-/* Functions */
 void ctf_internal_group_run(const struct ctf_internal_group *group);
 void ctf_internal_groups_run(int count, ...);
 size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
@@ -218,8 +78,83 @@ void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
 void ctf_parallel_internal_group_run(const struct ctf_internal_group *group);
 void ctf_parallel_internal_groups_run(int count, ...);
 #endif
+int ctf_internal_fail(const char *, int, const char *);
+int ctf_internal_pass(const char *, int, const char *);
+int ctf_internal_expect_msg(int, const char *, int, const char *);
+int ctf_internal_expect_true(int, const char *, int, const char *);
+#define EXPECT_GEN_PRIMITIVE       \
+  EXPECT_GEN(char_eq, char);       \
+  EXPECT_GEN(char_neq, char);      \
+  EXPECT_GEN(char_gt, char);       \
+  EXPECT_GEN(char_lt, char);       \
+  EXPECT_GEN(char_gte, char);      \
+  EXPECT_GEN(char_lte, char);      \
+  EXPECT_GEN(int_eq, intmax_t);    \
+  EXPECT_GEN(int_neq, intmax_t);   \
+  EXPECT_GEN(int_gt, intmax_t);    \
+  EXPECT_GEN(int_lt, intmax_t);    \
+  EXPECT_GEN(int_gte, intmax_t);   \
+  EXPECT_GEN(int_lte, intmax_t);   \
+  EXPECT_GEN(uint_eq, uintmax_t);  \
+  EXPECT_GEN(uint_neq, uintmax_t); \
+  EXPECT_GEN(uint_gt, uintmax_t);  \
+  EXPECT_GEN(uint_lt, uintmax_t);  \
+  EXPECT_GEN(uint_gte, uintmax_t); \
+  EXPECT_GEN(uint_lte, uintmax_t);
 
-/* UI */
+#define EXPECT_GEN(name, type)                                                \
+  int ctf_internal_expect_##name(type, type, const char *, const char *, int, \
+                                 const char *)
+EXPECT_GEN_PRIMITIVE
+EXPECT_GEN(ptr_eq, const void *);
+EXPECT_GEN(ptr_neq, const void *);
+EXPECT_GEN(ptr_gt, const void *);
+EXPECT_GEN(ptr_lt, const void *);
+EXPECT_GEN(ptr_gte, const void *);
+EXPECT_GEN(ptr_lte, const void *);
+EXPECT_GEN(string_eq, const char *);
+EXPECT_GEN(string_neq, const char *);
+EXPECT_GEN(string_gt, const char *);
+EXPECT_GEN(string_lt, const char *);
+EXPECT_GEN(string_gte, const char *);
+EXPECT_GEN(string_lte, const char *);
+#undef EXPECT_GEN
+#define EXPECT_GEN(name, type)                                              \
+  int ctf_internal_expect_memory_##name(const void *, const void *, size_t, \
+                                        size_t, int, const char *,          \
+                                        const char *, int, const char *)
+EXPECT_GEN_PRIMITIVE
+#undef EXPECT_GEN
+#define EXPECT_GEN(name, type)                                     \
+  int ctf_internal_expect_memory_##name(                           \
+    const void *const *, const void *const *, size_t, size_t, int, \
+    const char *, const char *, int, const char *)
+EXPECT_GEN(ptr_eq, const void *);
+EXPECT_GEN(ptr_neq, const void *);
+EXPECT_GEN(ptr_gt, const void *);
+EXPECT_GEN(ptr_lt, const void *);
+EXPECT_GEN(ptr_gte, const void *);
+EXPECT_GEN(ptr_lte, const void *);
+#undef EXPECT_GEN
+#define EXPECT_GEN(name, type)                                             \
+  int ctf_internal_expect_array_##name(const void *, const void *, size_t, \
+                                       size_t, size_t, int, const char *,  \
+                                       const char *, int, const char *)
+EXPECT_GEN_PRIMITIVE
+#undef EXPECT_GEN
+#define EXPECT_GEN(name, type)                                             \
+  int ctf_internal_expect_array_##name(                                    \
+    const void *const *, const void *const *, size_t, size_t, size_t, int, \
+    const char *, const char *, int, const char *)
+EXPECT_GEN(ptr_eq, const void *);
+EXPECT_GEN(ptr_neq, const void *);
+EXPECT_GEN(ptr_gt, const void *);
+EXPECT_GEN(ptr_lt, const void *);
+EXPECT_GEN(ptr_gte, const void *);
+EXPECT_GEN(ptr_lte, const void *);
+#undef EXPECT_GEN
+#undef EXPECT_GEN_PRIMITIVE
+
 #define CTF_EXTERN_TEST(name) void name(void)
 #define CTF_TEST(name) void name(void)
 #define CTF_EXTERN_GROUP(group_name) \
@@ -286,405 +221,640 @@ void ctf_parallel_sync(void);
   } while(0)
 #endif
 
-#define ctf_fail(m)                                                    \
-  CTF_INTERNAL_ASSERT_BEGIN;                                           \
-  do {                                                                 \
-    ctf_internal_state_p->status = 1;                                  \
-    strncpy(ctf_internal_state_p->msg, (m), CTF_CONST_STATE_MSG_SIZE); \
-    CTF_INTERNAL_ASSERT_COPY;                                          \
-    CTF_INTERNAL_ASSERT_END;                                           \
-  } while(0);
-#define ctf_pass(m)                                                    \
-  do {                                                                 \
-    CTF_INTERNAL_ASSERT_BEGIN;                                         \
-    ctf_internal_state_p->status = 0;                                  \
-    strncpy(ctf_internal_state_p->msg, (m), CTF_CONST_STATE_MSG_SIZE); \
-    CTF_INTERNAL_ASSERT_COPY;                                          \
-    CTF_INTERNAL_ASSERT_END;                                           \
-  } while(0);
-#define ctf_assert_msg(test, m)                                      \
-  do {                                                               \
-    CTF_INTERNAL_ASSERT_BEGIN;                                       \
-    ctf_internal_state_p->status = !((int)(test));                   \
-    strncpy(ctf_internal_state_p->msg, m, CTF_CONST_STATE_MSG_SIZE); \
-    CTF_INTERNAL_ASSERT_COPY;                                        \
-    CTF_INTERNAL_ASSERT_END                                          \
-  } while(0);
+#define ctf_fail(m)                                                \
+  do {                                                             \
+    CTF_INTERNAL_EXPECT(ctf_internal_fail, m, __LINE__, __FILE__); \
+    return;                                                        \
+  } while(0)
+#define ctf_pass(m) \
+  CTF_INTERNAL_EXPECT(ctf_internal_pass, m, __LINE__, __FILE__)
+#define ctf_assert_msg(test, m) \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_msg, test, m, __LINE__, __FILE__)
 #define ctf_assert(test) ctf_assert_msg(test, CTF_INTERNAL_STRINGIFY2(test))
-#define ctf_assert_char_eq(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, ==, char, ctf_internal_print_char_eq)
-#define ctf_assert_char_neq(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, !=, char, ctf_internal_print_char_neq)
-#define ctf_assert_char_gt(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, >, char, ctf_internal_print_char_gt)
-#define ctf_assert_char_lt(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, <, char, ctf_internal_print_char_lt)
-#define ctf_assert_char_gte(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, >=, char, ctf_internal_print_char_gte)
-#define ctf_assert_char_lte(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, <=, char, ctf_internal_print_char_lte)
-#define ctf_assert_int_eq(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, ==, intmax_t, ctf_internal_print_int_eq)
-#define ctf_assert_int_neq(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, !=, intmax_t, ctf_internal_print_int_neq)
-#define ctf_assert_int_gt(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, >, intmax_t, ctf_internal_print_int_gt)
-#define ctf_assert_int_lt(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, <, intmax_t, ctf_internal_print_int_lt)
-#define ctf_assert_int_gte(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, >=, intmax_t, ctf_internal_print_int_gte)
-#define ctf_assert_int_lte(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, <=, intmax_t, ctf_internal_print_int_lte)
-#define ctf_assert_uint_eq(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, ==, uintmax_t, ctf_internal_print_uint_eq)
-#define ctf_assert_uint_neq(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, !=, uintmax_t, ctf_internal_print_uint_neq)
-#define ctf_assert_uint_gt(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, >, uintmax_t, ctf_internal_print_uint_gt)
-#define ctf_assert_uint_lt(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, <, uintmax_t, ctf_internal_print_uint_lt)
-#define ctf_assert_uint_gte(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, >=, uintmax_t, ctf_internal_print_uint_gte)
-#define ctf_assert_uint_lte(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, <=, uintmax_t, ctf_internal_print_uint_lte)
-#define ctf_assert_ptr_eq(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, ==, void *const, ctf_internal_print_ptr_eq)
-#define ctf_assert_ptr_neq(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, !=, void *const, ctf_internal_print_ptr_neq)
-#define ctf_assert_ptr_gt(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, >, void *const, ctf_internal_print_ptr_gt)
-#define ctf_assert_ptr_lt(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, <, void *const, ctf_internal_print_ptr_lt)
-#define ctf_assert_ptr_gte(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, >=, void *const, ctf_internal_print_ptr_gte)
-#define ctf_assert_ptr_lte(a, b) \
-  CTF_INTERNAL_ASSERT(a, b, <=, void *const, ctf_internal_print_ptr_lte)
+#define ctf_assert_char_eq(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_char_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_char_neq(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_char_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_char_gt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_char_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_char_lt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_char_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_char_gte(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_char_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_char_lte(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_char_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_int_eq(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_int_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_int_neq(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_int_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_int_gt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_int_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_int_lt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_int_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_int_gte(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_int_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_int_lte(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_int_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_uint_eq(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_uint_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_uint_neq(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_uint_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_uint_gt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_uint_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_uint_lt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_uint_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_uint_gte(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_uint_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_uint_lte(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_uint_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_ptr_eq(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_ptr_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_ptr_neq(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_ptr_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_ptr_gt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_ptr_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_ptr_lt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_ptr_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_ptr_gte(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_ptr_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_ptr_lte(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_ptr_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
 #define ctf_assert_string_eq(a, b)                                           \
-  CTF_INTERNAL_ASSERT_FUNC(a, b, ==, char *const, ctf_internal_print_str_eq, \
-                           strcmp)
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_string_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
 #define ctf_assert_string_neq(a, b)                                           \
-  CTF_INTERNAL_ASSERT_FUNC(a, b, !=, char *const, ctf_internal_print_str_neq, \
-                           strcmp)
-#define ctf_assert_string_gt(a, b)                                          \
-  CTF_INTERNAL_ASSERT_FUNC(a, b, >, char *const, ctf_internal_print_str_gt, \
-                           strcmp)
-#define ctf_assert_string_lt(a, b)                                          \
-  CTF_INTERNAL_ASSERT_FUNC(a, b, <, char *const, ctf_internal_print_str_lt, \
-                           strcmp)
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_string_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_string_gt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_string_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_string_lt(a, b)                                           \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_string_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
 #define ctf_assert_string_gte(a, b)                                           \
-  CTF_INTERNAL_ASSERT_FUNC(a, b, >=, char *const, ctf_internal_print_str_gte, \
-                           strcmp)
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_string_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
 #define ctf_assert_string_lte(a, b)                                           \
-  CTF_INTERNAL_ASSERT_FUNC(a, b, <=, char *const, ctf_internal_print_str_lte, \
-                           strcmp)
-#define ctf_assert_memory_char_eq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, ==, ctf_internal_print_arr_char, length)
-#define ctf_assert_memory_char_neq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, !=, ctf_internal_print_arr_char, length)
-#define ctf_assert_memory_char_lt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <, ctf_internal_print_arr_char, length)
-#define ctf_assert_memory_char_gt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >, ctf_internal_print_arr_char, length)
-#define ctf_assert_memory_char_lte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <=, ctf_internal_print_arr_char, length)
-#define ctf_assert_memory_char_gte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >=, ctf_internal_print_arr_char, length)
-#define ctf_assert_memory_int_eq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, ==, ctf_internal_print_arr_int, length)
-#define ctf_assert_memory_int_neq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, !=, ctf_internal_print_arr_int, length)
-#define ctf_assert_memory_int_lt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <, ctf_internal_print_arr_int, length)
-#define ctf_assert_memory_int_gt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >, ctf_internal_print_arr_int, length)
-#define ctf_assert_memory_int_lte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <=, ctf_internal_print_arr_int, length)
-#define ctf_assert_memory_int_gte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >=, ctf_internal_print_arr_int, length)
-#define ctf_assert_memory_uint_eq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, ==, ctf_internal_print_arr_uint, length)
-#define ctf_assert_memory_uint_neq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, !=, ctf_internal_print_arr_uint, length)
-#define ctf_assert_memory_uint_lt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <, ctf_internal_print_arr_uint, length)
-#define ctf_assert_memory_uint_gt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >, ctf_internal_print_arr_uint, length)
-#define ctf_assert_memory_uint_lte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <=, ctf_internal_print_arr_uint, length)
-#define ctf_assert_memory_uint_gte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >=, ctf_internal_print_arr_uint, length)
-#define ctf_assert_memory_ptr_eq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, ==, ctf_internal_print_arr_ptr, length)
-#define ctf_assert_memory_ptr_neq(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, !=, ctf_internal_print_arr_ptr, length)
-#define ctf_assert_memory_ptr_lt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <, ctf_internal_print_arr_ptr, length)
-#define ctf_assert_memory_ptr_gt(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >, ctf_internal_print_arr_ptr, length)
-#define ctf_assert_memory_ptr_lte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, <=, ctf_internal_print_arr_ptr, length)
-#define ctf_assert_memory_ptr_gte(a, b, length) \
-  CTF_INTERNAL_ASSERT_MEM(a, b, >=, ctf_internal_print_arr_ptr, length)
-#define ctf_assert_array_char_eq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, ==, ctf_internal_print_arr_char)
-#define ctf_assert_array_char_neq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, !=, ctf_internal_print_arr_char)
-#define ctf_assert_array_char_lt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <, ctf_internal_print_arr_char)
-#define ctf_assert_array_char_gt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >, ctf_internal_print_arr_char)
-#define ctf_assert_array_char_lte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_char)
-#define ctf_assert_array_char_gte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_char)
-#define ctf_assert_array_int_eq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, ==, ctf_internal_print_arr_int)
-#define ctf_assert_array_int_neq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, !=, ctf_internal_print_arr_int)
-#define ctf_assert_array_int_lt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <, ctf_internal_print_arr_int)
-#define ctf_assert_array_int_gt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >, ctf_internal_print_arr_int)
-#define ctf_assert_array_int_lte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_int)
-#define ctf_assert_array_int_gte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_int)
-#define ctf_assert_array_uint_eq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, ==, ctf_internal_print_arr_uint)
-#define ctf_assert_array_uint_neq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, !=, ctf_internal_print_arr_uint)
-#define ctf_assert_array_uint_lt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <, ctf_internal_print_arr_uint)
-#define ctf_assert_array_uint_gt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >, ctf_internal_print_arr_uint)
-#define ctf_assert_array_uint_lte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_uint)
-#define ctf_assert_array_uint_gte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_uint)
-#define ctf_assert_array_ptr_eq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, ==, ctf_internal_print_arr_ptr)
-#define ctf_assert_array_ptr_neq(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, !=, ctf_internal_print_arr_ptr)
-#define ctf_assert_array_ptr_lt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <, ctf_internal_print_arr_ptr)
-#define ctf_assert_array_ptr_gt(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >, ctf_internal_print_arr_ptr)
-#define ctf_assert_array_ptr_lte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, <=, ctf_internal_print_arr_ptr)
-#define ctf_assert_array_ptr_gte(a, b) \
-  CTF_INTERNAL_ASSERT_ARR(a, b, >=, ctf_internal_print_arr_ptr)
-#define ctf_assert_true(a)                                        \
-  do {                                                            \
-    CTF_INTERNAL_ASSERT_BEGIN;                                    \
-    const int _x = a;                                             \
-    ctf_internal_state_p->status = !_x;                           \
-    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, \
-             "%s == true (%d != 0)", #a, _x);                     \
-    CTF_INTERNAL_ASSERT_COPY;                                     \
-    CTF_INTERNAL_ASSERT_END;                                      \
-  } while(0)
-#define ctf_assert_false(a)                                       \
-  do {                                                            \
-    CTF_INTERNAL_ASSERT_BEGIN;                                    \
-    const int _x = a;                                             \
-    ctf_internal_state_p->status = !!_x;                          \
-    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, \
-             "%s == false (%d == 0)", #a, _x);                    \
-    CTF_INTERNAL_ASSERT_COPY;                                     \
-    CTF_INTERNAL_ASSERT_END;                                      \
-  } while(0)
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_string_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_assert_memory_char_eq(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_char_eq,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_char_neq(a, b, length)                              \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_char_neq,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_char_gt(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_char_gt,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_char_lt(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_char_lt,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_char_gte(a, b, length)                              \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_char_gte,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_char_lte(a, b, length)                              \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_char_lte,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_int_eq(a, b, length)                                \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_int_eq,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_int_neq(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_int_neq,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_int_gt(a, b, length)                                \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_int_gt,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_int_lt(a, b, length)                                \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_int_lt,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_int_gte(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_int_gte,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_int_lte(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_int_lte,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_uint_eq(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_uint_eq,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_uint_neq(a, b, length)                              \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_uint_neq,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_uint_gt(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_uint_gt,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_uint_lt(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_uint_lt,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_uint_gte(a, b, length)                              \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_uint_gte,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_uint_lte(a, b, length)                              \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_uint_lte,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_ptr_eq(a, b, length)                                \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_ptr_eq,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_ptr_neq(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_ptr_neq,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_ptr_gt(a, b, length)                                \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_ptr_gt,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_ptr_lt(a, b, length)                                \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_ptr_lt,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_ptr_gte(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_ptr_gte,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_memory_ptr_lte(a, b, length)                               \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_memory_ptr_lte,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_char_eq(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_char_eq,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_char_neq(a, b)                                   \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_char_neq,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__)
+#define ctf_assert_array_char_gt(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_char_gt,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_char_lt(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_char_lt,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_char_gte(a, b)                                   \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_char_gte,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_char_lte(a, b)                                   \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_char_lte,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_int_eq(a, b)                                     \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_int_eq,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_int_neq(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_int_neq,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_int_gt(a, b)                                     \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_int_gt,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_int_lt(a, b)                                     \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_int_lt,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_int_gte(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_int_gte,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_int_lte(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_int_lte,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_uint_eq(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_uint_eq,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_uint_neq(a, b)                                   \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_uint_neq,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_uint_gt(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_uint_gt,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_uint_lt(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_uint_lt,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_uint_gte(a, b)                                   \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_uint_gte,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_uint_lte(a, b)                                   \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_uint_lte,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_ptr_eq(a, b)                                     \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_ptr_eq,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_ptr_neq(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_ptr_neq,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_ptr_gt(a, b)                                     \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_ptr_gt,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_ptr_lt(a, b)                                     \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_ptr_lt,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_ptr_gte(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_ptr_gte,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_array_ptr_lte(a, b)                                    \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_array_ptr_lte,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_assert_true(a) \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_true, a, #a, __LINE__, __FILE__)
+#define ctf_assert_false(a) \
+  CTF_INTERNAL_ASSERT(ctf_internal_expect_false, a, #a, __LINE__, __FILE__)
 
-#define ctf_expect_msg(test, m)                                      \
-  do {                                                               \
-    CTF_INTERNAL_ASSERT_BEGIN;                                       \
-    ctf_internal_state_p->status = !((int)(test));                   \
-    strncpy(ctf_internal_state_p->msg, m, CTF_CONST_STATE_MSG_SIZE); \
-    CTF_INTERNAL_ASSERT_COPY;                                        \
-    CTF_INTERNAL_EXPECT_END;                                         \
-  } while(0);
+#define ctf_expect_msg(test, m) \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_msg, test, m, __LINE__, __FILE__)
 #define ctf_expect(test) ctf_expect_msg(test, CTF_INTERNAL_STRINGIFY2(test))
-#define ctf_expect_char_eq(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, ==, char, ctf_internal_print_char_eq)
-#define ctf_expect_char_neq(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, !=, char, ctf_internal_print_char_neq)
-#define ctf_expect_char_gt(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, >, char, ctf_internal_print_char_gt)
-#define ctf_expect_char_lt(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, <, char, ctf_internal_print_char_lt)
-#define ctf_expect_char_gte(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, >=, char, ctf_internal_print_char_gte)
-#define ctf_expect_char_lte(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, <=, char, ctf_internal_print_char_lte)
-#define ctf_expect_int_eq(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, ==, intmax_t, ctf_internal_print_int_eq)
-#define ctf_expect_int_neq(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, !=, intmax_t, ctf_internal_print_int_neq)
-#define ctf_expect_int_gt(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, >, intmax_t, ctf_internal_print_int_gt)
-#define ctf_expect_int_lt(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, <, intmax_t, ctf_internal_print_int_lt)
-#define ctf_expect_int_gte(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, >=, intmax_t, ctf_internal_print_int_gte)
-#define ctf_expect_int_lte(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, <=, intmax_t, ctf_internal_print_int_lte)
-#define ctf_expect_uint_eq(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, ==, uintmax_t, ctf_internal_print_uint_eq)
-#define ctf_expect_uint_neq(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, !=, uintmax_t, ctf_internal_print_uint_neq)
-#define ctf_expect_uint_gt(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, >, uintmax_t, ctf_internal_print_uint_gt)
-#define ctf_expect_uint_lt(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, <, uintmax_t, ctf_internal_print_uint_lt)
-#define ctf_expect_uint_gte(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, >=, uintmax_t, ctf_internal_print_uint_gte)
-#define ctf_expect_uint_lte(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, <=, uintmax_t, ctf_internal_print_uint_lte)
-#define ctf_expect_ptr_eq(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, ==, void *const, ctf_internal_print_ptr_eq)
-#define ctf_expect_ptr_neq(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, !=, void *const, ctf_internal_print_ptr_neq)
-#define ctf_expect_ptr_gt(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, >, void *const, ctf_internal_print_ptr_gt)
-#define ctf_expect_ptr_lt(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, <, void *const, ctf_internal_print_ptr_lt)
-#define ctf_expect_ptr_gte(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, >=, void *const, ctf_internal_print_ptr_gte)
-#define ctf_expect_ptr_lte(a, b) \
-  CTF_INTERNAL_EXPECT(a, b, <=, void *const, ctf_internal_print_ptr_lte)
+#define ctf_expect_char_eq(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_char_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_char_neq(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_char_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_char_gt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_char_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_char_lt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_char_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_char_gte(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_char_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_char_lte(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_char_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_int_eq(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_int_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_int_neq(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_int_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_int_gt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_int_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_int_lt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_int_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_int_gte(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_int_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_int_lte(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_int_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_uint_eq(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_uint_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_uint_neq(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_uint_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_uint_gt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_uint_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_uint_lt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_uint_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_uint_gte(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_uint_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_uint_lte(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_uint_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_ptr_eq(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_ptr_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_ptr_neq(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_ptr_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_ptr_gt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_ptr_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_ptr_lt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_ptr_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_ptr_gte(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_ptr_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_ptr_lte(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_ptr_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
 #define ctf_expect_string_eq(a, b)                                           \
-  CTF_INTERNAL_EXPECT_FUNC(a, b, ==, char *const, ctf_internal_print_str_eq, \
-                           strcmp)
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_string_eq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
 #define ctf_expect_string_neq(a, b)                                           \
-  CTF_INTERNAL_EXPECT_FUNC(a, b, !=, char *const, ctf_internal_print_str_neq, \
-                           strcmp)
-#define ctf_expect_string_gt(a, b)                                          \
-  CTF_INTERNAL_EXPECT_FUNC(a, b, >, char *const, ctf_internal_print_str_gt, \
-                           strcmp)
-#define ctf_expect_string_lt(a, b)                                          \
-  CTF_INTERNAL_EXPECT_FUNC(a, b, <, char *const, ctf_internal_print_str_lt, \
-                           strcmp)
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_string_neq, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_string_gt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_string_gt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_string_lt(a, b)                                           \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_string_lt, a, b, #a, #b, __LINE__, \
+                      __FILE__)
 #define ctf_expect_string_gte(a, b)                                           \
-  CTF_INTERNAL_EXPECT_FUNC(a, b, >=, char *const, ctf_internal_print_str_gte, \
-                           strcmp)
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_string_gte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
 #define ctf_expect_string_lte(a, b)                                           \
-  CTF_INTERNAL_EXPECT_FUNC(a, b, <=, char *const, ctf_internal_print_str_lte, \
-                           strcmp)
-#define ctf_expect_memory_char_eq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, ==, ctf_internal_print_arr_char, length)
-#define ctf_expect_memory_char_neq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, !=, ctf_internal_print_arr_char, length)
-#define ctf_expect_memory_char_lt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <, ctf_internal_print_arr_char, length)
-#define ctf_expect_memory_char_gt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >, ctf_internal_print_arr_char, length)
-#define ctf_expect_memory_char_lte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <=, ctf_internal_print_arr_char, length)
-#define ctf_expect_memory_char_gte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >=, ctf_internal_print_arr_char, length)
-#define ctf_expect_memory_int_eq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, ==, ctf_internal_print_arr_int, length)
-#define ctf_expect_memory_int_neq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, !=, ctf_internal_print_arr_int, length)
-#define ctf_expect_memory_int_lt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <, ctf_internal_print_arr_int, length)
-#define ctf_expect_memory_int_gt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >, ctf_internal_print_arr_int, length)
-#define ctf_expect_memory_int_lte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <=, ctf_internal_print_arr_int, length)
-#define ctf_expect_memory_int_gte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >=, ctf_internal_print_arr_int, length)
-#define ctf_expect_memory_uint_eq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, ==, ctf_internal_print_arr_uint, length)
-#define ctf_expect_memory_uint_neq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, !=, ctf_internal_print_arr_uint, length)
-#define ctf_expect_memory_uint_lt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <, ctf_internal_print_arr_uint, length)
-#define ctf_expect_memory_uint_gt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >, ctf_internal_print_arr_uint, length)
-#define ctf_expect_memory_uint_lte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <=, ctf_internal_print_arr_uint, length)
-#define ctf_expect_memory_uint_gte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >=, ctf_internal_print_arr_uint, length)
-#define ctf_expect_memory_ptr_eq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, ==, ctf_internal_print_arr_ptr, length)
-#define ctf_expect_memory_ptr_neq(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, !=, ctf_internal_print_arr_ptr, length)
-#define ctf_expect_memory_ptr_lt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <, ctf_internal_print_arr_ptr, length)
-#define ctf_expect_memory_ptr_gt(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >, ctf_internal_print_arr_ptr, length)
-#define ctf_expect_memory_ptr_lte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, <=, ctf_internal_print_arr_ptr, length)
-#define ctf_expect_memory_ptr_gte(a, b, length) \
-  CTF_INTERNAL_EXPECT_MEM(a, b, >=, ctf_internal_print_arr_ptr, length)
-#define ctf_expect_array_char_eq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, ==, ctf_internal_print_arr_char)
-#define ctf_expect_array_char_neq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, !=, ctf_internal_print_arr_char)
-#define ctf_expect_array_char_lt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <, ctf_internal_print_arr_char)
-#define ctf_expect_array_char_gt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >, ctf_internal_print_arr_char)
-#define ctf_expect_array_char_lte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_char)
-#define ctf_expect_array_char_gte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_char)
-#define ctf_expect_array_int_eq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, ==, ctf_internal_print_arr_int)
-#define ctf_expect_array_int_neq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, !=, ctf_internal_print_arr_int)
-#define ctf_expect_array_int_lt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <, ctf_internal_print_arr_int)
-#define ctf_expect_array_int_gt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >, ctf_internal_print_arr_int)
-#define ctf_expect_array_int_lte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_int)
-#define ctf_expect_array_int_gte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_int)
-#define ctf_expect_array_uint_eq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, ==, ctf_internal_print_arr_uint)
-#define ctf_expect_array_uint_neq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, !=, ctf_internal_print_arr_uint)
-#define ctf_expect_array_uint_lt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <, ctf_internal_print_arr_uint)
-#define ctf_expect_array_uint_gt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >, ctf_internal_print_arr_uint)
-#define ctf_expect_array_uint_lte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_uint)
-#define ctf_expect_array_uint_gte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_uint)
-#define ctf_expect_array_ptr_eq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, ==, ctf_internal_print_arr_ptr)
-#define ctf_expect_array_ptr_neq(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, !=, ctf_internal_print_arr_ptr)
-#define ctf_expect_array_ptr_lt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <, ctf_internal_print_arr_ptr)
-#define ctf_expect_array_ptr_gt(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >, ctf_internal_print_arr_ptr)
-#define ctf_expect_array_ptr_lte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, <=, ctf_internal_print_arr_ptr)
-#define ctf_expect_array_ptr_gte(a, b) \
-  CTF_INTERNAL_EXPECT_ARR(a, b, >=, ctf_internal_print_arr_ptr)
-#define ctf_expect_true(a)                                        \
-  do {                                                            \
-    CTF_INTERNAL_ASSERT_BEGIN;                                    \
-    const int _x = a;                                             \
-    ctf_internal_state_p->status = !_x;                           \
-    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, \
-             "%s == true (%d != 0)", #a, _x);                     \
-    CTF_INTERNAL_ASSERT_COPY;                                     \
-    CTF_INTERNAL_EXPECT_END;                                      \
-  } while(0)
-#define ctf_expect_false(a)                                       \
-  do {                                                            \
-    CTF_INTERNAL_ASSERT_BEGIN;                                    \
-    const int _x = a;                                             \
-    ctf_internal_state_p->status = _x;                            \
-    snprintf(ctf_internal_state_p->msg, CTF_CONST_STATE_MSG_SIZE, \
-             "%s == false (%d == 0)", #a, _x);                    \
-    CTF_INTERNAL_ASSERT_COPY;                                     \
-    CTF_INTERNAL_EXPECT_END;                                      \
-  } while(0)
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_string_lte, a, b, #a, #b, __LINE__, \
+                      __FILE__)
+#define ctf_expect_memory_char_eq(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_char_eq,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_char_neq(a, b, length)                              \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_char_neq,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_char_gt(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_char_gt,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_char_lt(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_char_lt,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_char_gte(a, b, length)                              \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_char_gte,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_char_lte(a, b, length)                              \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_char_lte,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_int_eq(a, b, length)                                \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_int_eq,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_int_neq(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_int_neq,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_int_gt(a, b, length)                                \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_int_gt,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_int_lt(a, b, length)                                \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_int_lt,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_int_gte(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_int_gte,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_int_lte(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_int_lte,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_uint_eq(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_uint_eq,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_uint_neq(a, b, length)                              \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_uint_neq,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_uint_gt(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_uint_gt,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_uint_lt(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_uint_lt,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_uint_gte(a, b, length)                              \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_uint_gte,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_uint_lte(a, b, length)                              \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_uint_lte,                    \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_ptr_eq(a, b, length)                                \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_ptr_eq,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_ptr_neq(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_ptr_neq,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_ptr_gt(a, b, length)                                \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_ptr_gt,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_ptr_lt(a, b, length)                                \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_ptr_lt,                      \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_ptr_gte(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_ptr_gte,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_memory_ptr_lte(a, b, length)                               \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_memory_ptr_lte,                     \
+                      (const void *const *)a, (const void *const *)b, length, \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_char_eq(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_char_eq,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_char_neq(a, b)                                   \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_char_neq,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__)
+#define ctf_expect_array_char_gt(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_char_gt,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_char_lt(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_char_lt,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_char_gte(a, b)                                   \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_char_gte,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_char_lte(a, b)                                   \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_char_lte,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_int_eq(a, b)                                     \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_int_eq,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_int_neq(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_int_neq,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_int_gt(a, b)                                     \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_int_gt,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_int_lt(a, b)                                     \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_int_lt,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_int_gte(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_int_gte,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_int_lte(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_int_lte,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 1, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_uint_eq(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_uint_eq,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_uint_neq(a, b)                                   \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_uint_neq,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_uint_gt(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_uint_gt,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_uint_lt(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_uint_lt,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_uint_gte(a, b)                                   \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_uint_gte,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_uint_lte(a, b)                                   \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_uint_lte,                 \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_ptr_eq(a, b)                                     \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_ptr_eq,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_ptr_neq(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_ptr_neq,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_ptr_gt(a, b)                                     \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_ptr_gt,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_ptr_lt(a, b)                                     \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_ptr_lt,                   \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_ptr_gte(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_ptr_gte,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_array_ptr_lte(a, b)                                    \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_array_ptr_lte,                  \
+                      (const void *const *)a, (const void *const *)b,     \
+                      sizeof(a) / sizeof(*(a)), sizeof(b) / sizeof(*(b)), \
+                      sizeof(*(a)), 0, #a, #b, __LINE__, __FILE__);
+#define ctf_expect_true(a) \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_true, a, #a, __LINE__, __FILE__)
+#define ctf_expect_false(a) \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_false, a, #a, __LINE__, __FILE__)
 
 #if CTF_ASSERT_ALIASES == CTF_ON
 #define assert_msg(test, msg) ctf_assert_msg(test, msg)
