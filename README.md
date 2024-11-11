@@ -60,21 +60,33 @@ set errorformat^=%.%#[%f\|%l\|%t]\ %m,
 ```
 
 ### Building
-Framework is distributed as source and header pair,
-Enabling thread supports requires defining `CTF_PARALLEL` as number of threads
-used and linking library with pthreads `-lpthreads`.
+#### Prerequisites
+- C99 or newer
+- `__thread`(GCC/Clang) or `_Thread_local`(C11) support
+- `__attribute__((constructor))`(GCC/Clang) support
+- pthreads
+#### Notes
+Framework is distributed as source and header pair, compiling source requires
+linking with pthreads.
 
 ### Documentation
-#### Basic
+#### Declarations and definitions
 ```
 CTF_TEST(name) {} // test creation
 CTF_GROUP(group_name, test1, test2, ...) // group creation
 CTF_EXTERN_TEST(name); // external definition for test
 CTF_EXTERN_GROUP(group_name); // external definition for group
+```
+#### Execution control
+```
 ctf_group_run(&group_name); // run singular group
 ctf_groups_run(&group_name1, &group_name2, ...); // run multiple groups
 ctf_exit_code; // combined group status
-ctf_barrier(); // if(ctf_exit_code) return ctf_exit_code;
+ctf_barrier(); // syncs threads and then returns depending on ctf_exit_code
+
+ctf_parallel_start(); // starts threads
+ctf_parallel_stop(); // waits for threads and then stops them
+ctf_parallel_sync(); // waits for threads to finnish all tasks
 ```
 #### Asserts and expects
 ```
@@ -115,20 +127,6 @@ ctf_expect_false(a);
 ctf_fail(msg); // Failes test with message
 ctf_pass(msg); // Adds passed test with message
 ```
-#### Parallel
-```
-ctf_parallel_start(); // starts threads (changes following functions to parallel versions)
-ctf_parallel_stop(); // waits for threads and then stops them (changes following functions to sequential versions)
-ctf_parallel_sync(); // waits for threads to finnish all tasks
-
-// Parallel versions of sequential functions
-ctf_group_run(&group_name); // adds group to queue
-ctf_groups_run(&group_name1, &group_name2, ...); // adds groups to queue
-ctf_barrier(); // syncs threads and then returns depending on ctf_exit_code
-```
-#### Enabling parallelism
-1. In every test file before including header add `#define CTF_PARALLEL`.
-2. While compiling ctf.c add `-DCTF_PARALLEL=[thread_num]` to options.
 #### Configuration
 Specified when:
 - including library
@@ -140,4 +138,5 @@ Specified when:
 -c, --color    (off|on|auto*) color coding for failed and passed tests
 -d, --detail   (off|on|auto*) detailed info about failed tests
 -f, --failed   Print only groups that failed
+-j, --jobs     Number of parallel threads to run (default 1)
 ```

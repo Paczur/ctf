@@ -8,20 +8,15 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#ifdef CTF_PARALLEL
-#include <pthread.h>
-#endif
 
 #define CTF_CONST_STATE_FILE_SIZE 256
 #define CTF_CONST_STATE_MSG_SIZE 4096
 #define CTF_CONST_STATES_PER_THREAD 64
 
-#ifdef CTF_PARALLEL
 #if __STDC_VERSION__ == 201112L
-#define CTF_PARALLEL_INTERNAL_THREAD_LOCAL _Thread_local
+#define CTF_INTERNAL_PARALLEL_THREAD_LOCAL _Thread_local
 #else
-#define CTF_PARALLEL_INTERNAL_THREAD_LOCAL __thread
-#endif
+#define CTF_INTERNAL_PARALLEL_THREAD_LOCAL __thread
 #endif
 
 #define CTF_INTERNAL_STRINGIFY(x) #x
@@ -53,31 +48,18 @@ struct ctf_internal_group {
 };
 
 extern int ctf_exit_code;
-#ifdef CTF_PARALLEL
-extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL struct ctf_internal_state
+extern CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_state
   *ctf_internal_states;
-extern CTF_PARALLEL_INTERNAL_THREAD_LOCAL int ctf_internal_state_index;
-#else
-extern struct ctf_internal_state
-  ctf_internal_states[CTF_CONST_STATES_PER_THREAD];
-extern int ctf_internal_state_index;
-#endif
+extern CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_state_index;
 
-void ctf_internal_group_run(const struct ctf_internal_group *group);
+void ctf_group_run(const struct ctf_internal_group *group);
 void ctf_internal_groups_run(int count, ...);
-size_t ctf_internal_assert_mem_print(struct ctf_internal_state *state,
-                                     const void *a, const void *b, size_t la,
-                                     size_t lb, size_t step, int signed,
-                                     const char *a_str, const char *b_str,
-                                     const char *op_str, const char *format,
-                                     int line, const char *file);
-void ctf_internal_assert_copy(struct ctf_internal_state *state, int line,
-                              const char *file);
+#define ctf_groups_run(...)                                            \
+  ctf_internal_groups_run(                                             \
+    (sizeof((const struct ctf_internal_group *const[]){__VA_ARGS__}) / \
+     sizeof(struct ctf_internal_group *)),                             \
+    __VA_ARGS__)
 
-#ifdef CTF_PARALLEL
-void ctf_parallel_internal_group_run(const struct ctf_internal_group *group);
-void ctf_parallel_internal_groups_run(int count, ...);
-#endif
 int ctf_internal_fail(const char *, int, const char *);
 int ctf_internal_pass(const char *, int, const char *);
 int ctf_internal_expect_msg(int, const char *, int, const char *);
@@ -169,48 +151,9 @@ EXPECT_GEN(ptr_lte, const void *);
       .name = #group_name,                                   \
     };
 
-#ifndef CTF_PARALLEL
-#define ctf_group_run(name) ctf_internal_group_run(name)
-#define ctf_groups_run(...)                                            \
-  ctf_internal_groups_run(                                             \
-    (sizeof((const struct ctf_internal_group *const[]){__VA_ARGS__}) / \
-     sizeof(struct ctf_internal_group *)),                             \
-    __VA_ARGS__)
-#define ctf_barrier()       \
-  do {                      \
-    if(ctf_exit_code) {     \
-      return ctf_exit_code; \
-    }                       \
-  } while(0)
-#define ctf_parallel_start()
-#define ctf_parallel_stop()
-#define ctf_parallel_sync()
-#else
 void ctf_parallel_start(void);
 void ctf_parallel_stop(void);
 void ctf_parallel_sync(void);
-#define ctf_group_run(name)                  \
-  do {                                       \
-    if(ctf_parallel_internal_state) {        \
-      ctf_parallel_internal_group_run(name); \
-    } else {                                 \
-      ctf_internal_group_run(name);          \
-    }                                        \
-  } while(0)
-#define ctf_groups_run(...)                                                \
-  do {                                                                     \
-    if(ctf_parallel_internal_state) {                                      \
-      ctf_parallel_internal_groups_run(                                    \
-        (sizeof((const struct ctf_internal_group *const[]){__VA_ARGS__}) / \
-         sizeof(struct ctf_internal_group *)),                             \
-        __VA_ARGS__);                                                      \
-    } else {                                                               \
-      ctf_internal_groups_run(                                             \
-        (sizeof((const struct ctf_internal_group *const[]){__VA_ARGS__}) / \
-         sizeof(struct ctf_internal_group *)),                             \
-        __VA_ARGS__);                                                      \
-    }                                                                      \
-  } while(0)
 #define ctf_barrier()       \
   do {                      \
     ctf_parallel_sync();    \
@@ -219,7 +162,6 @@ void ctf_parallel_sync(void);
       return ctf_exit_code; \
     }                       \
   } while(0)
-#endif
 
 #define ctf_fail(m)                                                \
   do {                                                             \
