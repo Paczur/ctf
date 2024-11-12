@@ -17,11 +17,12 @@ WARN_FLAGS=-Wall -Wextra -Werror -Wno-error=cpp -Wno-unused-function -Wunused-re
 SANTIIZER_FLAGS=-fsanitize=undefined -fsanitize-address-use-after-scope -fstack-check -fno-stack-clash-protection
 DEBUG_FLAGS=$(WARN_FLAGS) $(MEMORY_DEBUG_FLAGS) $(SANITIZER_FLAGS) -Og -ggdb3
 OPTIMIZE_FLAGS=-march=native -O2 -pipe -D NDEBUG
-LINK_FLAGS=$(CFLAGS) -s -flto=4 -fwhole-program -pthread
-TEST_FLAGS=$(CFLAGS) $(DEBUG_FLAGS) -Isrc
-CFLAGS=-std=gnu99 -MMD -MP
+LINK_FLAGS=$(BASE_CFLAGS) -s -flto=4 -fwhole-program -pthread
+TEST_FLAGS=$(BASE_CFLAGS) -Isrc
+BASE_CFLAGS=-std=gnu99 -MMD -MP
+CFLAGS=$(BASE_CFLAGS)
 
-all: debug
+all: release
 
 release: CFLAGS += $(OPTIMIZE_FLAGS)
 release: $(TEST_RUN) $(SRC_BINARIES)
@@ -53,7 +54,7 @@ build/src/%.c: src/%.c
 build/src/ctf/ctf.o: src/ctf/ctf.c
 	mkdir -p $(@D)
 	$(info CC  $@)
-	$(CC) $(TEST_FLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(TEST_RUN): bin/$(TEST_BIN)
 	mkdir -p $(@D)

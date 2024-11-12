@@ -59,6 +59,19 @@ void ctf_internal_groups_run(int count, ...);
     (sizeof((const struct ctf_internal_group *const[]){__VA_ARGS__}) / \
      sizeof(struct ctf_internal_group *)),                             \
     __VA_ARGS__)
+void ctf_print_buffer_dump(void);
+void ctf_sigsegv_handler(int unused);
+void ctf_parallel_start(void);
+void ctf_parallel_stop(void);
+void ctf_parallel_sync(void);
+#define ctf_barrier()       \
+  do {                      \
+    ctf_parallel_sync();    \
+    if(ctf_exit_code) {     \
+      ctf_parallel_stop();  \
+      return ctf_exit_code; \
+    }                       \
+  } while(0)
 
 int ctf_internal_fail(const char *, int, const char *);
 int ctf_internal_pass(const char *, int, const char *);
@@ -83,6 +96,19 @@ int ctf_internal_expect_true(int, const char *, int, const char *);
   EXPECT_GEN(uint_lt, uintmax_t);  \
   EXPECT_GEN(uint_gte, uintmax_t); \
   EXPECT_GEN(uint_lte, uintmax_t);
+#define CTF_EXTERN_TEST(name) void name(void)
+#define CTF_TEST(name) void name(void)
+#define CTF_EXTERN_GROUP(group_name) \
+  extern const struct ctf_internal_group group_name
+#define CTF_GROUP(group_name, ...)                           \
+  const struct ctf_internal_group group_name =               \
+    (const struct ctf_internal_group){                       \
+      .tests = (ctf_internal_test[]){__VA_ARGS__},           \
+      .test_names = CTF_INTERNAL_STRINGIFY2((__VA_ARGS__)),  \
+      .length = sizeof((ctf_internal_test[]){__VA_ARGS__}) / \
+                sizeof(ctf_internal_test),                   \
+      .name = #group_name,                                   \
+    };
 
 #define EXPECT_GEN(name, type)                                                \
   int ctf_internal_expect_##name(type, type, const char *, const char *, int, \
@@ -136,32 +162,6 @@ EXPECT_GEN(ptr_gte, const void *);
 EXPECT_GEN(ptr_lte, const void *);
 #undef EXPECT_GEN
 #undef EXPECT_GEN_PRIMITIVE
-
-#define CTF_EXTERN_TEST(name) void name(void)
-#define CTF_TEST(name) void name(void)
-#define CTF_EXTERN_GROUP(group_name) \
-  extern const struct ctf_internal_group group_name
-#define CTF_GROUP(group_name, ...)                           \
-  const struct ctf_internal_group group_name =               \
-    (const struct ctf_internal_group){                       \
-      .tests = (ctf_internal_test[]){__VA_ARGS__},           \
-      .test_names = CTF_INTERNAL_STRINGIFY2((__VA_ARGS__)),  \
-      .length = sizeof((ctf_internal_test[]){__VA_ARGS__}) / \
-                sizeof(ctf_internal_test),                   \
-      .name = #group_name,                                   \
-    };
-
-void ctf_parallel_start(void);
-void ctf_parallel_stop(void);
-void ctf_parallel_sync(void);
-#define ctf_barrier()       \
-  do {                      \
-    ctf_parallel_sync();    \
-    if(ctf_exit_code) {     \
-      ctf_parallel_stop();  \
-      return ctf_exit_code; \
-    }                       \
-  } while(0)
 
 #define ctf_fail(m)                                                \
   do {                                                             \
