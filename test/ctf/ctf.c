@@ -1,13 +1,23 @@
 #include <ctf/ctf.h>
-#include <time.h>
 
-time_t __wrap_time(time_t *tloc) {
-  (void)tloc;
-  return 0;
+#include "add.h"
+
+CTF_MOCK_BEGIN(int, add, int a, int b)
+CTF_MOCK_CALL_ARGS(a, b)
+CTF_MOCK_END
+
+int mock_add(int a, int b) { return 0; }
+
+CTF_TEST(mock_basic) {
+  ctf_mock(add, mock_add);
+  expect_int_eq(0, add(1, 2));
+  expect_int_eq(1, ctf_mock_call_count(add));
 }
-
-CTF_TEST(mock_time) { assert_int_eq(0, __wrap_time(NULL)); }
-CTF_GROUP(mock, mock_time)
+CTF_TEST(mock_reset) {
+  expect_int_eq(3, add(1, 2));
+  expect_int_eq(0, ctf_mock_call_count(add));
+}
+CTF_GROUP(mock, mock_basic, mock_reset)
 
 CTF_TEST(char_expect_success) {
   char a = 'a';

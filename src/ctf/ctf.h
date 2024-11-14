@@ -12,6 +12,8 @@
 #define CTF_CONST_STATE_FILE_SIZE 256
 #define CTF_CONST_STATE_MSG_SIZE 4096
 #define CTF_CONST_STATES_PER_THREAD 64
+#define CTF_CONST_MAX_MOCKS_PER_TEST 64
+#define CTF_CONST_MAX_THREADS 16
 
 #if __STDC_VERSION__ == 201112L
 #define CTF_INTERNAL_PARALLEL_THREAD_LOCAL _Thread_local
@@ -46,11 +48,20 @@ struct ctf_internal_group {
   const int length;
   const char *name;
 };
+struct ctf_internal_mock_data {
+  void *mock_f;
+  int call_count;
+};
 
 extern int ctf_exit_code;
 extern CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_state
   *ctf_internal_states;
 extern CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_state_index;
+extern CTF_INTERNAL_PARALLEL_THREAD_LOCAL int
+  ctf_internal_parallel_thread_index;
+extern CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_mock_data
+  *ctf_internal_mock_reset_queue[CTF_CONST_MAX_MOCKS_PER_TEST];
+extern CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_mock_reset_count;
 
 void ctf_group_run(const struct ctf_internal_group *group);
 void ctf_internal_groups_run(int count, ...);
@@ -77,6 +88,55 @@ int ctf_internal_fail(const char *, int, const char *);
 int ctf_internal_pass(const char *, int, const char *);
 int ctf_internal_expect_msg(int, const char *, int, const char *);
 int ctf_internal_expect_true(int, const char *, int, const char *);
+#define CTF_EXTERN_TEST(name) void name(void)
+#define CTF_TEST(name) void name(void)
+#define CTF_EXTERN_GROUP(group_name) \
+  extern const struct ctf_internal_group group_name
+#define CTF_GROUP(group_name, ...)                           \
+  const struct ctf_internal_group group_name =               \
+    (const struct ctf_internal_group){                       \
+      .tests = (ctf_internal_test[]){__VA_ARGS__},           \
+      .test_names = CTF_INTERNAL_STRINGIFY2((__VA_ARGS__)),  \
+      .length = sizeof((ctf_internal_test[]){__VA_ARGS__}) / \
+                sizeof(ctf_internal_test),                   \
+      .name = #group_name,                                   \
+    };
+
+#define CTF_MOCK_BEGIN(return, name, ...)                                 \
+  struct ctf_internal_mock_data                                           \
+    ctf_internal_mock_data_##name[CTF_CONST_MAX_THREADS];                 \
+  return __real_##name(__VA_ARGS__);                                      \
+  return __wrap_##name(__VA_ARGS__) {                                     \
+    return (*const real)(__VA_ARGS__) = __real_##name;                    \
+    struct ctf_internal_mock_data *data =                                 \
+      ctf_internal_mock_data_##name + ctf_internal_parallel_thread_index; \
+    return (*const mock)(__VA_ARGS__) = data->mock_f;
+#define CTF_MOCK_CALL_ARGS(...) \
+  if(mock == NULL) {            \
+    return real(__VA_ARGS__);   \
+  } else {                      \
+    data->call_count++;         \
+    return mock(__VA_ARGS__);   \
+  }
+#define CTF_MOCK_END }
+#define ctf_mock(fn, mock)                                                 \
+  ctf_internal_mock_data_##fn[ctf_internal_parallel_thread_index].mock_f = \
+    mock;                                                                  \
+  ctf_internal_mock_reset_queue[ctf_internal_mock_reset_count++] =         \
+    ctf_internal_mock_data_##fn + ctf_internal_parallel_thread_index;
+#define ctf_mock_call_count(fn) \
+  (ctf_internal_mock_data_##fn[ctf_internal_parallel_thread_index].call_count)
+#define ctf_mock_check(fn, val)                                                \
+  do {                                                                         \
+    memcpy(                                                                    \
+      ctf_internal_mock_data_##fn[ctf_internal_parallel_thread_index].mem_in + \
+        ctf_internal_mock_data_##fn[ctf_internal_parallel_thread_index]        \
+          .mem_in_index,                                                       \
+      (unsigned char *)&val, sizeof(val));                                     \
+    ctf_internal_mock_data_##fn[ctf_internal_parallel_thread_index]            \
+      .mem_in_index += sizeof(val);                                            \
+  } while(0)
+
 #define EXPECT_GEN_PRIMITIVE       \
   EXPECT_GEN(char_eq, char);       \
   EXPECT_GEN(char_neq, char);      \
@@ -96,20 +156,6 @@ int ctf_internal_expect_true(int, const char *, int, const char *);
   EXPECT_GEN(uint_lt, uintmax_t);  \
   EXPECT_GEN(uint_gte, uintmax_t); \
   EXPECT_GEN(uint_lte, uintmax_t);
-#define CTF_EXTERN_TEST(name) void name(void)
-#define CTF_TEST(name) void name(void)
-#define CTF_EXTERN_GROUP(group_name) \
-  extern const struct ctf_internal_group group_name
-#define CTF_GROUP(group_name, ...)                           \
-  const struct ctf_internal_group group_name =               \
-    (const struct ctf_internal_group){                       \
-      .tests = (ctf_internal_test[]){__VA_ARGS__},           \
-      .test_names = CTF_INTERNAL_STRINGIFY2((__VA_ARGS__)),  \
-      .length = sizeof((ctf_internal_test[]){__VA_ARGS__}) / \
-                sizeof(ctf_internal_test),                   \
-      .name = #group_name,                                   \
-    };
-
 #define EXPECT_GEN(name, type)                                                \
   int ctf_internal_expect_##name(type, type, const char *, const char *, int, \
                                  const char *)

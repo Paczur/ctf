@@ -28,7 +28,6 @@
 
 #define PRINT_BUFF_SIZE 65536
 #define TASK_QUEUE_MAX 64
-#define MAX_THREADS 128
 #define SIGNAL_STACK_SIZE 1024
 
 #define CTF_INTERNAL_ISSPACE(c) (((c) >= '\t' && (c) <= '\r') || (c) == ' ')
@@ -60,7 +59,7 @@ int ctf_exit_code = 0;
 
 static char signal_stack[SIGNAL_STACK_SIZE];
 static pthread_mutex_t parallel_print_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_t parallel_threads[MAX_THREADS];
+static pthread_t parallel_threads[CTF_CONST_MAX_THREADS];
 static int parallel_threads_waiting = 0;
 static const struct ctf_internal_group *parallel_task_queue[TASK_QUEUE_MAX] = {
   0};
@@ -69,13 +68,16 @@ static pthread_cond_t parallel_threads_waiting_all = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t parallel_task_queue_non_empty = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t parallel_task_queue_non_full = PTHREAD_COND_INITIALIZER;
 static int parallel_state = 0;
-static struct ctf_internal_state parallel_states[MAX_THREADS]
+static struct ctf_internal_state parallel_states[CTF_CONST_MAX_THREADS]
                                                 [CTF_CONST_STATES_PER_THREAD];
-static int parallel_states_index[MAX_THREADS];
-static CTF_INTERNAL_PARALLEL_THREAD_LOCAL int parallel_thread_index;
+static int parallel_states_index[CTF_CONST_MAX_THREADS];
 static struct ctf_internal_state states[CTF_CONST_STATES_PER_THREAD];
-static char print_buff[MAX_THREADS][PRINT_BUFF_SIZE];
+static char print_buff[CTF_CONST_MAX_THREADS][PRINT_BUFF_SIZE];
 
+CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_parallel_thread_index;
+CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_mock_data
+  *ctf_internal_mock_reset_queue[CTF_CONST_MAX_MOCKS_PER_TEST];
+CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_mock_reset_count;
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_state
   *ctf_internal_states = states;
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_state_index = 0;
@@ -479,6 +481,14 @@ static size_t print_mem(struct ctf_internal_state *state, const void *a,
   return index;
 }
 
+static void test_cleanup(void) {
+  for(int i = 0; i < ctf_internal_mock_reset_count; i++) {
+    ctf_internal_mock_reset_queue[i]->call_count = 0;
+    ctf_internal_mock_reset_queue[i]->mock_f = NULL;
+  }
+  ctf_internal_mock_reset_count = 0;
+}
+
 static void group_run_helper(const struct ctf_internal_group *group,
                              char *buff) {
   unsigned buff_index = 0;
@@ -492,7 +502,7 @@ static void group_run_helper(const struct ctf_internal_group *group,
   for(int i = 0; i < group->length; i++) {
     test_passed = 1;
     if(opt_threads != 1) {
-      parallel_states_index[parallel_thread_index] = 0;
+      parallel_states_index[ctf_internal_parallel_thread_index] = 0;
     }
     ctf_internal_state_index = 0;
     CTF_INTERNAL_SKIP_SPACE(test_name);
@@ -503,8 +513,10 @@ static void group_run_helper(const struct ctf_internal_group *group,
     print_test_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
                        test_name, test_name_len);
     group->tests[i]();
+    test_cleanup();
     if(opt_threads != 1) {
-      ctf_internal_state_index = parallel_states_index[parallel_thread_index];
+      ctf_internal_state_index =
+        parallel_states_index[ctf_internal_parallel_thread_index];
     }
     for(int j = 0; j < ctf_internal_state_index; j++) {
       if(ctf_internal_states[j].status == 1) {
@@ -544,16 +556,16 @@ static void group_run_helper(const struct ctf_internal_group *group,
 }
 
 static void group_run(const struct ctf_internal_group *group) {
-  group_run_helper(group, print_buff[parallel_thread_index]);
-  printf("%s", print_buff[parallel_thread_index]);
+  group_run_helper(group, print_buff[ctf_internal_parallel_thread_index]);
+  printf("%s", print_buff[ctf_internal_parallel_thread_index]);
   fflush(stdout);
 }
 
 static void groups_run(int count, va_list args) {
   for(int i = 0; i < count; i++) {
     group_run_helper(va_arg(args, const struct ctf_internal_group *),
-                     print_buff[parallel_thread_index]);
-    printf("%s", print_buff[parallel_thread_index]);
+                     print_buff[ctf_internal_parallel_thread_index]);
+    printf("%s", print_buff[ctf_internal_parallel_thread_index]);
     fflush(stdout);
   }
 }
@@ -576,8 +588,8 @@ static int parallel_get_thread_index(void) {
 
 static void *parallel_thread_loop(void *data) {
   (void)data;
-  parallel_thread_index = parallel_get_thread_index();
-  ctf_internal_states = parallel_states[parallel_thread_index];
+  ctf_internal_parallel_thread_index = parallel_get_thread_index();
+  ctf_internal_states = parallel_states[ctf_internal_parallel_thread_index];
   const struct ctf_internal_group *group;
   while(1) {
     pthread_mutex_lock(&parallel_task_queue_mutex);
@@ -602,10 +614,10 @@ static void *parallel_thread_loop(void *data) {
     }
     pthread_cond_signal(&parallel_task_queue_non_full);
     pthread_mutex_unlock(&parallel_task_queue_mutex);
-    group_run_helper(group, print_buff[parallel_thread_index]);
+    group_run_helper(group, print_buff[ctf_internal_parallel_thread_index]);
     pthread_mutex_lock(&parallel_print_mutex);
-    printf("%s", print_buff[parallel_thread_index]);
-    print_buff[parallel_thread_index][0] = 0;
+    printf("%s", print_buff[ctf_internal_parallel_thread_index]);
+    print_buff[ctf_internal_parallel_thread_index][0] = 0;
     fflush(stdout);
     pthread_mutex_unlock(&parallel_print_mutex);
   }
@@ -648,10 +660,10 @@ static void parallel_groups_run(int count, va_list args) {
   pthread_mutex_unlock(&parallel_task_queue_mutex);
 }
 
-#define EXPECT_END                                  \
-  ctf_internal_state_index++;                       \
-  if(opt_threads != 1) {                            \
-    parallel_states_index[parallel_thread_index]++; \
+#define EXPECT_END                                               \
+  ctf_internal_state_index++;                                    \
+  if(opt_threads != 1) {                                         \
+    parallel_states_index[ctf_internal_parallel_thread_index]++; \
   }
 
 #define EXPECT_GEN_PRIMITIVE                  \
@@ -889,7 +901,8 @@ _Pragma("GCC diagnostic pop")
       if(i == argc) err();
       i++;
       sscanf(argv[i], "%u", &opt_threads);
-      if(opt_threads > MAX_THREADS) opt_threads = MAX_THREADS;
+      if(opt_threads > CTF_CONST_MAX_THREADS)
+        opt_threads = CTF_CONST_MAX_THREADS;
       if(opt_threads < 1) opt_threads = 1;
     }
   }
@@ -980,25 +993,25 @@ void ctf_sigsegv_handler(int unused) {
   }
   write(STDOUT_FILENO, premsg, sizeof(premsg));
   if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
-  write(STDOUT_FILENO, print_buff[parallel_thread_index],
-        strlen(print_buff[parallel_thread_index]));
+  write(STDOUT_FILENO, print_buff[ctf_internal_parallel_thread_index],
+        strlen(print_buff[ctf_internal_parallel_thread_index]));
   for(int i = 0; i < ctf_internal_state_index; i++) {
     if(ctf_internal_states[i].status == 0) {
       buff_index += print_test_pass_info(
-        print_buff[parallel_thread_index] + buff_index,
+        print_buff[ctf_internal_parallel_thread_index] + buff_index,
         PRINT_BUFF_SIZE - buff_index, ctf_internal_states + i);
     } else if(ctf_internal_states[i].status == 1) {
       buff_index += print_test_fail_info(
-        print_buff[parallel_thread_index] + buff_index,
+        print_buff[ctf_internal_parallel_thread_index] + buff_index,
         PRINT_BUFF_SIZE - buff_index, ctf_internal_states + i);
     } else if(ctf_internal_states[i].status == 2) {
       buff_index += print_test_unknown_info(
-        print_buff[parallel_thread_index] + buff_index,
+        print_buff[ctf_internal_parallel_thread_index] + buff_index,
         PRINT_BUFF_SIZE - buff_index, ctf_internal_states + i);
     }
   }
-  write(STDOUT_FILENO, print_buff[parallel_thread_index],
-        strlen(print_buff[parallel_thread_index]));
+  write(STDOUT_FILENO, print_buff[ctf_internal_parallel_thread_index],
+        strlen(print_buff[ctf_internal_parallel_thread_index]));
   if(color) write(STDOUT_FILENO, err_color, sizeof(err_color));
   write(STDOUT_FILENO, postmsg, sizeof(postmsg));
   if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
