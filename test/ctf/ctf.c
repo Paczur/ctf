@@ -2,16 +2,19 @@
 
 #include "add.h"
 
-CTF_MOCK_BEGIN(int, add, int a, int b)
-CTF_MOCK_CALL_ARGS(a, b)
-CTF_MOCK_END
+CTF_MOCK(int, add, (int a, int b), (a, b))
+CTF_MOCK(int, sub, (int a, int b), (a, b))
 
-CTF_MOCK_BEGIN(int, sub, int a, int b)
-CTF_MOCK_CALL_ARGS(a, b)
-CTF_MOCK_END
-
-int mock_add(int a, int b) { return 0; }
-int mock_sub(int a, int b) { return 1; }
+int mock_add(int a, int b) {
+  (void)a;
+  (void)b;
+  return 0;
+}
+int mock_sub(int a, int b) {
+  (void)a;
+  (void)b;
+  return 1;
+}
 
 CTF_MOCK_GROUP(add_sub) = {
   CTF_MOCK_GROUP_BIND(add, mock_add),
@@ -34,7 +37,11 @@ CTF_TEST(mock_group) {
   expect_int_eq(1, sub(1, 2));
   expect_int_eq(1, ctf_mock_call_count(sub));
 }
-CTF_GROUP(mock, mock_basic, mock_reset, mock_group)
+CTF_GROUP(mock) = {
+  CTF_TEST_P(mock_basic),
+  CTF_TEST_P(mock_reset),
+  CTF_TEST_P(mock_group),
+};
 
 CTF_TEST(char_expect_success) {
   char a = 'a';
@@ -255,9 +262,13 @@ CTF_TEST(string_assert) {
   assert_string_gte(s3, s1);
   assert_string_gte(s4, s1);
 }
-CTF_GROUP(primitive_success, char_expect_success, char_assert,
-          int_expect_success, int_assert, uint_expect_success, uint_assert,
-          ptr_expect_success, ptr_assert, string_expect_success, string_assert)
+CTF_GROUP(primitive_success) = {
+  CTF_TEST_P(char_expect_success),   CTF_TEST_P(char_assert),
+  CTF_TEST_P(int_expect_success),    CTF_TEST_P(int_assert),
+  CTF_TEST_P(uint_expect_success),   CTF_TEST_P(uint_assert),
+  CTF_TEST_P(ptr_expect_success),    CTF_TEST_P(ptr_assert),
+  CTF_TEST_P(string_expect_success), CTF_TEST_P(string_assert),
+};
 
 CTF_TEST(array_char_expect_success) {
   const char a1[] = {'a'};
@@ -574,9 +585,12 @@ CTF_TEST(array_ptr_assert) {
   assert_array_ptr_gte(a3, a1);
   assert_array_ptr_gte(a4, a1);
 }
-CTF_GROUP(array_success, array_char_expect_success, array_char_assert,
-          array_int_expect_success, array_int_assert, array_uint_expect_success,
-          array_uint_assert, array_ptr_expect_success, array_ptr_assert)
+CTF_GROUP(array_success) = {
+  CTF_TEST_P(array_char_expect_success), CTF_TEST_P(array_char_assert),
+  CTF_TEST_P(array_int_expect_success),  CTF_TEST_P(array_int_assert),
+  CTF_TEST_P(array_uint_expect_success), CTF_TEST_P(array_uint_assert),
+  CTF_TEST_P(array_ptr_expect_success),  CTF_TEST_P(array_ptr_assert),
+};
 
 CTF_TEST(memory_char_expect_success) {
   const char a1[] = {'a'};
@@ -723,20 +737,25 @@ CTF_TEST(memory_ptr_assert) {
   assert_memory_ptr_gte(a1, a1, 1);
   assert_memory_ptr_gte(a2, a1, 1);
 }
-CTF_GROUP(memory_success, memory_char_expect_success, memory_char_assert,
-          memory_int_expect_success, memory_int_assert,
-          memory_uint_expect_success, memory_uint_assert,
-          memory_ptr_expect_success, memory_ptr_assert)
+CTF_GROUP(memory_success) = {
+  CTF_TEST_P(memory_char_expect_success), CTF_TEST_P(memory_char_assert),
+  CTF_TEST_P(memory_int_expect_success),  CTF_TEST_P(memory_int_assert),
+  CTF_TEST_P(memory_uint_expect_success), CTF_TEST_P(memory_uint_assert),
+  CTF_TEST_P(memory_ptr_expect_success),  CTF_TEST_P(memory_ptr_assert),
+};
 
 CTF_TEST(pass_and_fail) {
   ctf_pass("pass");
   ctf_fail("fail");
 }
 
-CTF_GROUP(failure, char_expect_failure, int_expect_failure, uint_expect_failure,
-          ptr_expect_failure, string_expect_failure, array_char_expect_failure,
-          array_int_expect_failure, array_uint_expect_failure,
-          array_ptr_expect_failure, memory_char_expect_failure,
-          memory_int_expect_failure, memory_uint_expect_failure,
-          memory_ptr_expect_failure, pass_and_fail)
+CTF_GROUP(failure) = {
+  CTF_TEST_P(char_expect_failure),       CTF_TEST_P(int_expect_failure),
+  CTF_TEST_P(uint_expect_failure),       CTF_TEST_P(ptr_expect_failure),
+  CTF_TEST_P(string_expect_failure),     CTF_TEST_P(array_char_expect_failure),
+  CTF_TEST_P(array_int_expect_failure),  CTF_TEST_P(array_uint_expect_failure),
+  CTF_TEST_P(array_ptr_expect_failure),  CTF_TEST_P(memory_char_expect_failure),
+  CTF_TEST_P(memory_int_expect_failure), CTF_TEST_P(memory_uint_expect_failure),
+  CTF_TEST_P(memory_ptr_expect_failure), CTF_TEST_P(pass_and_fail),
+};
 

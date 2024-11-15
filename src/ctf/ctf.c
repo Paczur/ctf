@@ -61,8 +61,7 @@ static char signal_stack[SIGNAL_STACK_SIZE];
 static pthread_mutex_t parallel_print_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t parallel_threads[CTF_CONST_MAX_THREADS];
 static int parallel_threads_waiting = 0;
-static const struct ctf_internal_group *parallel_task_queue[TASK_QUEUE_MAX] = {
-  0};
+static struct ctf_internal_group parallel_task_queue[TASK_QUEUE_MAX] = {0};
 static pthread_mutex_t parallel_task_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t parallel_threads_waiting_all = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t parallel_task_queue_non_empty = PTHREAD_COND_INITIALIZER;
@@ -76,7 +75,7 @@ static char print_buff[CTF_CONST_MAX_THREADS][PRINT_BUFF_SIZE];
 
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_parallel_thread_index;
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_mock_data
-  *ctf_internal_mock_reset_queue[CTF_CONST_MAX_MOCKS_PER_TEST];
+  *ctf_internal_mock_reset_queue[CTF_CONST_MOCKS_PER_TEST];
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_mock_reset_count;
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_state
   *ctf_internal_states = states;
@@ -489,30 +488,22 @@ static void test_cleanup(void) {
   ctf_internal_mock_reset_count = 0;
 }
 
-static void group_run_helper(const struct ctf_internal_group *group,
-                             char *buff) {
+static void group_run_helper(struct ctf_internal_group group, char *buff) {
   unsigned buff_index = 0;
   int test_passed;
   int all_passed = 1;
-  const char *test_name = group->test_names;
-  int test_name_len = 1;
   buff_index +=
     print_group_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                        group->name, strlen(group->name));
-  for(int i = 0; i < group->length; i++) {
+                        group.name, strlen(group.name));
+  for(int i = 0; i < CTF_CONST_GROUP_SIZE && group.tests[i].f; i++) {
     test_passed = 1;
+    ctf_internal_state_index = 0;
     if(opt_threads != 1) {
       parallel_states_index[ctf_internal_parallel_thread_index] = 0;
     }
-    ctf_internal_state_index = 0;
-    CTF_INTERNAL_SKIP_SPACE(test_name);
-    test_name++; /* skips paren */
-    CTF_INTERNAL_SKIP_SPACE(test_name);
-    test_name_len = 1;
-    CTF_INTERNAL_NEXT_ID(test_name, test_name_len);
     print_test_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                       test_name, test_name_len);
-    group->tests[i]();
+                       group.tests[i].name, strlen(group.tests[i].name));
+    group.tests[i].f();
     test_cleanup();
     if(opt_threads != 1) {
       ctf_internal_state_index =
@@ -528,7 +519,7 @@ static void group_run_helper(const struct ctf_internal_group *group,
     if(!test_passed) {
       buff_index +=
         print_test_fail(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                        test_name, test_name_len);
+                        group.tests[i].name, strlen(group.tests[i].name));
       for(int j = 0; j < ctf_internal_state_index; j++) {
         if(ctf_internal_states[j].status == 0) {
           buff_index += print_test_pass_info(buff + buff_index,
@@ -543,28 +534,28 @@ static void group_run_helper(const struct ctf_internal_group *group,
     } else {
       buff_index +=
         print_test_pass(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                        test_name, test_name_len);
+                        group.tests[i].name, strlen(group.tests[i].name));
     }
-    test_name += test_name_len;
   }
   if(all_passed) {
-    print_group_pass(buff, PRINT_BUFF_SIZE, group->name, strlen(group->name));
+    print_group_pass(buff, PRINT_BUFF_SIZE, group.name, strlen(group.name));
   } else {
-    print_group_fail(buff, PRINT_BUFF_SIZE, group->name, strlen(group->name));
+    print_group_fail(buff, PRINT_BUFF_SIZE, group.name, strlen(group.name));
     ctf_exit_code = 1;
   }
 }
 
-static void group_run(const struct ctf_internal_group *group) {
+static void group_run(struct ctf_internal_group group) {
   group_run_helper(group, print_buff[ctf_internal_parallel_thread_index]);
   printf("%s", print_buff[ctf_internal_parallel_thread_index]);
   fflush(stdout);
 }
 
 static void groups_run(int count, va_list args) {
+  struct ctf_internal_group group;
   for(int i = 0; i < count; i++) {
-    group_run_helper(va_arg(args, const struct ctf_internal_group *),
-                     print_buff[ctf_internal_parallel_thread_index]);
+    group = va_arg(args, struct ctf_internal_group);
+    group_run_helper(group, print_buff[ctf_internal_parallel_thread_index]);
     printf("%s", print_buff[ctf_internal_parallel_thread_index]);
     fflush(stdout);
   }
@@ -588,28 +579,28 @@ static int parallel_get_thread_index(void) {
 
 static void *parallel_thread_loop(void *data) {
   (void)data;
+  struct ctf_internal_group group;
   ctf_internal_parallel_thread_index = parallel_get_thread_index();
   ctf_internal_states = parallel_states[ctf_internal_parallel_thread_index];
-  const struct ctf_internal_group *group;
   while(1) {
     pthread_mutex_lock(&parallel_task_queue_mutex);
-    if(parallel_task_queue[0] == NULL) {
+    if(parallel_task_queue[0].tests == NULL) {
       if(parallel_threads_waiting == opt_threads - 1)
         pthread_cond_signal(&parallel_threads_waiting_all);
       parallel_threads_waiting++;
-      while(parallel_task_queue[0] == NULL && parallel_state) {
+      while(parallel_task_queue[0].tests == NULL && parallel_state) {
         pthread_cond_wait(&parallel_task_queue_non_empty,
                           &parallel_task_queue_mutex);
       }
       parallel_threads_waiting--;
-      if(parallel_task_queue[0] == NULL && !parallel_state) {
+      if(parallel_task_queue[0].tests == NULL && !parallel_state) {
         pthread_mutex_unlock(&parallel_task_queue_mutex);
         return NULL;
       }
     }
     group = parallel_task_queue[0];
-    for(int i = 0; i < TASK_QUEUE_MAX - 1 && parallel_task_queue[i] != NULL;
-        i++) {
+    for(int i = 0;
+        i < TASK_QUEUE_MAX - 1 && parallel_task_queue[i].tests != NULL; i++) {
       parallel_task_queue[i] = parallel_task_queue[i + 1];
     }
     pthread_cond_signal(&parallel_task_queue_non_full);
@@ -623,14 +614,14 @@ static void *parallel_thread_loop(void *data) {
   }
 }
 
-static void parallel_group_run(const struct ctf_internal_group *group) {
+static void parallel_group_run(struct ctf_internal_group group) {
   pthread_mutex_lock(&parallel_task_queue_mutex);
-  while(parallel_task_queue[TASK_QUEUE_MAX - 1] != NULL) {
+  while(parallel_task_queue[TASK_QUEUE_MAX - 1].tests != NULL) {
     pthread_cond_wait(&parallel_task_queue_non_full,
                       &parallel_task_queue_mutex);
   }
   for(int i = 0; i < TASK_QUEUE_MAX; i++) {
-    if(parallel_task_queue[i] == NULL) {
+    if(parallel_task_queue[i].tests == NULL) {
       parallel_task_queue[i] = group;
       break;
     }
@@ -640,17 +631,17 @@ static void parallel_group_run(const struct ctf_internal_group *group) {
 }
 
 static void parallel_groups_run(int count, va_list args) {
-  const struct ctf_internal_group *group;
+  struct ctf_internal_group group;
 
   pthread_mutex_lock(&parallel_task_queue_mutex);
   for(int j = 0; j < count; j++) {
-    group = va_arg(args, const struct ctf_internal_group *);
-    while(parallel_task_queue[TASK_QUEUE_MAX - 1] != NULL) {
+    group = va_arg(args, struct ctf_internal_group);
+    while(parallel_task_queue[TASK_QUEUE_MAX - 1].tests != NULL) {
       pthread_cond_wait(&parallel_task_queue_non_full,
                         &parallel_task_queue_mutex);
     }
     for(int i = 0; i < TASK_QUEUE_MAX; i++) {
-      if(parallel_task_queue[i] == NULL) {
+      if(parallel_task_queue[i].tests == NULL) {
         parallel_task_queue[i] = group;
         break;
       }
@@ -932,7 +923,7 @@ void ctf_parallel_sync(void) {
   if(!parallel_state) return;
   pthread_mutex_lock(&parallel_task_queue_mutex);
   while(parallel_threads_waiting != opt_threads ||
-        parallel_task_queue[0] != NULL) {
+        parallel_task_queue[0].tests != NULL) {
     pthread_cond_wait(&parallel_threads_waiting_all,
                       &parallel_task_queue_mutex);
   }
@@ -956,7 +947,7 @@ void ctf_parallel_stop(void) {
     pthread_join(parallel_threads[i], NULL);
   }
 }
-void ctf_group_run(const struct ctf_internal_group *group) {
+void ctf_internal_group_run(const struct ctf_internal_group group) {
   if(parallel_state) {
     parallel_group_run(group);
   } else {
