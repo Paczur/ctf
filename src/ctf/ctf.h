@@ -34,6 +34,7 @@
     f(__VA_ARGS__);                                                      \
     if(ctf_internal_states[ctf_internal_state_index - 1].status) return; \
   } while(0)
+#define CTF_INTERNAL_LENGTH(a) (sizeof(a) / sizeof(*(a)))
 
 struct ctf_internal_state {
   int status;
@@ -88,19 +89,26 @@ int ctf_internal_fail(const char *, int, const char *);
 int ctf_internal_pass(const char *, int, const char *);
 int ctf_internal_expect_msg(int, const char *, int, const char *);
 int ctf_internal_expect_true(int, const char *, int, const char *);
-#define CTF_EXTERN_TEST(name) void name(void)
-#define CTF_TEST(name) void name(void)
+#define CTF_EXTERN_TEST(name)                        \
+  extern const char ctf_internal_test_name_##name[]; \
+  void name(void)
+#define CTF_TEST(name)                                \
+  const char ctf_internal_test_name_##name[] = #name; \
+  void name(void)
 #define CTF_EXTERN_GROUP(group_name) \
   extern const struct ctf_internal_group group_name
-#define CTF_GROUP(group_name, ...)                           \
-  const struct ctf_internal_group group_name =               \
-    (const struct ctf_internal_group){                       \
-      .tests = (ctf_internal_test[]){__VA_ARGS__},           \
-      .test_names = CTF_INTERNAL_STRINGIFY2((__VA_ARGS__)),  \
-      .length = sizeof((ctf_internal_test[]){__VA_ARGS__}) / \
-                sizeof(ctf_internal_test),                   \
-      .name = #group_name,                                   \
-    };
+#define CTF_GROUP(name)                                \
+  const char ctf_internal_group_name_##name[] = #name; \
+  void *name
+#define CTF_GROUP_TEST(name) name, ctf_internal_test_name_##name,
+#define CTF_GROUP(group_name, ...)                                            \
+  const struct ctf_internal_group group_name = {                              \
+    .tests = (ctf_internal_test[]){__VA_ARGS__},                              \
+    .test_names = CTF_INTERNAL_STRINGIFY2((__VA_ARGS__)),                     \
+    .length =                                                                 \
+      sizeof((ctf_internal_test[]){__VA_ARGS__}) / sizeof(ctf_internal_test), \
+    .name = #group_name,                                                      \
+  };
 
 #define CTF_MOCK_BEGIN(return, name, ...)                                 \
   struct ctf_internal_mock_data                                           \
@@ -119,6 +127,19 @@ int ctf_internal_expect_true(int, const char *, int, const char *);
     return mock(__VA_ARGS__);   \
   }
 #define CTF_MOCK_END }
+#define CTF_MOCK_GROUP_BIND(fn, mock) ctf_internal_mock_data_##fn, mock
+#define CTF_MOCK_GROUP(name) void *name[]
+#define CTF_EXTERN_MOCK_GROUP(name) extern void *name[];
+#define ctf_mock_group(name)                                           \
+  do {                                                                 \
+    for(int _i = 0; _i < CTF_INTERNAL_LENGTH(name); _i += 2) {         \
+      ((struct ctf_internal_mock_data *)                               \
+         name[_i])[ctf_internal_parallel_thread_index]                 \
+        .mock_f = name[_i + 1];                                        \
+      ctf_internal_mock_reset_queue[ctf_internal_mock_reset_count++] = \
+        name[_i] + ctf_internal_parallel_thread_index;                 \
+    }                                                                  \
+  } while(0)
 #define ctf_mock(fn, mock)                                                 \
   ctf_internal_mock_data_##fn[ctf_internal_parallel_thread_index].mock_f = \
     mock;                                                                  \

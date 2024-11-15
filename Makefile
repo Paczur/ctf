@@ -65,7 +65,7 @@ $(TEST_RUN): bin/$(TEST_BIN)
 bin/$(TEST_BIN): $(TEST_OBJECTS) build/src/ctf/ctf.o | build/test/$(TEST_BIN).lf
 	mkdir -p $(@D)
 	$(info LN  $@)
-	$(CC) $(LINK_FLAGS) $(TEST_FLAGS) -Wl,--wrap=add `cat $|` -o $@ $^
+	$(CC) $(LINK_FLAGS) $(TEST_FLAGS) -Wl,--wrap=add,--wrap=sub `cat $|` -o $@ $^
 
 build/test/$(TEST_BIN).lf: $(TESTS)
 	$(info FLG $@)
