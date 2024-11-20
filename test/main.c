@@ -4,8 +4,8 @@
 
 int main(void) {
   ctf_parallel_start();
-  ctf_groups_run(CTF_GROUP_P(mock), CTF_GROUP_P(primitive_success),
-                 CTF_GROUP_P(array_success), CTF_GROUP_P(memory_success));
+  ctf_groups_run(P_GROUP(mock), P_GROUP(primitive_success),
+                 P_GROUP(array_success), P_GROUP(memory_success));
   ctf_barrier();
   ctf_group_run(failure);
   ctf_parallel_stop();

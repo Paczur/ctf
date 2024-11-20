@@ -1,10 +1,12 @@
 #ifndef TEST_CTF_H
 #define TEST_CTF_H
 
-CTF_EXTERN_GROUP(mock);
-CTF_EXTERN_GROUP(primitive_success);
-CTF_EXTERN_GROUP(array_success);
-CTF_EXTERN_GROUP(memory_success);
-CTF_EXTERN_GROUP(failure);
+#include <ctf/ctf.h>
+
+EXTERN_GROUP(mock);
+EXTERN_GROUP(primitive_success);
+EXTERN_GROUP(array_success);
+EXTERN_GROUP(memory_success);
+EXTERN_GROUP(failure);
 
 #endif

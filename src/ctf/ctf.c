@@ -1,5 +1,9 @@
 #include "ctf.h"
 
+/*
+include(`base.m4')
+*/
+
 #ifndef CTF_NO_SIGNAL
 #include <signal.h>
 #endif
@@ -74,7 +78,7 @@ static struct ctf_internal_state states[CTF_CONST_STATES_PER_THREAD];
 static char print_buff[CTF_CONST_MAX_THREADS][PRINT_BUFF_SIZE];
 
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_parallel_thread_index;
-CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_mock_data
+CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_mock_state
   *ctf_internal_mock_reset_queue[CTF_CONST_MOCKS_PER_TEST];
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL int ctf_internal_mock_reset_count;
 CTF_INTERNAL_PARALLEL_THREAD_LOCAL struct ctf_internal_state
@@ -484,6 +488,8 @@ static void test_cleanup(void) {
   for(int i = 0; i < ctf_internal_mock_reset_count; i++) {
     ctf_internal_mock_reset_queue[i]->call_count = 0;
     ctf_internal_mock_reset_queue[i]->mock_f = NULL;
+    ctf_internal_mock_reset_queue[i]->return_override = 0;
+    ctf_internal_mock_reset_queue[i]->check_count = 0;
   }
   ctf_internal_mock_reset_count = 0;
 }
@@ -657,26 +663,6 @@ static void parallel_groups_run(int count, va_list args) {
     parallel_states_index[ctf_internal_parallel_thread_index]++; \
   }
 
-#define EXPECT_GEN_PRIMITIVE                  \
-  EXPECT_GEN(char_eq, char, ==, "'%c'");      \
-  EXPECT_GEN(char_neq, char, !=, "'%c'");     \
-  EXPECT_GEN(char_gt, char, >, "'%c'");       \
-  EXPECT_GEN(char_lt, char, <, "'%c'");       \
-  EXPECT_GEN(char_gte, char, >=, "'%c'");     \
-  EXPECT_GEN(char_lte, char, <=, "%c");       \
-  EXPECT_GEN(int_eq, intmax_t, ==, "%jd");    \
-  EXPECT_GEN(int_neq, intmax_t, !=, "%jd");   \
-  EXPECT_GEN(int_gt, intmax_t, >, "%jd");     \
-  EXPECT_GEN(int_lt, intmax_t, <, "%jd");     \
-  EXPECT_GEN(int_gte, intmax_t, >=, "%jd");   \
-  EXPECT_GEN(int_lte, intmax_t, <=, "%jd");   \
-  EXPECT_GEN(uint_eq, uintmax_t, ==, "%ju");  \
-  EXPECT_GEN(uint_neq, uintmax_t, !=, "%ju"); \
-  EXPECT_GEN(uint_gt, uintmax_t, >, "%ju");   \
-  EXPECT_GEN(uint_lt, uintmax_t, <, "%ju");   \
-  EXPECT_GEN(uint_gte, uintmax_t, >=, "%ju"); \
-  EXPECT_GEN(uint_lte, uintmax_t, <=, "%ju");
-
 int ctf_internal_fail(const char *m, int line, const char *file) {
   ctf_internal_states[ctf_internal_state_index].status = 1;
   EXPECT_END;
@@ -720,59 +706,27 @@ int ctf_internal_expect_false(int a, const char *a_str, int line,
            CTF_CONST_STATE_MSG_SIZE, "%s == false (%d == 0)", a_str, a);
   return !a;
 }
-#define EXPECT_GEN(name, type, op, format)                                     \
-  int ctf_internal_expect_##name(type a, type b, const char *a_str,            \
-                                 const char *b_str, int line,                  \
-                                 const char *file) {                           \
-    int status;                                                                \
-    ctf_internal_states[ctf_internal_state_index].status = 2;                  \
-    EXPECT_END;                                                                \
-    assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,      \
-                file);                                                         \
-    snprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,            \
-             CTF_CONST_STATE_MSG_SIZE,                                         \
-             "%s " #op " %s (" format " " #op " " format ")", a_str, b_str, a, \
-             b);                                                               \
-    status = ((a)op(b));                                                       \
-    ctf_internal_states[ctf_internal_state_index - 1].status = !status;        \
-    return status;                                                             \
-  }
-EXPECT_GEN_PRIMITIVE
-EXPECT_GEN(ptr_eq, const void *, ==, "%p");
-EXPECT_GEN(ptr_neq, const void *, !=, "%p");
-EXPECT_GEN(ptr_gt, const void *, >, "%p");
-EXPECT_GEN(ptr_lt, const void *, <, "%p");
-EXPECT_GEN(ptr_gte, const void *, >=, "%p");
-EXPECT_GEN(ptr_lte, const void *, <=, "%p");
-#undef EXPECT_GEN
-#define EXPECT_GEN(name, type, op, format, f)                                  \
-  int ctf_internal_expect_##name(type a, type b, const char *a_str,            \
-                                 const char *b_str, int line,                  \
-                                 const char *file) {                           \
-    int status;                                                                \
-    ctf_internal_states[ctf_internal_state_index].status = 2;                  \
-    EXPECT_END;                                                                \
-    assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,      \
-                file);                                                         \
-    snprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,            \
-             CTF_CONST_STATE_MSG_SIZE,                                         \
-             "%s " #op " %s (" format " " #op " " format ")", a_str, b_str, a, \
-             b);                                                               \
-    status = ((f)(a, b)op(0));                                                 \
-    ctf_internal_states[ctf_internal_state_index - 1].status = !status;        \
-    return status;                                                             \
-  }
-EXPECT_GEN(string_eq, const char *, ==, "\"%s\"", strcmp);
-EXPECT_GEN(string_neq, const char *, !=, "\"%s\"", strcmp);
-EXPECT_GEN(string_gt, const char *, >, "\"%s\"", strcmp);
-EXPECT_GEN(string_lt, const char *, <, "\"%s\"", strcmp);
-EXPECT_GEN(string_gte, const char *, >=, "\"%s\"", strcmp);
-EXPECT_GEN(string_lte, const char *, <=, "\"%s\"", strcmp);
-#undef EXPECT_GEN
-_Pragma("GCC diagnostic ignored \"-Wtype-limits\"");
-#define EXPECT_GEN(name, type, op, format)                                    \
-  int ctf_internal_expect_memory_##name(                                      \
-    const void *(a), const void *(b), size_t l, size_t step, int sign,        \
+// clang-format off
+/*
+define(`EXPECT_HELPER',
+`int ctf_internal_expect_$1_$2($3 a, $3 b, const char *a_str,
+const char *b_str, int line, const char *file) {
+int status;
+ctf_internal_states[ctf_internal_state_index].status = 2;
+EXPECT_END;
+assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,
+            file);
+snprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+         CTF_CONST_STATE_MSG_SIZE,
+         "%s $4 %s ( "$5" $4 "$5" )", a_str, b_str, a,
+         b);
+status = $6 $4 $7;
+ctf_internal_states[ctf_internal_state_index - 1].status = !status;
+return status;
+}')
+define(`EXPECT_MEMORY_HELPER',
+`int ctf_internal_expect_memory_$1_$2(                                      \
+$3(a), $3(b), size_t l, size_t step, int sign,        \
     const char *a_str, const char *b_str, int line, const char *file) {       \
     int status;                                                               \
     ctf_internal_states[ctf_internal_state_index].status = 2;                 \
@@ -780,89 +734,45 @@ _Pragma("GCC diagnostic ignored \"-Wtype-limits\"");
     assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,     \
                 file);                                                        \
     print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, l, l, \
-              step, sign, a_str, b_str, #op, format ", ", line, file);        \
-    status = ctf_internal_states[ctf_internal_state_index - 1].status op 0;   \
+              step, sign, a_str, b_str, "$4", $5 ", ", line, file);        \
+    status = ctf_internal_states[ctf_internal_state_index - 1].status $4 0;   \
     ctf_internal_states[ctf_internal_state_index - 1].status = !status;       \
     return status;                                                            \
-  }
-EXPECT_GEN_PRIMITIVE
-#undef EXPECT_GEN
-#define EXPECT_GEN(name, type, op, format)                                    \
-  int ctf_internal_expect_memory_##name(                                      \
-    const void *const *(a), const void *const *(b), size_t l, size_t step,    \
-    int sign, const char *a_str, const char *b_str, int line,                 \
-    const char *file) {                                                       \
-    int status;                                                               \
-    ctf_internal_states[ctf_internal_state_index].status = 2;                 \
-    EXPECT_END;                                                               \
-    assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,     \
-                file);                                                        \
-    print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, l, l, \
-              step, sign, a_str, b_str, #op, format ", ", line, file);        \
-    status = ctf_internal_states[ctf_internal_state_index - 1].status op 0;   \
-    ctf_internal_states[ctf_internal_state_index - 1].status = !status;       \
-    return status;                                                            \
-  }
-EXPECT_GEN(ptr_eq, const void *, ==, "%p");
-EXPECT_GEN(ptr_neq, const void *, !=, "%p");
-EXPECT_GEN(ptr_gt, const void *, >, "%p");
-EXPECT_GEN(ptr_lt, const void *, <, "%p");
-EXPECT_GEN(ptr_gte, const void *, >=, "%p");
-EXPECT_GEN(ptr_lte, const void *, <=, "%p");
-#undef EXPECT_GEN
-#define EXPECT_GEN(name, type, op, format)                                  \
-  int ctf_internal_expect_array_##name(                                     \
-    const void *(a), const void *(b), size_t la, size_t lb, size_t step,    \
-    int sign, const char *a_str, const char *b_str, int line,               \
-    const char *file) {                                                     \
-    int status;                                                             \
-    ctf_internal_states[ctf_internal_state_index].status = 2;               \
-    EXPECT_END;                                                             \
-    assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,   \
-                file);                                                      \
-    print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, la, \
-              lb, step, sign, a_str, b_str, #op, format ", ", line, file);  \
-    if(ctf_internal_states[ctf_internal_state_index - 1].status == 0) {     \
-      status = (la op lb);                                                  \
-    } else {                                                                \
-      status =                                                              \
-        (ctf_internal_states[ctf_internal_state_index - 1].status op 0);    \
-    }                                                                       \
-    ctf_internal_states[ctf_internal_state_index - 1].status = !status;     \
-    return status;                                                          \
-  }
-EXPECT_GEN_PRIMITIVE
-#undef EXPECT_GEN
-#define EXPECT_GEN(name, type, op, format)                                  \
-  int ctf_internal_expect_array_##name(                                     \
-    const void *const *(a), const void *const *(b), size_t la, size_t lb,   \
-    size_t step, int sign, const char *a_str, const char *b_str, int line,  \
-    const char *file) {                                                     \
-    int status;                                                             \
-    ctf_internal_states[ctf_internal_state_index].status = 2;               \
-    EXPECT_END;                                                             \
-    assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,   \
-                file);                                                      \
-    print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, la, \
-              lb, step, sign, a_str, b_str, #op, format ", ", line, file);  \
-    if(ctf_internal_states[ctf_internal_state_index - 1].status == 0) {     \
-      status = (la op lb);                                                  \
-    } else {                                                                \
-      status =                                                              \
-        (ctf_internal_states[ctf_internal_state_index - 1].status op 0);    \
-    }                                                                       \
-    ctf_internal_states[ctf_internal_state_index - 1].status = !status;     \
-    return status;                                                          \
-  }
-EXPECT_GEN(ptr_eq, const void *, ==, "%p");
-EXPECT_GEN(ptr_neq, const void *, !=, "%p");
-EXPECT_GEN(ptr_gt, const void *, >, "%p");
-EXPECT_GEN(ptr_lt, const void *, <, "%p");
-EXPECT_GEN(ptr_gte, const void *, >=, "%p");
-EXPECT_GEN(ptr_lte, const void *, <=, "%p");
-#undef EXPECT_END
-_Pragma("GCC diagnostic pop")
-  __attribute__((constructor)) void ctf_internal_premain(int argc,
+  }')
+define(`EXPECT_ARRAY_HELPER',
+`int ctf_internal_expect_array_$1_$2(                                     \
+  $3(a), $3(b), size_t la, size_t lb, size_t step,    \
+  int sign, const char *a_str, const char *b_str, int line,               \
+  const char *file) {                                                     \
+  int status;                                                             \
+  ctf_internal_states[ctf_internal_state_index].status = 2;               \
+  EXPECT_END;                                                             \
+  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,   \
+              file);                                                      \
+  print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, la, \
+            lb, step, sign, a_str, b_str, "$4", $5 ", ", line, file);  \
+  if(ctf_internal_states[ctf_internal_state_index - 1].status == 0) {     \
+    status = (la $4 lb);                                                  \
+  } else {                                                                \
+    status =                                                              \
+      (ctf_internal_states[ctf_internal_state_index - 1].status $4 0);    \
+  }                                                                       \
+  ctf_internal_states[ctf_internal_state_index - 1].status = !status;     \
+  return status;                                                          \
+}')
+define(`EXPECT_PRIMITIVE', `EXPECT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),a,b)')
+define(`EXPECT_STRING', `EXPECT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),strcmp(a,b),0)')
+define(`EXPECT_MEMORY', `EXPECT_MEMORY_HELPER(`$1',`$2',`$3',CMP_SYMBOL(`$2'),FORMAT(`$1'))')
+define(`EXPECT_ARRAY', `EXPECT_ARRAY_HELPER(`$1',`$2',`$3',CMP_SYMBOL(`$2'),FORMAT(`$1'))')
+*/
+COMB2(`EXPECT_PRIMITIVE', `(PRIMITIVE_TYPES)', `(CMPS)')
+COMB2(`EXPECT_STRING', `(str)', `(CMPS)')
+COMB3(`EXPECT_MEMORY', `(char, int, uint)', `(CMPS)', `(const void *)')
+COMB3(`EXPECT_MEMORY', `(ptr)', `(CMPS)', `(const void *const *)')
+COMB3(`EXPECT_ARRAY', `(char, int, uint)', `(CMPS)', `(const void *)')
+COMB3(`EXPECT_ARRAY', `(ptr)', `(CMPS)', `(const void *const *)')
+// clang-format on
+__attribute__((constructor)) void ctf_internal_premain(int argc,
                                                          char *argv[]) {
   for(int i = 1; i < argc; i++) {
     if(argv[i][0] != '-') err();
@@ -918,6 +828,63 @@ _Pragma("GCC diagnostic pop")
 #endif
 }
 
+static void mock_base(struct ctf_internal_mock_state *state, int type, void *f,
+                      const char *var) {
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->f.i = f;
+  strlcpy(check->var, var, CTF_CONST_MOCK_CHECK_VAR_LENGTH);
+  check->type = type;
+  state->check_count++;
+}
+void ctf_internal_mock_char(struct ctf_internal_mock *mock, int type, void *f,
+                            const char *var, char val) {
+  struct ctf_internal_mock_state *const state =
+    mock->state + ctf_internal_parallel_thread_index;
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->val.c = val;
+  mock_base(state, type, f, var);
+}
+void ctf_internal_mock_int(struct ctf_internal_mock *mock, int type, void *f,
+                           const char *var, intmax_t val) {
+  struct ctf_internal_mock_state *const state =
+    mock->state + ctf_internal_parallel_thread_index;
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->val.i = val;
+  mock_base(state, type, f, var);
+}
+void ctf_internal_mock_uint(struct ctf_internal_mock *mock, int type, void *f,
+                            const char *var, uintmax_t val) {
+  struct ctf_internal_mock_state *const state =
+    mock->state + ctf_internal_parallel_thread_index;
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->val.u = val;
+  mock_base(state, type, f, var);
+}
+void ctf_internal_mock_ptr(struct ctf_internal_mock *mock, int type, void *f,
+                           const char *var, const void *val) {
+  struct ctf_internal_mock_state *const state =
+    mock->state + ctf_internal_parallel_thread_index;
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->val.p = val;
+  mock_base(state, type, f, var);
+}
+void ctf_internal_mock_str(struct ctf_internal_mock *mock, int type, void *f,
+                           const char *var, const char *val) {
+  struct ctf_internal_mock_state *const state =
+    mock->state + ctf_internal_parallel_thread_index;
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->val.p = val;
+  mock_base(state, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, f, var);
+}
+void ctf_internal_mock_memory(struct ctf_internal_mock *mock, int type, void *f,
+                              const char *var, const void *val) {
+  struct ctf_internal_mock_state *const state =
+    mock->state + ctf_internal_parallel_thread_index;
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->val.p = val;
+  mock_base(state, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, f, var);
+}
+
 void ctf_parallel_sync(void) {
   if(opt_threads == 1) return;
   if(!parallel_state) return;
@@ -964,6 +931,7 @@ void ctf_internal_groups_run(int count, ...) {
   }
   va_end(args);
 }
+
 void ctf_sigsegv_handler(int unused) {
   (void)unused;
   const char err_color[] = "\x1b[33m";

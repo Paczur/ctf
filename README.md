@@ -72,6 +72,7 @@ linking with pthreads.
 ### Documentation
 #### Declarations and definitions
 ```
+#define CTF_ALIASES // creates aliasses to commonly used functions and macros without ctf_ prefix
 CTF_TEST(name) {} // test creation
 CTF_GROUP(group_name, test1, test2, ...) // group creation
 CTF_EXTERN_TEST(name); // external definition for test
@@ -90,8 +91,6 @@ ctf_parallel_sync(); // waits for threads to finnish all tasks
 ```
 #### Asserts and expects
 ```
-#define CTF_ASSERT_ALIASES // creates aliasses to asserts and expects without ctf_ prefix
-
 /* valid types:
  *   char - prints character instead of number
  *   int - uses intmax_t for storage and display

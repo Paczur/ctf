@@ -18,7 +18,7 @@ SANTIIZER_FLAGS=-fsanitize=undefined -fsanitize-address-use-after-scope -fstack-
 DEBUG_FLAGS=$(WARN_FLAGS) $(MEMORY_DEBUG_FLAGS) $(SANITIZER_FLAGS) -Og -ggdb3
 OPTIMIZE_FLAGS=-march=native -O2 -pipe -D NDEBUG
 LINK_FLAGS=$(BASE_CFLAGS) -s -flto=4 -fwhole-program -pthread
-TEST_FLAGS=$(BASE_CFLAGS) $(DEBUG_FLAGS) -Isrc
+TEST_FLAGS=$(BASE_CFLAGS) $(DEBUG_FLAGS) -Ibuild/src
 BASE_CFLAGS=-std=gnu99 -MMD -MP
 CFLAGS=$(BASE_CFLAGS)
 
@@ -43,19 +43,6 @@ $(VERBOSE).SILENT:
 $(shell mkdir -p $(dir $(DEPENDENCIES)))
 -include $(DEPENDENCIES)
 
-build/test/%.c: test/%.c
-	$(info E   $@)
-	$(CC) -E $(TEST_FLAGS) -o $@ $<
-
-build/src/%.c: src/%.c
-	$(info E   $@)
-	$(CC) -E $(CFLAGS) -o $@ $<
-
-build/src/ctf/ctf.o: src/ctf/ctf.c
-	mkdir -p $(@D)
-	$(info CC  $@)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
 $(TEST_RUN): bin/$(TEST_BIN)
 	mkdir -p $(@D)
 	$(info RUN $<)
@@ -71,12 +58,22 @@ build/test/$(TEST_BIN).lf: $(TESTS)
 	$(info FLG $@)
 	grep -ho '__wrap_[^( 	]\+' $^ | sort | uniq | sed 's/__wrap_\(.\+\)/,--wrap=\1/' | tr -d '\n' | sed 's/^,/-Wl,/' > $@
 
-build/test/%.o: test/%.c
+build/test/%.o: build/test/%.c build/test/%.h | build/src/ctf/ctf.h
 	mkdir -p $(@D)
 	$(info CC  $@)
 	$(CC) $(TEST_FLAGS) -c -o $@ $<
 
-build/src/%.o: src/%.c
+build/test/main.o: build/test/main.c | build/src/ctf/ctf.h
+	mkdir -p $(@D)
+	$(info CC  $@)
+	$(CC) $(TEST_FLAGS) -c -o $@ $<
+
+build/src/%.o: build/src/%.c build/src/%.h
 	mkdir -p $(@D)
 	$(info CC  $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+build/%: %
+	mkdir -p $(@D)
+	$(info GEN $@)
+	m4 -Im4 $< > $@
