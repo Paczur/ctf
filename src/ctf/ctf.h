@@ -111,7 +111,6 @@ void ctf_internal_groups_run(int count, ...);
     sizeof((const struct ctf_internal_group[]){__VA_ARGS__}) / \
       sizeof(const struct ctf_internal_group),                 \
     __VA_ARGS__)
-void ctf_print_buffer_dump(void);
 void ctf_sigsegv_handler(int unused);
 void ctf_parallel_start(void);
 void ctf_parallel_stop(void);

@@ -363,7 +363,6 @@ static unsigned print_test_unknown_info(
       return index;
     buff[index++] = '[';
     state->file = buff + index;
-    // strlcpy(buff + index, state->file, buff_len - index);
     index += strlen(state->file);
     buff[index++] = '|';
     index += print_int(buff + index, buff_len - index, state->line);
@@ -493,13 +492,13 @@ static void test_cleanup(void) {
 
 static void group_run_helper(struct ctf_internal_group group, char *buff) {
   unsigned buff_index = 0;
-  int test_passed;
-  int all_passed = 1;
+  int test_status;
+  int group_status = 1;
   buff_index +=
     print_group_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
                         group.name, strlen(group.name));
   for(int i = 0; i < CTF_CONST_GROUP_SIZE && group.tests[i].f; i++) {
-    test_passed = 1;
+    test_status = 1;
     ctf_internal_state_index = 0;
     if(opt_threads != 1) {
       parallel_states_index[ctf_internal_parallel_thread_index] = 0;
@@ -514,12 +513,12 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
     }
     for(int j = 0; j < ctf_internal_state_index; j++) {
       if(ctf_internal_states[j].status == 1) {
-        test_passed = 0;
-        all_passed = 0;
+        test_status = 0;
+        group_status = 0;
         break;
       }
     }
-    if(!test_passed) {
+    if(!test_status) {
       buff_index +=
         print_test_fail(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
                         group.tests[i].name, strlen(group.tests[i].name));
@@ -540,7 +539,7 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
                         group.tests[i].name, strlen(group.tests[i].name));
     }
   }
-  if(all_passed) {
+  if(group_status) {
     print_group_pass(buff, PRINT_BUFF_SIZE, group.name, strlen(group.name));
   } else {
     print_group_fail(buff, PRINT_BUFF_SIZE, group.name, strlen(group.name));
@@ -580,7 +579,7 @@ static int parallel_get_thread_index(void) {
   return -1;
 }
 
-static void *parallel_thread_loop(void *data) {
+static int parallel_thread_loop(void *data) {
   (void)data;
   struct ctf_internal_group group;
   ctf_internal_parallel_thread_index = parallel_get_thread_index();
@@ -597,7 +596,7 @@ static void *parallel_thread_loop(void *data) {
       parallel_threads_waiting--;
       if(parallel_task_queue[0].tests == NULL && !parallel_state) {
         mtx_unlock(&parallel_task_queue_mutex);
-        return NULL;
+        return 0;
       }
     }
     group = parallel_task_queue[0];
