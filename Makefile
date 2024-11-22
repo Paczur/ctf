@@ -52,18 +52,23 @@ $(TEST_RUN): bin/$(TEST_BIN)
 bin/$(TEST_BIN): $(TEST_OBJECTS) build/src/ctf/ctf.o | build/test/$(TEST_BIN).lf
 	mkdir -p $(@D)
 	$(info LN  $@)
-	$(CC) $(LINK_FLAGS) $(TEST_FLAGS) -Wl,--wrap=add,--wrap=sub `cat $|` -o $@ $^
+	$(CC) $(LINK_FLAGS) $(TEST_FLAGS) `cat $|` -o $@ $^
 
 build/test/$(TEST_BIN).lf: $(TESTS)
 	$(info FLG $@)
-	grep -ho '__wrap_[^( 	]\+' $^ | sort | uniq | sed 's/__wrap_\(.\+\)/,--wrap=\1/' | tr -d '\n' | sed 's/^,/-Wl,/' > $@
+	grep -h '^\s*MOCK(' $^ | sed 's/\s*MOCK([^,]\+,\s*\([^ ,]\+\)\s*,.*/,--wrap=\1/' | sort | uniq | tr -d '\n' | sed 's/^,/-Wl,/' > $@
 
-build/test/%.o: build/test/%.c build/test/%.h | build/src/ctf/ctf.h
+build/test/%.c: test/%.c | build/src/ctf/ctf.h
+	mkdir -p $(@D)
+	$(info E   $@)
+	$(CC) $(TEST_FLAGS) -E -o $@ $<
+
+build/test/%.o: test/%.c | build/src/ctf/ctf.h
 	mkdir -p $(@D)
 	$(info CC  $@)
 	$(CC) $(TEST_FLAGS) -c -o $@ $<
 
-build/test/main.o: build/test/main.c | build/src/ctf/ctf.h
+build/test/main.o: test/main.c | build/src/ctf/ctf.h
 	mkdir -p $(@D)
 	$(info CC  $@)
 	$(CC) $(TEST_FLAGS) -c -o $@ $<

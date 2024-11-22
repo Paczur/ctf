@@ -5,12 +5,7 @@
 #define CTF_ALIASES CTF_ON
 #endif
 
-// clang-format off
-/*
 include(`base.m4')
-*/
-// clang-format on
-
 #include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -24,7 +19,6 @@ include(`base.m4')
 #define CTF_CONST_GROUP_SIZE 128
 #define CTF_CONST_MOCK_GROUP_SIZE 64
 #define CTF_CONST_MOCK_CHECKS_PER_TEST 32
-#define CTF_CONST_MOCK_CHECK_VAR_LENGTH 64
 
 #define CTF_INTERNAL_MOCK_TYPE_uint u
 #define CTF_INTERNAL_MOCK_TYPE_int i
@@ -33,7 +27,7 @@ include(`base.m4')
 #define CTF_INTERNAL_MOCK_TYPE_char c
 
 #define CTF_INTERNAL_MOCK_TYPE_ASSERT 1
-#define CTF_INTERNAL_MOCK_TYPE_ALWAYS 2
+#define CTF_INTERNAL_MOCK_TYPE_ONCE 2
 #define CTF_INTERNAL_MOCK_TYPE_MEMORY 4
 #define CTF_INTERNAL_MOCK_TYPE_ARRAY 8
 
@@ -51,7 +45,7 @@ include(`base.m4')
 struct ctf_internal_state {
   int status;
   int line;
-  char file[CTF_CONST_STATE_FILE_SIZE];
+  const char *file;
   char msg[CTF_CONST_STATE_MSG_SIZE];
 };
 struct ctf_internal_test {
@@ -63,7 +57,7 @@ struct ctf_internal_group {
   const char *name;
 };
 struct ctf_internal_check {
-  char var[CTF_CONST_MOCK_CHECK_VAR_LENGTH];
+  const char *var;
   union {
     int (*i)(intmax_t, intmax_t, const char *, const char *, int, const char *);
     int (*u)(uintmax_t, uintmax_t, const char *, const char *, int,
@@ -73,10 +67,10 @@ struct ctf_internal_check {
     int (*c)(char, char, const char *, const char *, int, const char *);
     int (*s)(const char *, const char *, const char *, const char *, int,
              const char *);
-    int (*m)(const void *const *, const void *const *, size_t, size_t, int,
+    int (*m)(const void *, const void *, size_t, size_t, int, const char *,
+             const char *, int, const char *);
+    int (*a)(const void *, const void *, size_t, size_t, size_t, int,
              const char *, const char *, int, const char *);
-    int (*a)(const void *const *, const void *const *, size_t, size_t, size_t,
-             int, const char *, const char *, int, const char *);
   } f;
   int type;
   union {
@@ -86,6 +80,9 @@ struct ctf_internal_check {
     const void *p;
   } val;
   size_t length;
+  int line;
+  const char *file;
+  const char *print_var;
 };
 struct ctf_internal_mock_state {
   const void *mock_f;
@@ -171,7 +168,7 @@ int ctf_internal_expect_true(int, const char *, int, const char *);
       _data->call_count++;                                                 \
       if(_data->return_override) {                                         \
         _mock args;                                                        \
-        if(_data->return_override == 1) _data->return_override = 0;        \
+        if(_data->return_override == 2) _data->return_override = 0;        \
         return ctf_internal_mock_return_##name                             \
           [ctf_internal_parallel_thread_index];                            \
       }                                                                    \
@@ -205,6 +202,8 @@ int ctf_internal_expect_true(int, const char *, int, const char *);
     state->mock_f = mock;                                                   \
     ctf_internal_mock_reset_queue[ctf_internal_mock_reset_count++] = state; \
   } while(0)
+#define ctf_unmock(fn) \
+  ctf_internal_mock_##fn.state[ctf_internal_parallel_thread_index].mock_f = NULL
 #define ctf_mock_call_count(name)                                     \
   (ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index] \
      .call_count)
@@ -214,45 +213,11 @@ int ctf_internal_expect_true(int, const char *, int, const char *);
     ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]         \
       .return_override = 1;                                                    \
   } while(0)
-#define ctf_mock_will_return_always(name, val)                                 \
+#define ctf_mock_will_return_once(name, val)                                   \
   do {                                                                         \
     ctf_internal_mock_return_##name[ctf_internal_parallel_thread_index] = val; \
     ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]         \
       .return_override = 2;                                                    \
-  } while(0)
-
-#define ctf_mock_check(name, t, v)                                           \
-  do {                                                                       \
-    int _ret = 1;                                                            \
-    int _removed = 0;                                                        \
-    struct ctf_internal_mock_state *const state =                            \
-      ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index;   \
-    for(int _i = 0; _i < state->check_count; _i++) {                         \
-      if(strncmp(state->check[_i].var, #v, CTF_CONST_MOCK_CHECK_VAR_LENGTH)) \
-        continue;                                                            \
-      _ret = state->check[_i].f.CTF_INTERNAL_MOCK_TYPE_##t(                  \
-        state->check[_i].val.CTF_INTERNAL_MOCK_TYPE_##t, v, "{check}", #v,   \
-        __LINE__, __FILE__);                                                 \
-      if(!(state->check[_i].type & CTF_INTERNAL_MOCK_TYPE_ALWAYS)) {         \
-        state->check[_i].f.i = NULL;                                         \
-        _removed++;                                                          \
-      }                                                                      \
-      if(!_ret && state->check[_i].type & CTF_INTERNAL_MOCK_TYPE_ASSERT) {   \
-        longjmp(state->assert_jump, 1);                                      \
-      }                                                                      \
-    }                                                                        \
-    for(int _i = 0; _i < state->check_count; _i++) {                         \
-      if(state->check[_i].f.i == NULL) {                                     \
-        for(int _j = _i + 1; _j < state->check_count; _j++) {                \
-          if(state->check[_j].f.i != NULL) {                                 \
-            state->check[_i] = state->check[_j];                             \
-            state->check[_j].f.i = NULL;                                     \
-            break;                                                           \
-          }                                                                  \
-        }                                                                    \
-      }                                                                      \
-    }                                                                        \
-    state->check_count -= _removed;                                          \
   } while(0)
 
 int ctf_internal_pass(const char *, int, const char *);
@@ -262,73 +227,96 @@ int ctf_internal_fail(const char *, int, const char *);
 
 // clang-format off
 /*
-define(`MOCK_FUNCTION', `void ctf_internal_mock_$1(struct ctf_internal_mock*, int, void *, const char*, $2 val);')
+define(`MOCK_FUNCTION_HELPER', `void ctf_internal_mock_$1(struct ctf_internal_mock*, int, int, const char *, const char*, void *, const char*, $2 val);')
+define(`MOCK_FUNCTION', `MOCK_FUNCTION_HELPER(`$1',TYPE(`$1'))')
+define(`MOCK_CHECK_FUNCTION_HELPER', `void ctf_internal_mock_check_$1(struct ctf_internal_mock_state *state, $2 v, const char *v_print);')
+define(`MOCK_CHECK_MEMORY_FUNCTION_HELPER', `void ctf_internal_mock_check_memory_$1(struct ctf_internal_mock_state *state, const void *v, const char *v_print, size_t step, int sign);')
+define(`MOCK_CHECK_FUNCTION', `MOCK_CHECK_FUNCTION_HELPER(`$1', TYPE(`$1'))')
+define(`MOCK_CHECK_MEMORY_FUNCTION', `MOCK_CHECK_MEMORY_FUNCTION_HELPER(`$1', TYPE(`$1'))')
 define(`MOCK_EXPECT', `#define ctf_mock_expect_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT($1, $2, 0, name, #var, val);')
 define(`MOCK_ASSERT', `#define ctf_mock_assert_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT($1, $2, CTF_INTERNAL_MOCK_TYPE_ASSERT, name, #var, val);')
-define(`MOCK_EXPECT_ALWAYS', `#define ctf_mock_expect_always_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT($1, $2, CTF_INTERNAL_MOCK_TYPE_ALWAYS, name, #var, val);')
-define(`MOCK_ASSERT_ALWAYS', `#define ctf_mock_assert_always_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT($1, $2, CTF_INTERNAL_MOCK_TYPE_ALWAYS | CTF_INTERNAL_MOCK_TYPE_ASSERT, name, #var, val);')
-define(`MOCK_EXPECT_MEMORY', `#define ctf_mock_expect_memory_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT_MEMORY($1, $2, 0, name, #var, val);')
-define(`MOCK_ASSERT_MEMORY', `#define ctf_mock_assert_memory_$1_$2(name, var, val) CTF_INTERNAL_MOCK_ASSERT_MEMORY($1, $2, 0, name, #var, val);')
+define(`MOCK_EXPECT_ONCE', `#define ctf_mock_expect_once_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE, name, #var, val);')
+define(`MOCK_ASSERT_ONCE', `#define ctf_mock_assert_once_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE | CTF_INTERNAL_MOCK_TYPE_ASSERT, name, #var, val);')
+define(`MOCK_EXPECT_MEMORY', `#define ctf_mock_expect_memory_$1_$2(name, var, val, length) CTF_INTERNAL_MOCK_EXPECT_MEMORY($1, $2, 0, name, #var, val, length);')
+define(`MOCK_ASSERT_MEMORY', `#define ctf_mock_assert_memory_$1_$2(name, var, val, length) CTF_INTERNAL_MOCK_ASSERT_MEMORY($1, $2, 0, name, #var, val, length);')
+define(`MOCK_EXPECT_ARRAY', `#define ctf_mock_expect_array_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT_MEMORY($1, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));')
+define(`MOCK_ASSERT_ARRAY', `#define ctf_mock_assert_array_$1_$2(name, var, val) CTF_INTERNAL_MOCK_ASSERT_MEMORY($1, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));')
+define(`MOCK_EXPECT_ONCE_MEMORY', `#define ctf_mock_expect_once_memory_$1_$2(name, var, val, length) CTF_INTERNAL_MOCK_EXPECT_MEMORY($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE, name, #var, val, length);')
+define(`MOCK_ASSERT_ONCE_MEMORY', `#define ctf_mock_assert_once_memory_$1_$2(name, var, val, length) CTF_INTERNAL_MOCK_ASSERT_MEMORY($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE, name, #var, val, length);')
+define(`MOCK_EXPECT_ONCE_ARRAY', `#define ctf_mock_expect_once_array_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT_MEMORY($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE, name, #var, val, sizeof(val)/sizeof(*(val)));')
+define(`MOCK_ASSERT_ONCE_ARRAY', `#define ctf_mock_assert_once_array_$1_$2(name, var, val) CTF_INTERNAL_MOCK_ASSERT_MEMORY($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE, name, #var, val, sizeof(val)/sizeof(*(val)));')
+define(`MOCK_CHECK', `#define ctf_mock_check_$1(name, v) ctf_internal_mock_check_$1(ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index, v, #v)')
+define(`MOCK_CHECK_MEMORY',
+`format(`#define ctf_mock_check_memory_$1(name, v) \
+ctf_internal_mock_check_ptr(ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index, v, #v); \
+    ctf_internal_mock_check_memory_$1(ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index, v, #v, sizeof(*(v)), %d)'
+  ,ifelse(`$1',`int',1,0))')
 define(`EA_TEMPLATE', `#define ctf_$3_$1_$2(a, b) CTF_INTERNAL_$4(ctf_internal_expect_$1_$2, a, b, #a, #b, __LINE__, __FILE__)')dnl
-define(`EA_MEMORY_TEMPLATE', `#define ctf_$3_memory_$1_$2(a, b, length) CTF_INTERNAL_$4(ctf_internal_expect_memory_$1_$2,(const void *const *)a, (const void *const *)b, length,  sizeof(*(a)), 'ifelse(`$1', `int', `1', `0')`, #a, #b, __LINE__, __FILE__)')dnl
-define(`EA_ARRAY_TEMPLATE', `#define ctf_$3_array_$1_$2(a, b) CTF_INTERNAL_$4(ctf_internal_expect_array_$1_$2,(const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), 'ifelse(`$1', `int', `1', `0')`, #a, #b, __LINE__, __FILE__)')dnl
+define(`EA_MEMORY_TEMPLATE',
+`format(`#define ctf_$3_memory_$1_$2(a, b, length) CTF_INTERNAL_$4(ctf_internal_expect_memory_$1_$2,(const void *)a, (const void *)b, length,  sizeof(*(a)), %d, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+define(`EA_ARRAY_TEMPLATE',
+`format(`#define ctf_$3_array_$1_$2(a, b) CTF_INTERNAL_$4(ctf_internal_expect_array_$1_$2,(const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
 define(`EXPECT_FUNCTION',
-`format(`int ctf_internal_expect_$1_$2(%s, %s, const char *, const char *, int, const char *);',TYPE(`$1'),TYPE(`$1'))')
+`format(`int ctf_internal_expect_$1_$2(%s, %s, const char *, const char *, int, const char *);',TYPE(`$1'),TYPE(`$1'))')dnl
 define(`EXPECT_MEMORY_PRIMITIVE_FUNCTION',
-`int ctf_internal_expect_memory_$1_$2(const void *, const void *, size_t, size_t, int, const char *, const char *, int, const char *);')
-define(`EXPECT_MEMORY_POINTER_FUNCTION',
-`int ctf_internal_expect_memory_$1_$2(const void *const *, const void *const *, size_t, size_t, int, const char *, const char *, int, const char *);')
+`int ctf_internal_expect_memory_$1_$2(const void *, const void *, size_t, size_t, int, const char *, const char *, int, const char *);')dnl
 define(`EXPECT_ARRAY_PRIMITIVE_FUNCTION',
-`int ctf_internal_expect_array_$1_$2(const void *, const void *, size_t, size_t, size_t, int, const char *, const char *, int, const char*);')
-define(`EXPECT_ARRAY_POINTER_FUNCTION',
-`int ctf_internal_expect_array_$1_$2(const void *const *, const void *const *, size_t, size_t, size_t, int, const char *, const char *, int, const char*);')
+`int ctf_internal_expect_array_$1_$2(const void *, const void *, size_t, size_t, size_t, int, const char *, const char *, int, const char*);')dnl
 define(`ASSERT_WRAP',
 `indir(`$1', `$2', `$3', `assert', `ASSERT')
 indir(`$1', `$2', `$3', `expect', `EXPECT')
 ')dnl
 define(`EA_FACTORY', `foreach(`type', `$1', `foreach(`comp', `$2', `indir(`ASSERT_WRAP', `$3', type, comp)')')')dnl
 */
-MOCK_FUNCTION(char, char);
-MOCK_FUNCTION(int, intmax_t);
-MOCK_FUNCTION(uint, uintmax_t);
-MOCK_FUNCTION(ptr, const void *);
-MOCK_FUNCTION(str, const char *)
+COMB(`MOCK_FUNCTION', `(PRIMITIVE_TYPES, str)')
 COMB2(`MOCK_EXPECT', `(char, int, uint, ptr, str)', `(CMPS)')
 COMB2(`MOCK_ASSERT', `(char, int, uint, ptr, str)', `(CMPS)')
-COMB2(`MOCK_EXPECT_ALWAYS', `(char, int, uint, ptr, str)', `(CMPS)')
-COMB2(`MOCK_ASSERT_ALWAYS', `(char, int, uint, ptr, str)', `(CMPS)')
+COMB2(`MOCK_EXPECT_ONCE', `(char, int, uint, ptr, str)', `(CMPS)')
+COMB2(`MOCK_ASSERT_ONCE', `(char, int, uint, ptr, str)', `(CMPS)')
 COMB2(`MOCK_EXPECT_MEMORY', `(char, int, uint, ptr)', `(CMPS)')
+COMB2(`MOCK_EXPECT_ARRAY', `(char, int, uint, ptr)', `(CMPS)')
 COMB2(`MOCK_ASSERT_MEMORY', `(char, int, uint, ptr)', `(CMPS)')
+COMB2(`MOCK_ASSERT_ARRAY', `(char, int, uint, ptr)', `(CMPS)')
+COMB2(`MOCK_EXPECT_ONCE_MEMORY', `(char, int, uint, ptr)', `(CMPS)')
+COMB2(`MOCK_EXPECT_ONCE_ARRAY', `(char, int, uint, ptr)', `(CMPS)')
+COMB2(`MOCK_ASSERT_ONCE_MEMORY', `(char, int, uint, ptr)', `(CMPS)')
+COMB2(`MOCK_ASSERT_ONCE_ARRAY', `(char, int, uint, ptr)', `(CMPS)')
 COMB2(`EXPECT_FUNCTION', `(int, uint, char, ptr, str)', `(CMPS)')
-COMB2(`EXPECT_MEMORY_PRIMITIVE_FUNCTION', `(int, uint, char)', `(CMPS)')
-COMB2(`EXPECT_MEMORY_POINTER_FUNCTION', `(ptr)', `(CMPS)')
-COMB2(`EXPECT_ARRAY_PRIMITIVE_FUNCTION', `(int, uint, char)', `(CMPS)')
-COMB2(`EXPECT_ARRAY_POINTER_FUNCTION', `(ptr)', `(CMPS)')
+COMB2(`EXPECT_MEMORY_PRIMITIVE_FUNCTION', `(PRIMITIVE_TYPES)', `(CMPS)')
+COMB2(`EXPECT_ARRAY_PRIMITIVE_FUNCTION', `(PRIMITIVE_TYPES)', `(CMPS)')
 EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `EA_TEMPLATE')
 EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_MEMORY_TEMPLATE')
 EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_ARRAY_TEMPLATE')
+COMB(`MOCK_CHECK_FUNCTION', `(PRIMITIVE_TYPES, str)')
+COMB(`MOCK_CHECK_MEMORY_FUNCTION', `(PRIMITIVE_TYPES, str)')
+COMB(`MOCK_CHECK', `(PRIMITIVE_TYPES, str)')
+COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
 // clang-format on
-void ctf_internal_mock_memory(struct ctf_internal_mock *mock, int type, void *f,
-                              const char *var, const void *val);
+void ctf_internal_mock_memory(struct ctf_internal_mock *mock, int type,
+                              int, const char *, const char*, void *f,
+                              const char *var, const void *val, size_t l);
 
-#define CTF_INTERNAL_MOCK_EXPECT_MEMORY(t, comp, type, name, var, val)     \
-  if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]    \
-       .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                      \
-  ctf_internal_mock_memory(&ctf_internal_mock_##name, type,                \
-                           (void *)ctf_internal_expect_##t##_##comp, #var, \
-                           val)
-#define CTF_INTERNAL_MOCK_EXPECT(t, comp, type, name, ...)              \
-  if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index] \
-       .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                   \
-  ctf_internal_mock_##t(&ctf_internal_mock_##name, type,                \
-                        (void *)ctf_internal_expect_##t##_##comp, __VA_ARGS__)
-#define CTF_INTERNAL_MOCK_ASSERT(t, comp, type, name, ...)                  \
+#define CTF_INTERNAL_MOCK_EXPECT_MEMORY(t, comp, type, name, var, val, l)      \
+  if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]        \
+       .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                          \
+  ctf_internal_mock_memory(                                                    \
+    &ctf_internal_mock_##name, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, __LINE__, \
+    __FILE__, #val, (void *)ctf_internal_expect_memory_##t##_##comp, var, val, \
+    l)
+#define CTF_INTERNAL_MOCK_EXPECT(t, comp, type, name, var, val)              \
+  if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]      \
+       .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                        \
+  ctf_internal_mock_##t(&ctf_internal_mock_##name, type, __LINE__, __FILE__, \
+                        #val, (void *)ctf_internal_expect_##t##_##comp, var, \
+                        val)
+#define CTF_INTERNAL_MOCK_ASSERT(t, comp, type, name, var, val)             \
   do {                                                                      \
     if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]   \
          .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                     \
       ctf_internal_mock_##t(                                                \
         &ctf_internal_mock_##name, type | CTF_INTERNAL_MOCK_TYPE_ASSERT,    \
-        (void *)ctf_internal_expect_##t##_##comp, __VA_ARGS__);             \
+        __LINE__, __FILE__, #val, (void *)ctf_internal_expect_##t##_##comp, \
+        var, val);                                                          \
     if(setjmp(                                                              \
          ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index] \
            .assert_jump))                                                   \
@@ -353,26 +341,33 @@ define(`EA_ALIAS', `ALIAS($3_$1_$2(a, b))')dnl
 define(`EA_MEMORY_ALIAS', `ALIAS($3_memory_$1_$2(a, b, length))')dnl
 define(`EA_ARRAY_ALIAS', `ALIAS($3_array_$1_$2(a, b))')dnl
 define(`MOCK_EA_ALIAS', `ALIAS(mock_$3_$1_$2(name, var, val))')
-define(`MOCK_EA_ALWAYS_ALIAS', `ALIAS(mock_$3_always_$1_$2(name, var, val))')
-define(`MOCK_EA_MEMORY_ALIAS', `ALIAS(mock_$3_memory_$1_$2(name, var, val))')
+define(`MOCK_EA_ONCE_ALIAS', `ALIAS(mock_$3_once_$1_$2(name, var, val))')
+define(`MOCK_EA_MEMORY_ALIAS', `ALIAS(mock_$3_memory_$1_$2(name, var, val, length))')
+define(`MOCK_EA_ARRAY_ALIAS', `ALIAS(mock_$3_array_$1_$2(name, var, val))')
+define(`MOCK_EA_ONCE_MEMORY_ALIAS', `ALIAS(mock_$3_once_memory_$1_$2(name, var, val, length))')
+define(`MOCK_EA_ONCE_ARRAY_ALIAS', `ALIAS(mock_$3_once_array_$1_$2(name, var, val))')
+define(`MOCK_CHECK_ALIAS', `ALIAS(mock_check_$1(name, val))')
+define(`MOCK_CHECK_MEMORY_ALIAS', `ALIAS(mock_check_memory_$1(name, val))')
 define(`EXTERN_P', `$1, EXTERN_$1, P_$1')
-
-define(`macro_aliases',
-       `EXTERN_P(TEST(name)), EXTERN_P(GROUP(name)),
-       MOCK(ret_type, name, typed, args), EXTERN_MOCK(ret_type, name, typed),
-       MOCK_BIND(fn, mock), MOCK_GROUP(name), EXTERN_MOCK_GROUP(name)')
-define(`normal_aliases',
-       `mock(name, f), mock_group(name), mock_call_count(name),
-       mock_will_return(name, val), mock_will_return_always(name, val)')
 */
-foreach(`x', `(macro_aliases)', `MACRO_ALIAS(x)')
-foreach(`x', `(normal_aliases)', `ALIAS(x)')
+COMB(`MACRO_ALIAS',
+`(EXTERN_P(TEST(name)), EXTERN_P(GROUP(name)),
+  MOCK(ret_type, name, typed, args), EXTERN_MOCK(ret_type, name, typed),
+  MOCK_BIND(fn, mock), MOCK_GROUP(name), EXTERN_MOCK_GROUP(name))')
+COMB(`ALIAS',
+`(mock(name, f), mock_group(name), mock_call_count(name),
+  mock_will_return(name, val), mock_will_return_once(name, val))')
 EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `EA_ALIAS')
 EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_MEMORY_ALIAS')
 EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_ARRAY_ALIAS')
 EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_ALIAS')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_ALWAYS_ALIAS')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_MEMORY_ALIAS')
+EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_ONCE_ALIAS')
+EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `MOCK_EA_MEMORY_ALIAS')
+EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `MOCK_EA_ARRAY_ALIAS')
+EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `MOCK_EA_ONCE_MEMORY_ALIAS')
+EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `MOCK_EA_ONCE_ARRAY_ALIAS')
+COMB(`MOCK_CHECK_ALIAS', `(PRIMITIVE_TYPES, str)')
+COMB(`MOCK_CHECK_MEMORY_ALIAS', `(PRIMITIVE_TYPES)')
 // clang-format on
 
 #endif

@@ -13,10 +13,10 @@ int stub_add(int a, int b) {
 int mock_add(int a, int b) {
   const char s[] = "string";
   const int m[] = {0, 1, 2};
-  ctf_mock_check(add, str, s);
-  ctf_mock_check(add, int, a);
-  ctf_mock_check(add, int, b);
-  ctf_mock_check(add, ptr, m);
+  mock_check_str(add, s);
+  mock_check_int(add, a);
+  mock_check_int(add, b);
+  mock_check_memory_int(add, m);
   return a + b;
 }
 int stub_sub(int a, int b) {
@@ -44,34 +44,36 @@ TEST(mock_grouped) {
 }
 TEST(mock_return) {
   mock(add, mock_add);
-  mock_will_return(add, 2);
+  mock_will_return_once(add, 2);
   expect_int_eq(2, add(1, 3));
   expect_int_eq(4, add(1, 3));
-  mock_will_return_always(add, 2);
+  mock_will_return(add, 2);
   expect_int_eq(2, add(1, 3));
   expect_int_eq(2, add(1, 3));
 }
 TEST(mock_expect) {
-  const int m[] = {0, 1, 3};
+  const int m[] = {0, 1, 2};
   mock(add, mock_add);
-  mock_expect_int_eq(add, a, 1);
-  mock_expect_int_eq(add, b, 3);
+  mock_expect_once_int_eq(add, a, 1);
+  mock_expect_once_int_eq(add, b, 3);
   mock_expect_str_eq(add, s, "string");
-  mock_expect_memory_int_eq(add, m, m);
+  mock_expect_array_int_eq(add, m, m);
   add(1, 3);
   add(2, 5);
 }
 TEST(mock_assert) {
   mock(add, mock_add);
-  mock_assert_int_eq(add, a, 1);
-  mock_assert_int_eq(add, b, 3);
+  mock_assert_once_int_eq(add, a, 1);
+  mock_assert_once_int_eq(add, b, 3);
   add(1, 3);
   add(2, 5);
 }
 TEST(mock_failure) {
+  const int m[] = {0, 1, 3};
   mock(add, mock_add);
-  mock_expect_always_int_eq(add, a, 1);
-  mock_expect_always_int_eq(add, b, 3);
+  mock_expect_once_int_eq(add, a, 1);
+  mock_expect_once_int_eq(add, b, 3);
+  mock_expect_array_int_eq(add, m, m);
   add(3, 4);
   add(2, 5);
 }

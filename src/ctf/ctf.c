@@ -1,8 +1,6 @@
 #include "ctf.h"
 
-/*
 include(`base.m4')
-*/
 
 #ifndef CTF_NO_SIGNAL
 #include <signal.h>
@@ -356,7 +354,7 @@ static unsigned print_test_fail_info(char *buff, unsigned buff_len,
 }
 
 static unsigned print_test_unknown_info(
-  char *buff, unsigned buff_len, const struct ctf_internal_state *state) {
+  char *buff, unsigned buff_len, struct ctf_internal_state *state) {
   unsigned index = 0;
   if(index + 8 > buff_len) return index;
   while(index < 8) {
@@ -366,7 +364,8 @@ static unsigned print_test_unknown_info(
     if(index + strlen(state->file) + 2 + int_length(state->line) >= buff_len)
       return index;
     buff[index++] = '[';
-    strlcpy(buff + index, state->file, buff_len - index);
+    state->file = buff + index;
+    // strlcpy(buff + index, state->file, buff_len - index);
     index += strlen(state->file);
     buff[index++] = '|';
     index += print_int(buff + index, buff_len - index, state->line);
@@ -478,7 +477,7 @@ static size_t print_mem(struct ctf_internal_state *state, const void *a,
   index = print_arr(state, index, a, la, step, sign, format);
   index += snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index,
                     "} %s {", op_str);
-  index = print_arr(state, index, a, la, step, sign, format);
+  index = print_arr(state, index, b, lb, step, sign, format);
   snprintf(state->msg + index, CTF_CONST_STATE_MSG_SIZE - index, "})");
   state->status = status;
   return index;
@@ -570,7 +569,7 @@ static void groups_run(int count, va_list args) {
 static void assert_copy(struct ctf_internal_state *state, int line,
                         const char *file) {
   state->line = line;
-  strlcpy(state->file, file, CTF_CONST_STATE_FILE_SIZE);
+  state->file = file;
 }
 
 static int parallel_get_thread_index(void) {
@@ -706,6 +705,46 @@ int ctf_internal_expect_false(int a, const char *a_str, int line,
            CTF_CONST_STATE_MSG_SIZE, "%s == false (%d == 0)", a_str, a);
   return !a;
 }
+void ctf_internal_mock_check_base(struct ctf_internal_mock_state *state,
+                                  const char *v, int ret, int memory) {
+  int removed = 0;
+  for(int i = 0; i < state->check_count; i++) {
+    if(!(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY) == memory)
+      continue;
+    if(strcmp(state->check[i].var, v)) continue;
+    if(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_ONCE) {
+      state->check[i].f.i = NULL;
+      removed++;
+    }
+    if(!ret && state->check[i].type & CTF_INTERNAL_MOCK_TYPE_ASSERT) {
+      longjmp(state->assert_jump, 1);
+    }
+  }
+  for(int i = 0; i < state->check_count; i++) {
+    if(state->check[i].f.i == NULL) {
+      for(int j = i + 1; j < state->check_count; j++) {
+        if(state->check[j].f.i != NULL) {
+          state->check[i] = state->check[j];
+          state->check[j].f.i = NULL;
+          break;
+        }
+      }
+    }
+  }
+  state->check_count -= removed;                                        \
+}
+static void mock_base(struct ctf_internal_mock_state *state, int type,
+                      int line, const char *file, const char *print_var,
+                      void *f, const char *var) {
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->f.i = f;
+  check->var = var;
+  check->type = type;
+  check->line = line;
+  check->file = file;
+  check->print_var = print_var;
+  state->check_count++;
+}
 // clang-format off
 /*
 define(`EXPECT_HELPER',
@@ -727,7 +766,7 @@ return status;
 define(`EXPECT_MEMORY_HELPER',
 `int ctf_internal_expect_memory_$1_$2(                                      \
 $3(a), $3(b), size_t l, size_t step, int sign,        \
-    const char *a_str, const char *b_str, int line, const char *file) {       \
+const char *a_str, const char *b_str, int line, const char *file) {       \
     int status;                                                               \
     ctf_internal_states[ctf_internal_state_index].status = 2;                 \
     EXPECT_END;                                                               \
@@ -760,17 +799,75 @@ define(`EXPECT_ARRAY_HELPER',
   ctf_internal_states[ctf_internal_state_index - 1].status = !status;     \
   return status;                                                          \
 }')
+define(`MOCK_HELPER',
+`void ctf_internal_mock_$1(struct ctf_internal_mock *mock, int type,
+                            int line, const char *file, const char *print_var,
+                            void *f, const char *var, $2 val) {
+  struct ctf_internal_mock_state *const state =
+    mock->state + ctf_internal_parallel_thread_index;
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->val.$3 = val;
+  mock_base(state, type | $4, line, file, print_var, f, var);
+}')
+define(`MOCK_MEMORY_HELPER',
+`void ctf_internal_mock_$1(struct ctf_internal_mock *mock, int type,
+                            int line, const char *file, const char *print_var,
+                            void *f, const char *var, $2 val, size_t l) {
+  struct ctf_internal_mock_state *const state =
+    mock->state + ctf_internal_parallel_thread_index;
+  struct ctf_internal_check *const check = state->check + state->check_count;
+  check->val.$3 = val;
+  check->length = l;
+  mock_base(state, type | $4, line, file, print_var, f, var);
+}')
+define(`MOCK_CHECK_HELPER',
+`void ctf_internal_mock_check_$1(struct ctf_internal_mock_state *state, $2 v,
+const char *v_print) {
+  int ret = 1;
+  for(int i=0; i<state->check_count; i++) {
+    if(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY) continue;
+    if(strcmp(state->check[i].var, v_print)) continue;
+    ret = state->check[i].f.$3(
+      state->check[i].val.$3, v,
+      state->check[i].print_var, v_print, state->check[i].line,
+        state->check[i].file);
+  }
+  ctf_internal_mock_check_base(state, v_print, ret, 0);
+}')
+define(`MOCK_CHECK_MEMORY_HELPER',
+       `void ctf_internal_mock_check_memory_$1(struct ctf_internal_mock_state *state, const void * v,
+                                               const char *v_print, size_t step, int sign) {
+  int ret = 1;
+  for(int i=0; i<state->check_count; i++) {
+    if(!(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY)) continue;
+    if(strcmp(state->check[i].var, v_print)) continue;
+    ret = state->check[i].f.m( state->check[i].val.p, v, state->check[i].length, step, sign,
+      state->check[i].print_var, v_print, state->check[i].line,
+        state->check[i].file);
+  }
+  ctf_internal_mock_check_base(state, v_print, ret, 1);
+}')
+define(`MOCK', `MOCK_HELPER(`$1', TYPE(`$1'), SHORT(`$1'), 0)')
+define(`MOCK_STR', `MOCK_HELPER(`$1', TYPE(`$1'), `p', `CTF_INTERNAL_MOCK_TYPE_MEMORY')')
+define(`MOCK_MEMORY', `MOCK_MEMORY_HELPER(`$1', `const void *', `p', `CTF_INTERNAL_MOCK_TYPE_MEMORY')')
 define(`EXPECT_PRIMITIVE', `EXPECT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),a,b)')
 define(`EXPECT_STRING', `EXPECT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),strcmp(a,b),0)')
 define(`EXPECT_MEMORY', `EXPECT_MEMORY_HELPER(`$1',`$2',`$3',CMP_SYMBOL(`$2'),FORMAT(`$1'))')
 define(`EXPECT_ARRAY', `EXPECT_ARRAY_HELPER(`$1',`$2',`$3',CMP_SYMBOL(`$2'),FORMAT(`$1'))')
+define(`MOCK_CHECK', `MOCK_CHECK_HELPER(`$1', TYPE(`$1'), SHORT(`$1'))')
+define(`MOCK_CHECK_MEMORY', `MOCK_CHECK_MEMORY_HELPER(`$1')')
 */
 COMB2(`EXPECT_PRIMITIVE', `(PRIMITIVE_TYPES)', `(CMPS)')
 COMB2(`EXPECT_STRING', `(str)', `(CMPS)')
 COMB3(`EXPECT_MEMORY', `(char, int, uint)', `(CMPS)', `(const void *)')
-COMB3(`EXPECT_MEMORY', `(ptr)', `(CMPS)', `(const void *const *)')
+COMB3(`EXPECT_MEMORY', `(ptr)', `(CMPS)', `(const void *)')
 COMB3(`EXPECT_ARRAY', `(char, int, uint)', `(CMPS)', `(const void *)')
-COMB3(`EXPECT_ARRAY', `(ptr)', `(CMPS)', `(const void *const *)')
+COMB3(`EXPECT_ARRAY', `(ptr)', `(CMPS)', `(const void *)')
+COMB(`MOCK', `(PRIMITIVE_TYPES)')
+COMB(`MOCK_STR', `(str)')
+COMB(`MOCK_MEMORY', `(memory)')
+COMB(`MOCK_CHECK', `(PRIMITIVE_TYPES, str)')
+COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
 // clang-format on
 __attribute__((constructor)) void ctf_internal_premain(int argc,
                                                          char *argv[]) {
@@ -826,63 +923,6 @@ __attribute__((constructor)) void ctf_internal_premain(int argc,
   sigaltstack(&(stack_t){.ss_sp = signal_stack, .ss_size = SIGNAL_STACK_SIZE},
               NULL);
 #endif
-}
-
-static void mock_base(struct ctf_internal_mock_state *state, int type, void *f,
-                      const char *var) {
-  struct ctf_internal_check *const check = state->check + state->check_count;
-  check->f.i = f;
-  strlcpy(check->var, var, CTF_CONST_MOCK_CHECK_VAR_LENGTH);
-  check->type = type;
-  state->check_count++;
-}
-void ctf_internal_mock_char(struct ctf_internal_mock *mock, int type, void *f,
-                            const char *var, char val) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
-  struct ctf_internal_check *const check = state->check + state->check_count;
-  check->val.c = val;
-  mock_base(state, type, f, var);
-}
-void ctf_internal_mock_int(struct ctf_internal_mock *mock, int type, void *f,
-                           const char *var, intmax_t val) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
-  struct ctf_internal_check *const check = state->check + state->check_count;
-  check->val.i = val;
-  mock_base(state, type, f, var);
-}
-void ctf_internal_mock_uint(struct ctf_internal_mock *mock, int type, void *f,
-                            const char *var, uintmax_t val) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
-  struct ctf_internal_check *const check = state->check + state->check_count;
-  check->val.u = val;
-  mock_base(state, type, f, var);
-}
-void ctf_internal_mock_ptr(struct ctf_internal_mock *mock, int type, void *f,
-                           const char *var, const void *val) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
-  struct ctf_internal_check *const check = state->check + state->check_count;
-  check->val.p = val;
-  mock_base(state, type, f, var);
-}
-void ctf_internal_mock_str(struct ctf_internal_mock *mock, int type, void *f,
-                           const char *var, const char *val) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
-  struct ctf_internal_check *const check = state->check + state->check_count;
-  check->val.p = val;
-  mock_base(state, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, f, var);
-}
-void ctf_internal_mock_memory(struct ctf_internal_mock *mock, int type, void *f,
-                              const char *var, const void *val) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
-  struct ctf_internal_check *const check = state->check + state->check_count;
-  check->val.p = val;
-  mock_base(state, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, f, var);
 }
 
 void ctf_parallel_sync(void) {
