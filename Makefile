@@ -18,8 +18,8 @@ SANTIIZER_FLAGS=-fsanitize=undefined -fsanitize-address-use-after-scope -fstack-
 DEBUG_FLAGS=$(WARN_FLAGS) $(MEMORY_DEBUG_FLAGS) $(SANITIZER_FLAGS) -Og -ggdb3
 OPTIMIZE_FLAGS=-march=native -O2 -pipe -D NDEBUG
 LINK_FLAGS=$(BASE_CFLAGS) -s -flto=4 -fwhole-program -pthread
-TEST_FLAGS=$(BASE_CFLAGS) $(DEBUG_FLAGS) -Ibuild/src
-BASE_CFLAGS=-std=gnu99 -MMD -MP
+TEST_FLAGS=$(BASE_CFLAGS) -Ibuild/src
+BASE_CFLAGS=-std=gnu11 -MMD -MP
 CFLAGS=$(BASE_CFLAGS)
 
 all: release

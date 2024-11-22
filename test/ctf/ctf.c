@@ -4,6 +4,8 @@
 
 MOCK(int, sub, (int a, int b), (a, b))
 MOCK(int, add, (int a, int b), (a, b))
+MOCK(int, wrapped_strcmp, (const char *a, const char *b), (a, b))
+MOCK(int, wrapped_memcmp, (const void *a, const void *b, size_t l), (a, b, l))
 
 int stub_add(int a, int b) {
   (void)a;
@@ -11,12 +13,8 @@ int stub_add(int a, int b) {
   return 0;
 }
 int mock_add(int a, int b) {
-  const char s[] = "string";
-  const int m[] = {0, 1, 2};
-  mock_check_str(add, s);
   mock_check_int(add, a);
   mock_check_int(add, b);
-  mock_check_memory_int(add, m);
   return a + b;
 }
 int stub_sub(int a, int b) {
@@ -24,17 +22,22 @@ int stub_sub(int a, int b) {
   (void)b;
   return 1;
 }
+int mock_wrapped_strcmp(const char *a, const char *b) {
+  mock_check_str(wrapped_strcmp, a);
+  mock_check_str(wrapped_strcmp, b);
+  return __real_wrapped_strcmp(a, b);
+}
+int mock_wrapped_memcmp(const void *a, const void *b, size_t l) {
+  mock_check_memory_int(wrapped_memcmp, a);
+  mock_check_memory_int(wrapped_memcmp, b);
+  return __real_wrapped_memcmp(a, b, l);
+}
 
 MOCK_GROUP(add_sub) = {
   MOCK_BIND(add, stub_add),
   MOCK_BIND(sub, stub_sub),
 };
 
-TEST(mock_basic) {
-  mock(add, stub_add);
-  expect_int_eq(0, add(1, 2));
-  expect_int_eq(1, mock_call_count(add));
-}
 TEST(mock_grouped) {
   mock_group(add_sub);
   expect_int_eq(0, add(1, 2));
@@ -51,39 +54,849 @@ TEST(mock_return) {
   expect_int_eq(2, add(1, 3));
   expect_int_eq(2, add(1, 3));
 }
-TEST(mock_expect) {
-  const int m[] = {0, 1, 2};
-  mock(add, mock_add);
-  mock_expect_once_int_eq(add, a, 1);
-  mock_expect_once_int_eq(add, b, 3);
-  mock_expect_str_eq(add, s, "string");
-  mock_expect_array_int_eq(add, m, m);
-  add(1, 3);
-  add(2, 5);
-}
-TEST(mock_assert) {
-  mock(add, mock_add);
-  mock_assert_once_int_eq(add, a, 1);
-  mock_assert_once_int_eq(add, b, 3);
-  add(1, 3);
-  add(2, 5);
-}
-TEST(mock_failure) {
-  const int m[] = {0, 1, 3};
-  mock(add, mock_add);
-  mock_expect_once_int_eq(add, a, 1);
-  mock_expect_once_int_eq(add, b, 3);
-  mock_expect_array_int_eq(add, m, m);
-  add(3, 4);
-  add(2, 5);
-}
 TEST(mock_reset) {
   expect_int_eq(3, add(1, 2));
   expect_int_eq(0, mock_call_count(add));
 }
+
+TEST(mock_char_expect_success) {
+  char a = 'a';
+  char b = 'b';
+  mock(add, mock_add);
+  mock_expect_once_char_eq(add, a, a);
+  mock_expect_once_char_eq(add, b, b);
+  mock_expect_once_char_neq(add, a, b);
+  mock_expect_once_char_neq(add, b, a);
+  mock_expect_once_char_lt(add, b, a);
+  mock_expect_once_char_gt(add, a, b);
+  mock_expect_once_char_lte(add, a, a);
+  mock_expect_once_char_lte(add, b, a);
+  mock_expect_once_char_gte(add, a, a);
+  mock_expect_once_char_gte(add, a, b);
+  add(a, b);
+  add(b, a);
+  mock_expect_char_eq(add, a, a);
+  mock_expect_char_eq(add, b, b);
+  mock_expect_char_neq(add, a, b);
+  mock_expect_char_neq(add, b, a);
+  mock_expect_char_lt(add, b, a);
+  mock_expect_char_gt(add, a, b);
+  mock_expect_char_lte(add, a, a);
+  mock_expect_char_lte(add, b, a);
+  mock_expect_char_gte(add, a, a);
+  mock_expect_char_gte(add, a, b);
+  add(a, b);
+}
+TEST(mock_char_expect_failure) {
+  char a = 'a';
+  char b = 'b';
+  mock(add, mock_add);
+  mock_expect_char_eq(add, a, b);
+  mock_expect_char_eq(add, b, a);
+  mock_expect_char_neq(add, a, a);
+  mock_expect_char_neq(add, b, b);
+  mock_expect_char_gt(add, a, a);
+  mock_expect_char_gt(add, b, a);
+  mock_expect_char_lt(add, a, a);
+  mock_expect_char_lt(add, a, b);
+  mock_expect_char_gte(add, b, a);
+  mock_expect_char_lte(add, a, b);
+  add(a, b);
+}
+TEST(mock_char_assert) {
+  char a = 'a';
+  char b = 'b';
+  mock(add, mock_add);
+  mock_assert_char_eq(add, a, a);
+  mock_assert_char_eq(add, b, b);
+  mock_assert_char_neq(add, a, b);
+  mock_assert_char_neq(add, b, a);
+  mock_assert_char_lt(add, b, a);
+  mock_assert_char_gt(add, a, b);
+  mock_assert_char_lte(add, a, a);
+  mock_assert_char_lte(add, b, a);
+  mock_assert_char_gte(add, a, a);
+  mock_assert_char_gte(add, a, b);
+  add(a, b);
+}
+TEST(mock_int_expect_success) {
+  int a = -2;
+  int b = -1;
+  mock(add, mock_add);
+  mock_expect_once_int_eq(add, a, a);
+  mock_expect_once_int_eq(add, b, b);
+  mock_expect_once_int_neq(add, a, b);
+  mock_expect_once_int_neq(add, b, a);
+  mock_expect_once_int_lt(add, b, a);
+  mock_expect_once_int_gt(add, a, b);
+  mock_expect_once_int_lte(add, a, a);
+  mock_expect_once_int_lte(add, b, a);
+  mock_expect_once_int_gte(add, a, a);
+  mock_expect_once_int_gte(add, a, b);
+  add(a, b);
+  add(b, a);
+  mock_expect_int_eq(add, a, a);
+  mock_expect_int_eq(add, b, b);
+  mock_expect_int_neq(add, a, b);
+  mock_expect_int_neq(add, b, a);
+  mock_expect_int_lt(add, b, a);
+  mock_expect_int_gt(add, a, b);
+  mock_expect_int_lte(add, a, a);
+  mock_expect_int_lte(add, b, a);
+  mock_expect_int_gte(add, a, a);
+  mock_expect_int_gte(add, a, b);
+  add(a, b);
+}
+TEST(mock_int_expect_failure) {
+  int a = -2;
+  int b = -1;
+  mock(add, mock_add);
+  mock_expect_int_eq(add, a, b);
+  mock_expect_int_eq(add, b, a);
+  mock_expect_int_neq(add, a, a);
+  mock_expect_int_neq(add, b, b);
+  mock_expect_int_gt(add, a, a);
+  mock_expect_int_gt(add, b, a);
+  mock_expect_int_lt(add, a, a);
+  mock_expect_int_lt(add, a, b);
+  mock_expect_int_gte(add, b, a);
+  mock_expect_int_lte(add, a, b);
+  add(a, b);
+}
+TEST(mock_int_assert) {
+  int a = -2;
+  int b = -1;
+  mock(add, mock_add);
+  mock_assert_int_eq(add, a, a);
+  mock_assert_int_eq(add, b, b);
+  mock_assert_int_neq(add, a, b);
+  mock_assert_int_neq(add, b, a);
+  mock_assert_int_lt(add, b, a);
+  mock_assert_int_gt(add, a, b);
+  mock_assert_int_lte(add, a, a);
+  mock_assert_int_lte(add, b, a);
+  mock_assert_int_gte(add, a, a);
+  mock_assert_int_gte(add, a, b);
+  add(a, b);
+}
+TEST(mock_uint_expect_success) {
+  unsigned a = 0;
+  unsigned b = 1;
+  mock(add, mock_add);
+  mock_expect_once_uint_eq(add, a, a);
+  mock_expect_once_uint_eq(add, b, b);
+  mock_expect_once_uint_neq(add, a, b);
+  mock_expect_once_uint_neq(add, b, a);
+  mock_expect_once_uint_lt(add, b, a);
+  mock_expect_once_uint_gt(add, a, b);
+  mock_expect_once_uint_lte(add, a, a);
+  mock_expect_once_uint_lte(add, b, a);
+  mock_expect_once_uint_gte(add, a, a);
+  mock_expect_once_uint_gte(add, a, b);
+  add(a, b);
+  add(b, a);
+  mock_expect_uint_eq(add, a, a);
+  mock_expect_uint_eq(add, b, b);
+  mock_expect_uint_neq(add, a, b);
+  mock_expect_uint_neq(add, b, a);
+  mock_expect_uint_lt(add, b, a);
+  mock_expect_uint_gt(add, a, b);
+  mock_expect_uint_lte(add, a, a);
+  mock_expect_uint_lte(add, b, a);
+  mock_expect_uint_gte(add, a, a);
+  mock_expect_uint_gte(add, a, b);
+  add(a, b);
+}
+TEST(mock_uint_expect_failure) {
+  unsigned a = 0;
+  unsigned b = 1;
+  mock(add, mock_add);
+  mock_expect_uint_eq(add, a, b);
+  mock_expect_uint_eq(add, b, a);
+  mock_expect_uint_neq(add, a, a);
+  mock_expect_uint_neq(add, b, b);
+  mock_expect_uint_gt(add, a, a);
+  mock_expect_uint_gt(add, b, a);
+  mock_expect_uint_lt(add, a, a);
+  mock_expect_uint_lt(add, a, b);
+  mock_expect_uint_gte(add, b, a);
+  mock_expect_uint_lte(add, a, b);
+  add(a, b);
+}
+TEST(mock_uint_assert) {
+  unsigned a = 0;
+  unsigned b = 1;
+  mock(add, mock_add);
+  mock_assert_uint_eq(add, a, a);
+  mock_assert_uint_eq(add, b, b);
+  mock_assert_uint_neq(add, a, b);
+  mock_assert_uint_neq(add, b, a);
+  mock_assert_uint_lt(add, b, a);
+  mock_assert_uint_gt(add, a, b);
+  mock_assert_uint_lte(add, a, a);
+  mock_assert_uint_lte(add, b, a);
+  mock_assert_uint_gte(add, a, a);
+  mock_assert_uint_gte(add, a, b);
+  add(a, b);
+}
+TEST(mock_ptr_expect_success) {
+  char arr[2] = {'a', 'b'};
+  const char *a = arr;
+  const char *b = arr + 1;
+  mock(wrapped_strcmp, mock_wrapped_strcmp);
+  mock_expect_once_ptr_eq(wrapped_strcmp, a, a);
+  mock_expect_once_ptr_eq(wrapped_strcmp, b, b);
+  mock_expect_once_ptr_neq(wrapped_strcmp, a, b);
+  mock_expect_once_ptr_neq(wrapped_strcmp, b, a);
+  mock_expect_once_ptr_lt(wrapped_strcmp, b, a);
+  mock_expect_once_ptr_gt(wrapped_strcmp, a, b);
+  mock_expect_once_ptr_lte(wrapped_strcmp, a, a);
+  mock_expect_once_ptr_lte(wrapped_strcmp, b, a);
+  mock_expect_once_ptr_gte(wrapped_strcmp, a, a);
+  mock_expect_once_ptr_gte(wrapped_strcmp, a, b);
+  (void)wrapped_strcmp(a, b);
+  (void)wrapped_strcmp(b, a);
+  mock_expect_ptr_eq(wrapped_strcmp, a, a);
+  mock_expect_ptr_eq(wrapped_strcmp, b, b);
+  mock_expect_ptr_neq(wrapped_strcmp, a, b);
+  mock_expect_ptr_neq(wrapped_strcmp, b, a);
+  mock_expect_ptr_lt(wrapped_strcmp, b, a);
+  mock_expect_ptr_gt(wrapped_strcmp, a, b);
+  mock_expect_ptr_lte(wrapped_strcmp, a, a);
+  mock_expect_ptr_lte(wrapped_strcmp, b, a);
+  mock_expect_ptr_gte(wrapped_strcmp, a, a);
+  mock_expect_ptr_gte(wrapped_strcmp, a, b);
+  (void)wrapped_strcmp(a, b);
+}
+TEST(mock_ptr_expect_failure) {
+  char arr[2] = {'a', 'b'};
+  const char *a = arr;
+  const char *b = arr + 1;
+  mock(wrapped_strcmp, mock_wrapped_strcmp);
+  mock_expect_ptr_eq(wrapped_strcmp, a, b);
+  mock_expect_ptr_eq(wrapped_strcmp, b, a);
+  mock_expect_ptr_neq(wrapped_strcmp, a, a);
+  mock_expect_ptr_neq(wrapped_strcmp, b, b);
+  mock_expect_ptr_gt(wrapped_strcmp, a, a);
+  mock_expect_ptr_gt(wrapped_strcmp, b, a);
+  mock_expect_ptr_lt(wrapped_strcmp, a, a);
+  mock_expect_ptr_lt(wrapped_strcmp, a, b);
+  mock_expect_ptr_gte(wrapped_strcmp, b, a);
+  mock_expect_ptr_lte(wrapped_strcmp, a, b);
+  (void)wrapped_strcmp(a, b);
+}
+TEST(mock_ptr_assert) {
+  char arr[2] = {'a', 'b'};
+  const char *a = arr;
+  const char *b = arr + 1;
+  mock(wrapped_strcmp, mock_wrapped_strcmp);
+  mock_assert_ptr_eq(wrapped_strcmp, a, a);
+  mock_assert_ptr_eq(wrapped_strcmp, b, b);
+  mock_assert_ptr_neq(wrapped_strcmp, a, b);
+  mock_assert_ptr_neq(wrapped_strcmp, b, a);
+  mock_assert_ptr_lt(wrapped_strcmp, b, a);
+  mock_assert_ptr_gt(wrapped_strcmp, a, b);
+  mock_assert_ptr_lte(wrapped_strcmp, a, a);
+  mock_assert_ptr_lte(wrapped_strcmp, b, a);
+  mock_assert_ptr_gte(wrapped_strcmp, a, a);
+  mock_assert_ptr_gte(wrapped_strcmp, a, b);
+  (void)wrapped_strcmp(a, b);
+}
+TEST(mock_str_expect_success) {
+  const char a[] = "a";
+  const char b[] = "b";
+  mock(wrapped_strcmp, mock_wrapped_strcmp);
+  mock_expect_once_str_eq(wrapped_strcmp, a, a);
+  mock_expect_once_str_eq(wrapped_strcmp, b, b);
+  mock_expect_once_str_neq(wrapped_strcmp, a, b);
+  mock_expect_once_str_neq(wrapped_strcmp, b, a);
+  mock_expect_once_str_lt(wrapped_strcmp, b, a);
+  mock_expect_once_str_gt(wrapped_strcmp, a, b);
+  mock_expect_once_str_lte(wrapped_strcmp, a, a);
+  mock_expect_once_str_lte(wrapped_strcmp, b, a);
+  mock_expect_once_str_gte(wrapped_strcmp, a, a);
+  mock_expect_once_str_gte(wrapped_strcmp, a, b);
+  (void)wrapped_strcmp(a, b);
+  (void)wrapped_strcmp(b, a);
+  mock_expect_str_eq(wrapped_strcmp, a, a);
+  mock_expect_str_eq(wrapped_strcmp, b, b);
+  mock_expect_str_neq(wrapped_strcmp, a, b);
+  mock_expect_str_neq(wrapped_strcmp, b, a);
+  mock_expect_str_lt(wrapped_strcmp, b, a);
+  mock_expect_str_gt(wrapped_strcmp, a, b);
+  mock_expect_str_lte(wrapped_strcmp, a, a);
+  mock_expect_str_lte(wrapped_strcmp, b, a);
+  mock_expect_str_gte(wrapped_strcmp, a, a);
+  mock_expect_str_gte(wrapped_strcmp, a, b);
+  (void)wrapped_strcmp(a, b);
+}
+TEST(mock_str_expect_failure) {
+  const char a[] = "a";
+  const char b[] = "b";
+  mock(wrapped_strcmp, mock_wrapped_strcmp);
+  mock_expect_str_neq(wrapped_strcmp, a, a);
+  mock_expect_str_neq(wrapped_strcmp, b, b);
+  mock_expect_str_eq(wrapped_strcmp, a, b);
+  mock_expect_str_eq(wrapped_strcmp, b, a);
+  mock_expect_str_gte(wrapped_strcmp, b, a);
+  mock_expect_str_lte(wrapped_strcmp, a, b);
+  mock_expect_str_gt(wrapped_strcmp, a, a);
+  mock_expect_str_gt(wrapped_strcmp, b, a);
+  mock_expect_str_lt(wrapped_strcmp, a, a);
+  mock_expect_str_lt(wrapped_strcmp, a, b);
+  (void)wrapped_strcmp(a, b);
+}
+TEST(mock_str_assert) {
+  const char a[] = "a";
+  const char b[] = "b";
+  mock(wrapped_strcmp, mock_wrapped_strcmp);
+  mock_assert_str_eq(wrapped_strcmp, a, a);
+  mock_assert_str_eq(wrapped_strcmp, b, b);
+  mock_assert_str_neq(wrapped_strcmp, a, b);
+  mock_assert_str_neq(wrapped_strcmp, b, a);
+  mock_assert_str_lt(wrapped_strcmp, b, a);
+  mock_assert_str_gt(wrapped_strcmp, a, b);
+  mock_assert_str_lte(wrapped_strcmp, a, a);
+  mock_assert_str_lte(wrapped_strcmp, b, a);
+  mock_assert_str_gte(wrapped_strcmp, a, a);
+  mock_assert_str_gte(wrapped_strcmp, a, b);
+  (void)wrapped_strcmp(a, b);
+}
+
+TEST(mock_memory_char_expect_success) {
+  const char a[] = {'a'};
+  const char b[] = {'b'};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_memory_char_eq(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_char_neq(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_char_lt(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_char_gt(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_char_lte(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_char_lte(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_char_gte(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_char_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_expect_memory_char_eq(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_char_neq(wrapped_memcmp, a, b, 1);
+  mock_expect_memory_char_lt(wrapped_memcmp, b, a, 1);
+  mock_expect_memory_char_gt(wrapped_memcmp, a, b, 1);
+  mock_expect_memory_char_lte(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_char_lte(wrapped_memcmp, b, a, 1);
+  mock_expect_memory_char_gte(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_char_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_char_expect_failure) {
+  const char a[] = {'a'};
+  const char b[] = {'b'};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_memory_char_eq(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_char_neq(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_char_gt(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_char_gt(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_char_lt(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_char_lt(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_char_gte(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_char_lte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_char_assert) {
+  const char a[] = {'a'};
+  const char b[] = {'b'};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_assert_once_memory_char_eq(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_char_neq(wrapped_memcmp, a, b, 1);
+  mock_assert_once_memory_char_lt(wrapped_memcmp, b, a, 1);
+  mock_assert_once_memory_char_gt(wrapped_memcmp, a, b, 1);
+  mock_assert_once_memory_char_lte(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_char_lte(wrapped_memcmp, b, a, 1);
+  mock_assert_once_memory_char_gte(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_char_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_assert_memory_char_eq(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_char_neq(wrapped_memcmp, a, b, 1);
+  mock_assert_memory_char_lt(wrapped_memcmp, b, a, 1);
+  mock_assert_memory_char_gt(wrapped_memcmp, a, b, 1);
+  mock_assert_memory_char_lte(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_char_lte(wrapped_memcmp, b, a, 1);
+  mock_assert_memory_char_gte(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_char_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_int_expect_success) {
+  const int a[] = {-2};
+  const int b[] = {-1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_memory_int_eq(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_int_neq(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_int_lt(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_int_gt(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_int_lte(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_int_lte(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_int_gte(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_int_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_expect_memory_int_eq(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_int_neq(wrapped_memcmp, a, b, 1);
+  mock_expect_memory_int_lt(wrapped_memcmp, b, a, 1);
+  mock_expect_memory_int_gt(wrapped_memcmp, a, b, 1);
+  mock_expect_memory_int_lte(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_int_lte(wrapped_memcmp, b, a, 1);
+  mock_expect_memory_int_gte(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_int_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_int_expect_failure) {
+  const int a[] = {-2};
+  const int b[] = {-1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_memory_int_eq(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_int_neq(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_int_gt(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_int_gt(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_int_lt(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_int_lt(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_int_gte(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_int_lte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_int_assert) {
+  const int a[] = {-2};
+  const int b[] = {-1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_assert_once_memory_int_eq(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_int_neq(wrapped_memcmp, a, b, 1);
+  mock_assert_once_memory_int_lt(wrapped_memcmp, b, a, 1);
+  mock_assert_once_memory_int_gt(wrapped_memcmp, a, b, 1);
+  mock_assert_once_memory_int_lte(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_int_lte(wrapped_memcmp, b, a, 1);
+  mock_assert_once_memory_int_gte(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_int_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_assert_memory_int_eq(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_int_neq(wrapped_memcmp, a, b, 1);
+  mock_assert_memory_int_lt(wrapped_memcmp, b, a, 1);
+  mock_assert_memory_int_gt(wrapped_memcmp, a, b, 1);
+  mock_assert_memory_int_lte(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_int_lte(wrapped_memcmp, b, a, 1);
+  mock_assert_memory_int_gte(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_int_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_uint_expect_success) {
+  const unsigned a[] = {0};
+  const unsigned b[] = {1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_memory_uint_eq(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_uint_neq(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_uint_lt(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_uint_gt(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_uint_lte(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_uint_lte(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_uint_gte(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_uint_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_expect_memory_uint_eq(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_uint_neq(wrapped_memcmp, a, b, 1);
+  mock_expect_memory_uint_lt(wrapped_memcmp, b, a, 1);
+  mock_expect_memory_uint_gt(wrapped_memcmp, a, b, 1);
+  mock_expect_memory_uint_lte(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_uint_lte(wrapped_memcmp, b, a, 1);
+  mock_expect_memory_uint_gte(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_uint_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_uint_expect_failure) {
+  const unsigned a[] = {0};
+  const unsigned b[] = {1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_memory_uint_eq(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_uint_neq(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_uint_gt(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_uint_gt(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_uint_lt(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_uint_lt(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_uint_gte(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_uint_lte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_uint_assert) {
+  const unsigned a[] = {0};
+  const unsigned b[] = {1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_assert_once_memory_uint_eq(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_uint_neq(wrapped_memcmp, a, b, 1);
+  mock_assert_once_memory_uint_lt(wrapped_memcmp, b, a, 1);
+  mock_assert_once_memory_uint_gt(wrapped_memcmp, a, b, 1);
+  mock_assert_once_memory_uint_lte(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_uint_lte(wrapped_memcmp, b, a, 1);
+  mock_assert_once_memory_uint_gte(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_uint_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_assert_memory_uint_eq(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_uint_neq(wrapped_memcmp, a, b, 1);
+  mock_assert_memory_uint_lt(wrapped_memcmp, b, a, 1);
+  mock_assert_memory_uint_gt(wrapped_memcmp, a, b, 1);
+  mock_assert_memory_uint_lte(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_uint_lte(wrapped_memcmp, b, a, 1);
+  mock_assert_memory_uint_gte(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_uint_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_ptr_expect_success) {
+  const char *arr[2];
+  const void *a[] = {arr};
+  const void *b[] = {arr + 1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_memory_ptr_eq(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_ptr_neq(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_ptr_lt(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_ptr_gt(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_ptr_lte(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_ptr_lte(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_ptr_gte(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_ptr_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_expect_memory_ptr_eq(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_ptr_neq(wrapped_memcmp, a, b, 1);
+  mock_expect_memory_ptr_lt(wrapped_memcmp, b, a, 1);
+  mock_expect_memory_ptr_gt(wrapped_memcmp, a, b, 1);
+  mock_expect_memory_ptr_lte(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_ptr_lte(wrapped_memcmp, b, a, 1);
+  mock_expect_memory_ptr_gte(wrapped_memcmp, a, a, 1);
+  mock_expect_memory_ptr_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_ptr_expect_failure) {
+  const char *arr[2];
+  const void *a[] = {arr};
+  const void *b[] = {arr + 1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_memory_ptr_eq(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_ptr_neq(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_ptr_gt(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_ptr_gt(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_ptr_lt(wrapped_memcmp, a, a, 1);
+  mock_expect_once_memory_ptr_lt(wrapped_memcmp, a, b, 1);
+  mock_expect_once_memory_ptr_gte(wrapped_memcmp, b, a, 1);
+  mock_expect_once_memory_ptr_lte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_memory_ptr_assert) {
+  const char *arr[2];
+  const void *a[] = {arr};
+  const void *b[] = {arr + 1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_assert_once_memory_ptr_eq(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_ptr_neq(wrapped_memcmp, a, b, 1);
+  mock_assert_once_memory_ptr_lt(wrapped_memcmp, b, a, 1);
+  mock_assert_once_memory_ptr_gt(wrapped_memcmp, a, b, 1);
+  mock_assert_once_memory_ptr_lte(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_ptr_lte(wrapped_memcmp, b, a, 1);
+  mock_assert_once_memory_ptr_gte(wrapped_memcmp, a, a, 1);
+  mock_assert_once_memory_ptr_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_assert_memory_ptr_eq(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_ptr_neq(wrapped_memcmp, a, b, 1);
+  mock_assert_memory_ptr_lt(wrapped_memcmp, b, a, 1);
+  mock_assert_memory_ptr_gt(wrapped_memcmp, a, b, 1);
+  mock_assert_memory_ptr_lte(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_ptr_lte(wrapped_memcmp, b, a, 1);
+  mock_assert_memory_ptr_gte(wrapped_memcmp, a, a, 1);
+  mock_assert_memory_ptr_gte(wrapped_memcmp, a, b, 1);
+  wrapped_memcmp(a, b, 1);
+}
+
+TEST(mock_array_char_expect_success) {
+  const char a[] = {'a'};
+  const char b[] = {'b'};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_array_char_eq(wrapped_memcmp, a, a);
+  mock_expect_once_array_char_neq(wrapped_memcmp, a, b);
+  mock_expect_once_array_char_lt(wrapped_memcmp, b, a);
+  mock_expect_once_array_char_gt(wrapped_memcmp, a, b);
+  mock_expect_once_array_char_lte(wrapped_memcmp, a, a);
+  mock_expect_once_array_char_lte(wrapped_memcmp, b, a);
+  mock_expect_once_array_char_gte(wrapped_memcmp, a, a);
+  mock_expect_once_array_char_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_expect_array_char_eq(wrapped_memcmp, a, a);
+  mock_expect_array_char_neq(wrapped_memcmp, a, b);
+  mock_expect_array_char_lt(wrapped_memcmp, b, a);
+  mock_expect_array_char_gt(wrapped_memcmp, a, b);
+  mock_expect_array_char_lte(wrapped_memcmp, a, a);
+  mock_expect_array_char_lte(wrapped_memcmp, b, a);
+  mock_expect_array_char_gte(wrapped_memcmp, a, a);
+  mock_expect_array_char_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_char_expect_failure) {
+  const char a[] = {'a'};
+  const char b[] = {'b'};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_array_char_eq(wrapped_memcmp, a, b);
+  mock_expect_once_array_char_neq(wrapped_memcmp, a, a);
+  mock_expect_once_array_char_gt(wrapped_memcmp, a, a);
+  mock_expect_once_array_char_gt(wrapped_memcmp, b, a);
+  mock_expect_once_array_char_lt(wrapped_memcmp, a, a);
+  mock_expect_once_array_char_lt(wrapped_memcmp, a, b);
+  mock_expect_once_array_char_gte(wrapped_memcmp, b, a);
+  mock_expect_once_array_char_lte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_char_assert) {
+  const char a[] = {'a'};
+  const char b[] = {'b'};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_assert_once_array_char_eq(wrapped_memcmp, a, a);
+  mock_assert_once_array_char_neq(wrapped_memcmp, a, b);
+  mock_assert_once_array_char_lt(wrapped_memcmp, b, a);
+  mock_assert_once_array_char_gt(wrapped_memcmp, a, b);
+  mock_assert_once_array_char_lte(wrapped_memcmp, a, a);
+  mock_assert_once_array_char_lte(wrapped_memcmp, b, a);
+  mock_assert_once_array_char_gte(wrapped_memcmp, a, a);
+  mock_assert_once_array_char_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_assert_array_char_eq(wrapped_memcmp, a, a);
+  mock_assert_array_char_neq(wrapped_memcmp, a, b);
+  mock_assert_array_char_lt(wrapped_memcmp, b, a);
+  mock_assert_array_char_gt(wrapped_memcmp, a, b);
+  mock_assert_array_char_lte(wrapped_memcmp, a, a);
+  mock_assert_array_char_lte(wrapped_memcmp, b, a);
+  mock_assert_array_char_gte(wrapped_memcmp, a, a);
+  mock_assert_array_char_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_int_expect_success) {
+  const int a[] = {-2};
+  const int b[] = {-1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_array_int_eq(wrapped_memcmp, a, a);
+  mock_expect_once_array_int_neq(wrapped_memcmp, a, b);
+  mock_expect_once_array_int_lt(wrapped_memcmp, b, a);
+  mock_expect_once_array_int_gt(wrapped_memcmp, a, b);
+  mock_expect_once_array_int_lte(wrapped_memcmp, a, a);
+  mock_expect_once_array_int_lte(wrapped_memcmp, b, a);
+  mock_expect_once_array_int_gte(wrapped_memcmp, a, a);
+  mock_expect_once_array_int_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_expect_array_int_eq(wrapped_memcmp, a, a);
+  mock_expect_array_int_neq(wrapped_memcmp, a, b);
+  mock_expect_array_int_lt(wrapped_memcmp, b, a);
+  mock_expect_array_int_gt(wrapped_memcmp, a, b);
+  mock_expect_array_int_lte(wrapped_memcmp, a, a);
+  mock_expect_array_int_lte(wrapped_memcmp, b, a);
+  mock_expect_array_int_gte(wrapped_memcmp, a, a);
+  mock_expect_array_int_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_int_expect_failure) {
+  const int a[] = {-2};
+  const int b[] = {-1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_array_int_eq(wrapped_memcmp, a, b);
+  mock_expect_once_array_int_neq(wrapped_memcmp, a, a);
+  mock_expect_once_array_int_gt(wrapped_memcmp, a, a);
+  mock_expect_once_array_int_gt(wrapped_memcmp, b, a);
+  mock_expect_once_array_int_lt(wrapped_memcmp, a, a);
+  mock_expect_once_array_int_lt(wrapped_memcmp, a, b);
+  mock_expect_once_array_int_gte(wrapped_memcmp, b, a);
+  mock_expect_once_array_int_lte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_int_assert) {
+  const int a[] = {-2};
+  const int b[] = {-1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_assert_once_array_int_eq(wrapped_memcmp, a, a);
+  mock_assert_once_array_int_neq(wrapped_memcmp, a, b);
+  mock_assert_once_array_int_lt(wrapped_memcmp, b, a);
+  mock_assert_once_array_int_gt(wrapped_memcmp, a, b);
+  mock_assert_once_array_int_lte(wrapped_memcmp, a, a);
+  mock_assert_once_array_int_lte(wrapped_memcmp, b, a);
+  mock_assert_once_array_int_gte(wrapped_memcmp, a, a);
+  mock_assert_once_array_int_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_assert_array_int_eq(wrapped_memcmp, a, a);
+  mock_assert_array_int_neq(wrapped_memcmp, a, b);
+  mock_assert_array_int_lt(wrapped_memcmp, b, a);
+  mock_assert_array_int_gt(wrapped_memcmp, a, b);
+  mock_assert_array_int_lte(wrapped_memcmp, a, a);
+  mock_assert_array_int_lte(wrapped_memcmp, b, a);
+  mock_assert_array_int_gte(wrapped_memcmp, a, a);
+  mock_assert_array_int_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_uint_expect_success) {
+  const unsigned a[] = {0};
+  const unsigned b[] = {1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_array_uint_eq(wrapped_memcmp, a, a);
+  mock_expect_once_array_uint_neq(wrapped_memcmp, a, b);
+  mock_expect_once_array_uint_lt(wrapped_memcmp, b, a);
+  mock_expect_once_array_uint_gt(wrapped_memcmp, a, b);
+  mock_expect_once_array_uint_lte(wrapped_memcmp, a, a);
+  mock_expect_once_array_uint_lte(wrapped_memcmp, b, a);
+  mock_expect_once_array_uint_gte(wrapped_memcmp, a, a);
+  mock_expect_once_array_uint_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_expect_array_uint_eq(wrapped_memcmp, a, a);
+  mock_expect_array_uint_neq(wrapped_memcmp, a, b);
+  mock_expect_array_uint_lt(wrapped_memcmp, b, a);
+  mock_expect_array_uint_gt(wrapped_memcmp, a, b);
+  mock_expect_array_uint_lte(wrapped_memcmp, a, a);
+  mock_expect_array_uint_lte(wrapped_memcmp, b, a);
+  mock_expect_array_uint_gte(wrapped_memcmp, a, a);
+  mock_expect_array_uint_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_uint_expect_failure) {
+  const unsigned a[] = {0};
+  const unsigned b[] = {1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_array_uint_eq(wrapped_memcmp, a, b);
+  mock_expect_once_array_uint_neq(wrapped_memcmp, a, a);
+  mock_expect_once_array_uint_gt(wrapped_memcmp, a, a);
+  mock_expect_once_array_uint_gt(wrapped_memcmp, b, a);
+  mock_expect_once_array_uint_lt(wrapped_memcmp, a, a);
+  mock_expect_once_array_uint_lt(wrapped_memcmp, a, b);
+  mock_expect_once_array_uint_gte(wrapped_memcmp, b, a);
+  mock_expect_once_array_uint_lte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_uint_assert) {
+  const unsigned a[] = {0};
+  const unsigned b[] = {1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_assert_once_array_uint_eq(wrapped_memcmp, a, a);
+  mock_assert_once_array_uint_neq(wrapped_memcmp, a, b);
+  mock_assert_once_array_uint_lt(wrapped_memcmp, b, a);
+  mock_assert_once_array_uint_gt(wrapped_memcmp, a, b);
+  mock_assert_once_array_uint_lte(wrapped_memcmp, a, a);
+  mock_assert_once_array_uint_lte(wrapped_memcmp, b, a);
+  mock_assert_once_array_uint_gte(wrapped_memcmp, a, a);
+  mock_assert_once_array_uint_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_assert_array_uint_eq(wrapped_memcmp, a, a);
+  mock_assert_array_uint_neq(wrapped_memcmp, a, b);
+  mock_assert_array_uint_lt(wrapped_memcmp, b, a);
+  mock_assert_array_uint_gt(wrapped_memcmp, a, b);
+  mock_assert_array_uint_lte(wrapped_memcmp, a, a);
+  mock_assert_array_uint_lte(wrapped_memcmp, b, a);
+  mock_assert_array_uint_gte(wrapped_memcmp, a, a);
+  mock_assert_array_uint_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_ptr_expect_success) {
+  const char *arr[2];
+  const void *a[] = {arr};
+  const void *b[] = {arr + 1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_array_ptr_eq(wrapped_memcmp, a, a);
+  mock_expect_once_array_ptr_neq(wrapped_memcmp, a, b);
+  mock_expect_once_array_ptr_lt(wrapped_memcmp, b, a);
+  mock_expect_once_array_ptr_gt(wrapped_memcmp, a, b);
+  mock_expect_once_array_ptr_lte(wrapped_memcmp, a, a);
+  mock_expect_once_array_ptr_lte(wrapped_memcmp, b, a);
+  mock_expect_once_array_ptr_gte(wrapped_memcmp, a, a);
+  mock_expect_once_array_ptr_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_expect_array_ptr_eq(wrapped_memcmp, a, a);
+  mock_expect_array_ptr_neq(wrapped_memcmp, a, b);
+  mock_expect_array_ptr_lt(wrapped_memcmp, b, a);
+  mock_expect_array_ptr_gt(wrapped_memcmp, a, b);
+  mock_expect_array_ptr_lte(wrapped_memcmp, a, a);
+  mock_expect_array_ptr_lte(wrapped_memcmp, b, a);
+  mock_expect_array_ptr_gte(wrapped_memcmp, a, a);
+  mock_expect_array_ptr_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_ptr_expect_failure) {
+  const char *arr[2];
+  const void *a[] = {arr};
+  const void *b[] = {arr + 1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_expect_once_array_ptr_eq(wrapped_memcmp, a, b);
+  mock_expect_once_array_ptr_neq(wrapped_memcmp, a, a);
+  mock_expect_once_array_ptr_gt(wrapped_memcmp, a, a);
+  mock_expect_once_array_ptr_gt(wrapped_memcmp, b, a);
+  mock_expect_once_array_ptr_lt(wrapped_memcmp, a, a);
+  mock_expect_once_array_ptr_lt(wrapped_memcmp, a, b);
+  mock_expect_once_array_ptr_gte(wrapped_memcmp, b, a);
+  mock_expect_once_array_ptr_lte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+TEST(mock_array_ptr_assert) {
+  const char *arr[2];
+  const void *a[] = {arr};
+  const void *b[] = {arr + 1};
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+  mock_assert_once_array_ptr_eq(wrapped_memcmp, a, a);
+  mock_assert_once_array_ptr_neq(wrapped_memcmp, a, b);
+  mock_assert_once_array_ptr_lt(wrapped_memcmp, b, a);
+  mock_assert_once_array_ptr_gt(wrapped_memcmp, a, b);
+  mock_assert_once_array_ptr_lte(wrapped_memcmp, a, a);
+  mock_assert_once_array_ptr_lte(wrapped_memcmp, b, a);
+  mock_assert_once_array_ptr_gte(wrapped_memcmp, a, a);
+  mock_assert_once_array_ptr_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+  wrapped_memcmp(b, a, 1);
+  mock_assert_array_ptr_eq(wrapped_memcmp, a, a);
+  mock_assert_array_ptr_neq(wrapped_memcmp, a, b);
+  mock_assert_array_ptr_lt(wrapped_memcmp, b, a);
+  mock_assert_array_ptr_gt(wrapped_memcmp, a, b);
+  mock_assert_array_ptr_lte(wrapped_memcmp, a, a);
+  mock_assert_array_ptr_lte(wrapped_memcmp, b, a);
+  mock_assert_array_ptr_gte(wrapped_memcmp, a, a);
+  mock_assert_array_ptr_gte(wrapped_memcmp, a, b);
+  wrapped_memcmp(a, b, 1);
+}
+
 GROUP(mock) = {
-  P_TEST(mock_basic),  P_TEST(mock_grouped), P_TEST(mock_return),
-  P_TEST(mock_expect), P_TEST(mock_assert),  P_TEST(mock_reset),
+  P_TEST(mock_grouped),
+  P_TEST(mock_return),
+  P_TEST(mock_reset),
+  P_TEST(mock_char_expect_success),
+  P_TEST(mock_char_assert),
+  P_TEST(mock_int_expect_success),
+  P_TEST(mock_int_assert),
+  P_TEST(mock_uint_expect_success),
+  P_TEST(mock_uint_assert),
+  P_TEST(mock_ptr_expect_success),
+  P_TEST(mock_ptr_assert),
+  P_TEST(mock_str_expect_success),
+  P_TEST(mock_str_assert),
+  P_TEST(mock_memory_char_expect_success),
+  P_TEST(mock_memory_char_assert),
+  P_TEST(mock_memory_int_expect_success),
+  P_TEST(mock_memory_int_assert),
+  P_TEST(mock_memory_uint_expect_success),
+  P_TEST(mock_memory_uint_assert),
+  P_TEST(mock_memory_ptr_expect_success),
+  P_TEST(mock_memory_ptr_assert),
+  P_TEST(mock_array_char_expect_success),
+  P_TEST(mock_array_char_assert),
+  P_TEST(mock_array_int_expect_success),
+  P_TEST(mock_array_int_assert),
+  P_TEST(mock_array_uint_expect_success),
+  P_TEST(mock_array_uint_assert),
+  P_TEST(mock_array_ptr_expect_success),
+  P_TEST(mock_array_ptr_assert),
 };
 
 TEST(char_expect_success) {
@@ -639,6 +1452,7 @@ TEST(memory_char_expect_success) {
   const char a1[] = {'a'};
   const char a2[] = {'b'};
   expect_memory_char_eq(a1, a1, 1);
+  expect_memory_char_neq(a1, a2, 1);
   expect_memory_char_lt(a1, a2, 1);
   expect_memory_char_gt(a2, a1, 1);
   expect_memory_char_lte(a1, a1, 1);
@@ -674,6 +1488,7 @@ TEST(memory_int_expect_success) {
   const int a1[] = {-2};
   const int a2[] = {-1};
   expect_memory_int_eq(a1, a1, 1);
+  expect_memory_int_neq(a1, a2, 1);
   expect_memory_int_lt(a1, a2, 1);
   expect_memory_int_gt(a2, a1, 1);
   expect_memory_int_lte(a1, a1, 1);
@@ -793,20 +1608,27 @@ TEST(pass_and_fail) {
 }
 
 GROUP(failure) = {
-  P_TEST(char_expect_failure),
-  P_TEST(int_expect_failure),
-  P_TEST(uint_expect_failure),
-  P_TEST(ptr_expect_failure),
-  P_TEST(str_expect_failure),
-  P_TEST(array_char_expect_failure),
-  P_TEST(array_int_expect_failure),
-  P_TEST(array_uint_expect_failure),
-  P_TEST(array_ptr_expect_failure),
-  P_TEST(memory_char_expect_failure),
-  P_TEST(memory_int_expect_failure),
-  P_TEST(memory_uint_expect_failure),
-  P_TEST(memory_ptr_expect_failure),
-  P_TEST(pass_and_fail),
-  P_TEST(mock_failure),
+  P_TEST(char_expect_failure),       P_TEST(int_expect_failure),
+  P_TEST(uint_expect_failure),       P_TEST(ptr_expect_failure),
+  P_TEST(str_expect_failure),        P_TEST(array_char_expect_failure),
+  P_TEST(array_int_expect_failure),  P_TEST(array_uint_expect_failure),
+  P_TEST(array_ptr_expect_failure),  P_TEST(memory_char_expect_failure),
+  P_TEST(memory_int_expect_failure), P_TEST(memory_uint_expect_failure),
+  P_TEST(memory_ptr_expect_failure), P_TEST(pass_and_fail),
+};
+GROUP(mock_failure) = {
+  P_TEST(mock_char_expect_failure),
+  P_TEST(mock_int_expect_failure),
+  P_TEST(mock_uint_expect_failure),
+  P_TEST(mock_ptr_expect_failure),
+  P_TEST(mock_str_expect_failure),
+  P_TEST(mock_memory_char_expect_failure),
+  P_TEST(mock_memory_int_expect_failure),
+  P_TEST(mock_memory_uint_expect_failure),
+  P_TEST(mock_memory_ptr_expect_failure),
+  P_TEST(mock_array_char_expect_failure),
+  P_TEST(mock_array_int_expect_failure),
+  P_TEST(mock_array_uint_expect_failure),
+  P_TEST(mock_array_ptr_expect_failure),
 };
 
