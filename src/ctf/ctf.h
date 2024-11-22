@@ -366,7 +366,7 @@ COMB(`MACRO_ALIAS',
   MOCK(ret_type, name, typed, args), EXTERN_MOCK(ret_type, name, typed),
   MOCK_BIND(fn, mock), MOCK_GROUP(name), EXTERN_MOCK_GROUP(name))')
 COMB(`ALIAS',
-`(mock(name, f), mock_group(name), mock_call_count(name),
+`(mock(name, f), unmock(f), mock_group(name), mock_call_count(name),
   mock_will_return(name, val), mock_will_return_once(name, val))')
 EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `EA_ALIAS')
 EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_MEMORY_ALIAS')

@@ -57,6 +57,11 @@ TEST(mock_return) {
 TEST(mock_reset) {
   expect_int_eq(3, add(1, 2));
   expect_int_eq(0, mock_call_count(add));
+  mock(add, mock_add);
+  add(1, 2);
+  unmock(add);
+  add(3, 4);
+  expect_int_eq(1, mock_call_count(add));
 }
 
 TEST(mock_char_expect_success) {
