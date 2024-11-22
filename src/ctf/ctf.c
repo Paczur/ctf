@@ -1,14 +1,14 @@
 #include "ctf.h"
 
+#include <stdarg.h>
+#include <stdlib.h>
+#include <unistd.h>
+
 include(`base.m4')
 
 #ifndef CTF_NO_SIGNAL
 #include <signal.h>
 #endif
-#include <pthread.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <unistd.h>
 #define IS_TTY !isatty(STDOUT_FILENO)
 
 #define HELP_MSG                                                             \
@@ -60,14 +60,14 @@ static int detail = 1;
 int ctf_exit_code = 0;
 
 static char signal_stack[SIGNAL_STACK_SIZE];
-static pthread_mutex_t parallel_print_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_t parallel_threads[CTF_CONST_MAX_THREADS];
+static mtx_t parallel_print_mutex;
+static thrd_t parallel_threads[CTF_CONST_MAX_THREADS];
 static int parallel_threads_waiting = 0;
 static struct ctf_internal_group parallel_task_queue[TASK_QUEUE_MAX] = {0};
-static pthread_mutex_t parallel_task_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t parallel_threads_waiting_all = PTHREAD_COND_INITIALIZER;
-static pthread_cond_t parallel_task_queue_non_empty = PTHREAD_COND_INITIALIZER;
-static pthread_cond_t parallel_task_queue_non_full = PTHREAD_COND_INITIALIZER;
+static mtx_t parallel_task_queue_mutex;
+static cnd_t parallel_threads_waiting_all;
+static cnd_t parallel_task_queue_non_empty;
+static cnd_t parallel_task_queue_non_full;
 static int parallel_state = 0;
 static struct ctf_internal_state parallel_states[CTF_CONST_MAX_THREADS]
                                                 [CTF_CONST_STATES_PER_THREAD];
@@ -571,9 +571,9 @@ static void assert_copy(struct ctf_internal_state *state, int line,
 }
 
 static int parallel_get_thread_index(void) {
-  const pthread_t thread = pthread_self();
+  const thrd_t thread = thrd_current();
   for(int i = 0; i < opt_threads; i++) {
-    if(pthread_equal(parallel_threads[i], thread)) {
+    if(thrd_equal(parallel_threads[i], thread)) {
       return i;
     }
   }
@@ -586,18 +586,17 @@ static void *parallel_thread_loop(void *data) {
   ctf_internal_parallel_thread_index = parallel_get_thread_index();
   ctf_internal_states = parallel_states[ctf_internal_parallel_thread_index];
   while(1) {
-    pthread_mutex_lock(&parallel_task_queue_mutex);
+    mtx_lock(&parallel_task_queue_mutex);
     if(parallel_task_queue[0].tests == NULL) {
       if(parallel_threads_waiting == opt_threads - 1)
-        pthread_cond_signal(&parallel_threads_waiting_all);
+        cnd_signal(&parallel_threads_waiting_all);
       parallel_threads_waiting++;
       while(parallel_task_queue[0].tests == NULL && parallel_state) {
-        pthread_cond_wait(&parallel_task_queue_non_empty,
-                          &parallel_task_queue_mutex);
+        cnd_wait(&parallel_task_queue_non_empty, &parallel_task_queue_mutex);
       }
       parallel_threads_waiting--;
       if(parallel_task_queue[0].tests == NULL && !parallel_state) {
-        pthread_mutex_unlock(&parallel_task_queue_mutex);
+        mtx_unlock(&parallel_task_queue_mutex);
         return NULL;
       }
     }
@@ -606,22 +605,21 @@ static void *parallel_thread_loop(void *data) {
         i < TASK_QUEUE_MAX - 1 && parallel_task_queue[i].tests != NULL; i++) {
       parallel_task_queue[i] = parallel_task_queue[i + 1];
     }
-    pthread_cond_signal(&parallel_task_queue_non_full);
-    pthread_mutex_unlock(&parallel_task_queue_mutex);
+    cnd_signal(&parallel_task_queue_non_full);
+    mtx_unlock(&parallel_task_queue_mutex);
     group_run_helper(group, print_buff[ctf_internal_parallel_thread_index]);
-    pthread_mutex_lock(&parallel_print_mutex);
+    mtx_lock(&parallel_print_mutex);
     printf("%s", print_buff[ctf_internal_parallel_thread_index]);
     print_buff[ctf_internal_parallel_thread_index][0] = 0;
     fflush(stdout);
-    pthread_mutex_unlock(&parallel_print_mutex);
+    mtx_unlock(&parallel_print_mutex);
   }
 }
 
 static void parallel_group_run(struct ctf_internal_group group) {
-  pthread_mutex_lock(&parallel_task_queue_mutex);
+  mtx_lock(&parallel_task_queue_mutex);
   while(parallel_task_queue[TASK_QUEUE_MAX - 1].tests != NULL) {
-    pthread_cond_wait(&parallel_task_queue_non_full,
-                      &parallel_task_queue_mutex);
+    cnd_wait(&parallel_task_queue_non_full, &parallel_task_queue_mutex);
   }
   for(int i = 0; i < TASK_QUEUE_MAX; i++) {
     if(parallel_task_queue[i].tests == NULL) {
@@ -629,19 +627,18 @@ static void parallel_group_run(struct ctf_internal_group group) {
       break;
     }
   }
-  pthread_cond_signal(&parallel_task_queue_non_empty);
-  pthread_mutex_unlock(&parallel_task_queue_mutex);
+  cnd_signal(&parallel_task_queue_non_empty);
+  mtx_unlock(&parallel_task_queue_mutex);
 }
 
 static void parallel_groups_run(int count, va_list args) {
   struct ctf_internal_group group;
 
-  pthread_mutex_lock(&parallel_task_queue_mutex);
+  mtx_lock(&parallel_task_queue_mutex);
   for(int j = 0; j < count; j++) {
     group = va_arg(args, struct ctf_internal_group);
     while(parallel_task_queue[TASK_QUEUE_MAX - 1].tests != NULL) {
-      pthread_cond_wait(&parallel_task_queue_non_full,
-                        &parallel_task_queue_mutex);
+      cnd_wait(&parallel_task_queue_non_full, &parallel_task_queue_mutex);
     }
     for(int i = 0; i < TASK_QUEUE_MAX; i++) {
       if(parallel_task_queue[i].tests == NULL) {
@@ -650,8 +647,8 @@ static void parallel_groups_run(int count, va_list args) {
       }
     }
   }
-  pthread_cond_broadcast(&parallel_task_queue_non_empty);
-  pthread_mutex_unlock(&parallel_task_queue_mutex);
+  cnd_broadcast(&parallel_task_queue_non_empty);
+  mtx_unlock(&parallel_task_queue_mutex);
 }
 
 #define EXPECT_END                                               \
@@ -893,6 +890,11 @@ COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
 // clang-format on
 __attribute__((constructor)) void ctf_internal_premain(int argc,
                                                          char *argv[]) {
+  mtx_init(&parallel_print_mutex, mtx_plain);
+  mtx_init(&parallel_task_queue_mutex, mtx_plain);
+  cnd_init(&parallel_threads_waiting_all);
+  cnd_init(&parallel_task_queue_non_empty);
+  cnd_init(&parallel_task_queue_non_full);
   for(int i = 1; i < argc; i++) {
     if(argv[i][0] != '-') err();
     if(!strcmp(argv[i] + 1, "h") || !strcmp(argv[i] + 1, "-help")) {
@@ -950,30 +952,29 @@ __attribute__((constructor)) void ctf_internal_premain(int argc,
 void ctf_parallel_sync(void) {
   if(opt_threads == 1) return;
   if(!parallel_state) return;
-  pthread_mutex_lock(&parallel_task_queue_mutex);
+  mtx_lock(&parallel_task_queue_mutex);
   while(parallel_threads_waiting != opt_threads ||
         parallel_task_queue[0].tests != NULL) {
-    pthread_cond_wait(&parallel_threads_waiting_all,
-                      &parallel_task_queue_mutex);
+    cnd_wait(&parallel_threads_waiting_all, &parallel_task_queue_mutex);
   }
   fflush(stdout);
-  pthread_mutex_unlock(&parallel_task_queue_mutex);
+  mtx_unlock(&parallel_task_queue_mutex);
 }
 void ctf_parallel_start(void) {
   if(opt_threads == 1) return;
   parallel_state = 1;
   for(int i = 0; i < opt_threads; i++) {
-    pthread_create(parallel_threads + i, NULL, parallel_thread_loop, NULL);
+    thrd_create(parallel_threads + i, parallel_thread_loop, NULL);
   }
 }
 void ctf_parallel_stop(void) {
   if(opt_threads == 1) return;
   parallel_state = 0;
-  pthread_mutex_lock(&parallel_task_queue_mutex);
-  pthread_cond_broadcast(&parallel_task_queue_non_empty);
-  pthread_mutex_unlock(&parallel_task_queue_mutex);
+  mtx_lock(&parallel_task_queue_mutex);
+  cnd_broadcast(&parallel_task_queue_non_empty);
+  mtx_unlock(&parallel_task_queue_mutex);
   for(int i = 0; i < opt_threads; i++) {
-    pthread_join(parallel_threads[i], NULL);
+    thrd_join(parallel_threads[i], NULL);
   }
 }
 void ctf_internal_group_run(const struct ctf_internal_group group) {
