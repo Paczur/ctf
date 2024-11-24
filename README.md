@@ -7,7 +7,8 @@ wide support of asserts and expects while maintaing clutter-free prints.
 - Wide selection of asserts
 - Only useful information about passed tests
 - Expects
-- (optional) Parallel group execution
+- Parallel group execution
+- Mocks
 
 Not yet implemented:
 - Support for other operating systems than linux
@@ -32,9 +33,25 @@ int main(void) {
     return ctf_exit_code;
 }
 ```
+#### MOCKS
+```
+CTF_MOCK(int, add, (int a, int b), (a, b))
+
+int mock_add(int a, int b) {
+    mock_check_int(add, a);
+    mock_check_int(add, b);
+    return a+b;
+}
+
+TEST(mocked_add) {
+    ctf_mock(add, mock_add);
+    mock_expect_char_eq(add, a, 1);
+    mock_expect_char_eq(add, a, 2);
+    add(1, 2);
+}
+```
 #### Parallel execution of tests
 ```
-#define CTF_PARALLEL 4 //Number of threads in threadpool
 static int add(int a, int b) {
     return a+b;
 }
@@ -61,22 +78,27 @@ set errorformat^=%.%#[%f\|%l\|%t]\ %m,
 
 ### Building
 #### Prerequisites
-- C99 or newer
-- `__thread`(GCC/Clang) or `_Thread_local`(C11) support
+- C11
 - `__attribute__((constructor))`(GCC/Clang) support
-- pthreads
 #### Notes
-Framework is distributed as source and header pair, compiling source requires
-linking with pthreads.
+Framework is distributed as source and header pair.
 
 ### Documentation
 #### Declarations and definitions
 ```
 #define CTF_ALIASES // creates aliasses to commonly used functions and macros without ctf_ prefix
 CTF_TEST(name) {} // test creation
+CTF_P_TEST(name) //test pointer (used in making group)
 CTF_GROUP(group_name, test1, test2, ...) // group creation
 CTF_EXTERN_TEST(name); // external definition for test
 CTF_EXTERN_GROUP(group_name); // external definition for group
+CTF_P_GROUP(name) // group pointer (used in groups_run)
+
+CTF_MOCK(ret_type, fn_name, (typed_args), (untyped_args))
+CTF_EXTERN_MOCK(ret_type, fn_name, (typed_args))
+CTF_MOCK_BIND(fn_to_mock, mock) // Binding of mock to functions (used in MOCK_GROUP)
+CTF_MOCK_GROUP(name)
+CTF_EXTERN_MOCK_GROUP(name)
 ```
 #### Execution control
 ```
@@ -84,6 +106,7 @@ ctf_group_run(&group_name); // run singular group
 ctf_groups_run(&group_name1, &group_name2, ...); // run multiple groups
 ctf_exit_code; // combined group status
 ctf_barrier(); // syncs threads and then returns depending on ctf_exit_code
+ctf_sigsegv_handler(unused); // used only when compiled with CTF_NO_SIGNAL
 
 ctf_parallel_start(); // starts threads
 ctf_parallel_stop(); // waits for threads and then stops them
@@ -96,7 +119,7 @@ ctf_parallel_sync(); // waits for threads to finnish all tasks
  *   int - uses intmax_t for storage and display
  *   uint - uses uintmax_t for storage and display
  *   ptr
- *   string - not present for array/memory asserts
+ *   str - not present for array/memory asserts
  * valid comparisons:
  *   eq - equal
  *   neq - not equal
@@ -118,13 +141,34 @@ ctf_assert(test);
 ctf_expect_msg(test, msg);
 ctf_expect(test);
 
-ctf_assert_true(a);
-ctf_assert_false(a);
-ctf_expect_true(a);
-ctf_expect_false(a);
-
 ctf_fail(msg); // Failes test with message
 ctf_pass(msg); // Adds passed test with message
+```
+#### Mocks
+```
+ctf_mock(fn_to_mock, fn);
+ctf_unmock(fn_mocked);
+ctf_mock_call_count(mocked_fn)
+ctf_mock_will_return(mocked_fn, val);
+ctf_mock_will_return_once(mocked_fn, val);
+
+ctf_mock_check_[type]_[comparison](fn_mocked, id);
+ctf_mock_check_memory_[type]_[comparison](fn_mocked, id);
+// Using ctf_mock_check_memory or ctf_mock_check_str creates ctf_mock_check_ptr
+
+ctf_mock_assert_[type]_[comparison](fn_mocked, id, value);
+ctf_mock_assert_memory_[type]_[comparison](fn_mocked, id, value, length);
+ctf_mock_assert_array_[type]_[comparison](fn_mocked, id, value);
+ctf_mock_assert_once_[type]_[comparison](fn_mocked, id, value);
+ctf_mock_assert_once_memory_[type]_[comparison](fn_mocked, id, value, length);
+ctf_mock_assert_once_array_[type]_[comparison](fn_mocked, id, value);
+
+ctf_mock_expect_[type]_[comparison](fn_mocked, id, value);
+ctf_mock_expect_memory_[type]_[comparison](fn_mocked, id, value, length);
+ctf_mock_expect_array_[type]_[comparison](fn_mocked, id, value);
+ctf_mock_expect_once_[type]_[comparison](fn_mocked, id, value);
+ctf_mock_expect_once_memory_[type]_[comparison](fn_mocked, id, value, length);
+ctf_mock_expect_once_array_[type]_[comparison](fn_mocked, id, value);
 ```
 #### Configuration
 Specified when:
@@ -138,4 +182,5 @@ Specified when:
 -d, --detail   (off|on|auto*) detailed info about failed tests
 -f, --failed   Print only groups that failed
 -j, --jobs     Number of parallel threads to run (default 1)
+-s, --sigsegv  Don't register SIGSEGV handler
 ```

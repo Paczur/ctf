@@ -20,17 +20,11 @@ include(`base.m4')
 #define CTF_CONST_GROUP_SIZE 128
 #define CTF_CONST_MOCK_GROUP_SIZE 64
 #define CTF_CONST_MOCK_CHECKS_PER_TEST 32
-
-#define CTF_INTERNAL_MOCK_TYPE_uint u
-#define CTF_INTERNAL_MOCK_TYPE_int i
-#define CTF_INTERNAL_MOCK_TYPE_ptr p
-#define CTF_INTERNAL_MOCK_TYPE_str p
-#define CTF_INTERNAL_MOCK_TYPE_char c
+#define CTF_CONST_SIGNAL_STACK_SIZE 1024
 
 #define CTF_INTERNAL_MOCK_TYPE_ASSERT 1
 #define CTF_INTERNAL_MOCK_TYPE_ONCE 2
 #define CTF_INTERNAL_MOCK_TYPE_MEMORY 4
-#define CTF_INTERNAL_MOCK_TYPE_ARRAY 8
 
 #define CTF_INTERNAL_STRINGIFY(x) #x
 #define CTF_INTERNAL_STRINGIFY2(x) CTF_INTERNAL_STRINGIFY(x)
@@ -64,20 +58,18 @@ struct ctf_internal_check {
              const char *);
     int (*m)(const void *, const void *, size_t, size_t, int, const char *,
              const char *, int, const char *);
-    int (*a)(const void *, const void *, size_t, size_t, size_t, int,
-             const char *, const char *, int, const char *);
   } f;
   int type;
+  size_t length;
+  int line;
+  const char *file;
+  const char *print_var;
   union {
     uintmax_t u;
     intmax_t i;
     char c;
     const void *p;
   } val;
-  size_t length;
-  int line;
-  const char *file;
-  const char *print_var;
 };
 struct ctf_internal_mock_state {
   const void *mock_f;
@@ -112,6 +104,7 @@ void ctf_internal_groups_run(int count, ...);
       sizeof(const struct ctf_internal_group),                 \
     __VA_ARGS__)
 void ctf_sigsegv_handler(int unused);
+extern char ctf_signal_altstack[CTF_CONST_SIGNAL_STACK_SIZE];
 void ctf_parallel_start(void);
 void ctf_parallel_stop(void);
 void ctf_parallel_sync(void);
@@ -123,11 +116,6 @@ void ctf_parallel_sync(void);
       return ctf_exit_code; \
     }                       \
   } while(0)
-
-int ctf_internal_fail(const char *, int, const char *);
-int ctf_internal_pass(const char *, int, const char *);
-int ctf_internal_expect_msg(int, const char *, int, const char *);
-int ctf_internal_expect_true(int, const char *, int, const char *);
 
 #define CTF_EXTERN_TEST(name)                        \
   extern const char ctf_internal_test_name_##name[]; \
@@ -214,8 +202,13 @@ int ctf_internal_expect_true(int, const char *, int, const char *);
 
 int ctf_internal_pass(const char *, int, const char *);
 int ctf_internal_fail(const char *, int, const char *);
+int ctf_internal_expect_msg(int, const char *, int, const char *);
 #define ctf_pass(m) ctf_internal_pass(m, __LINE__, __FILE__)
 #define ctf_fail(m) ctf_internal_fail(m, __LINE__, __FILE__)
+#define ctf_expect_msg(m) \
+  CTF_INTERNAL_EXPECT(ctf_internal_expect_msg, m, __LINE__, __FILE__)
+#define ctf_assert_msg(m) \
+  CTF_INTERNAL_ASSERT(ctf_internal_assert_msg, m, __LINE__, __FILE__)
 
 // clang-format off
 /*
@@ -334,13 +327,12 @@ void ctf_internal_mock_memory(struct ctf_internal_mock *mock, int type,
   } while(0)
 
 #if CTF_ALIASES == CTF_ON
-#define CTF_INTERNAL_EXPECT(f, ...) \
-  if(ctf_internal_state_index < CTF_CONST_STATES_PER_THREAD) f(__VA_ARGS__)
-#define CTF_INTERNAL_ASSERT(f, ...)                                            \
-  do {                                                                         \
-    if(ctf_internal_state_index < CTF_CONST_STATES_PER_THREAD) f(__VA_ARGS__); \
-    if(ctf_internal_states[ctf_internal_state_index - 1].status) return;       \
+#define CTF_INTERNAL_ASSERT(f, ...)                                      \
+  do {                                                                   \
+    f(__VA_ARGS__);                                                      \
+    if(ctf_internal_states[ctf_internal_state_index - 1].status) return; \
   } while(0)
+#define CTF_INTERNAL_EXPECT(f, ...) f(__VA_ARGS__)
 // clang-format off
 /*
 define(`ALIAS', `#define $1 ctf_$1
