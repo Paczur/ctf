@@ -463,8 +463,7 @@ static size_t print_arr(struct ctf_internal_state *state, size_t index,
 static size_t print_mem(struct ctf_internal_state *state, const void *a,
                         const void *b, size_t la, size_t lb, size_t step,
                         int sign, const char *a_str, const char *b_str,
-                        const char *op_str, const char *format, int line,
-                        const char *file) {
+                        const char *op_str, const char *format) {
   size_t index;
   int status = memcmp(a, b, MIN(la, lb) * step);
   index = snprintf(state->msg, CTF_CONST_STATE_MSG_SIZE, "%s %s %s ({", a_str,
@@ -748,7 +747,7 @@ const char *a_str, const char *b_str, int line, const char *file) {       \
     assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,     \
                 file);                                                        \
     print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, l, l, \
-              step, sign, a_str, b_str, "$4", $5 ", ", line, file);        \
+              step, sign, a_str, b_str, "$4", $5 ", ");        \
     status = ctf_internal_states[ctf_internal_state_index - 1].status $4 0;   \
     ctf_internal_states[ctf_internal_state_index - 1].status = !status;       \
     return status;                                                            \
@@ -764,7 +763,7 @@ define(`EXPECT_ARRAY_HELPER',
   assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,   \
               file);                                                      \
   print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, la, \
-            lb, step, sign, a_str, b_str, "$4", $5 ", ", line, file);  \
+            lb, step, sign, a_str, b_str, "$4", $5 ", ");  \
   if(ctf_internal_states[ctf_internal_state_index - 1].status == 0) {     \
     status = (la $4 lb);                                                  \
   } else {                                                                \
@@ -927,7 +926,8 @@ __attribute__((constructor)) void ctf_internal_premain(int argc,
               &(struct sigaction){.sa_handler = ctf_sigsegv_handler,
                                   .sa_flags = SA_ONSTACK | SA_RESETHAND},
               NULL);
-    sigaltstack(&(stack_t){.ss_sp = signal_stack, .ss_size = SIGNAL_STACK_SIZE},
+    sigaltstack(&(stack_t){.ss_sp = ctf_signal_altstack,
+                           .ss_size = CTF_CONST_SIGNAL_STACK_SIZE},
                 NULL);
   }
 }
