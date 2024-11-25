@@ -119,84 +119,97 @@ void ctf_parallel_sync(void);
 
 #define CTF_EXTERN_TEST(name)                        \
   extern const char ctf_internal_test_name_##name[]; \
-  void name(void)
+  void ctf_internal_test_fn_##name(void)
 #define CTF_TEST(name)                                \
   const char ctf_internal_test_name_##name[] = #name; \
-  void name(void)
-#define CTF_P_TEST(name) \
-  (const struct ctf_internal_test) { name, ctf_internal_test_name_##name }
+  void ctf_internal_test_fn_##name(void)
+#define CTF_P_TEST(name)                                       \
+  (const struct ctf_internal_test) {                           \
+    ctf_internal_test_fn_##name, ctf_internal_test_name_##name \
+  }
 #define CTF_EXTERN_GROUP(name)                        \
   extern const char ctf_internal_group_name_##name[]; \
-  extern const struct ctf_internal_test name[CTF_CONST_GROUP_SIZE];
+  extern const struct ctf_internal_test               \
+    ctf_internal_group_st_##name[CTF_CONST_GROUP_SIZE];
 #define CTF_GROUP(name)                                \
   const char ctf_internal_group_name_##name[] = #name; \
-  const struct ctf_internal_test name[CTF_CONST_GROUP_SIZE]
-#define CTF_P_GROUP(name) \
-  (const struct ctf_internal_group) { name, ctf_internal_group_name_##name }
+  const struct ctf_internal_test                       \
+    ctf_internal_group_st_##name[CTF_CONST_GROUP_SIZE]
+#define CTF_P_GROUP(name)                                        \
+  (const struct ctf_internal_group) {                            \
+    ctf_internal_group_st_##name, ctf_internal_group_name_##name \
+  }
 
-#define CTF_MOCK(ret_type, name, typed, args)                              \
-  ret_type ctf_internal_mock_return_##name[CTF_CONST_MAX_THREADS];         \
-  struct ctf_internal_mock ctf_internal_mock_##name;                       \
-  ret_type __real_##name typed;                                            \
-  ret_type __wrap_##name typed {                                           \
-    struct ctf_internal_mock_state *_data =                                \
-      ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index; \
-    ret_type(*const _mock) typed = _data->mock_f;                          \
-    if(_mock == NULL) {                                                    \
-      return __real_##name args;                                           \
-    } else {                                                               \
-      _data->call_count++;                                                 \
-      if(_data->return_override) {                                         \
-        _mock args;                                                        \
-        if(_data->return_override == 2) _data->return_override = 0;        \
-        return ctf_internal_mock_return_##name                             \
-          [ctf_internal_parallel_thread_index];                            \
-      }                                                                    \
-      return _mock args;                                                   \
-    }                                                                      \
+#define CTF_MOCK(ret_type, name, typed, args)                                 \
+  ret_type ctf_internal_mock_return_##name[CTF_CONST_MAX_THREADS];            \
+  struct ctf_internal_mock ctf_internal_mock_st_##name;                       \
+  ret_type __real_##name typed;                                               \
+  ret_type __wrap_##name typed {                                              \
+    struct ctf_internal_mock_state *_data =                                   \
+      ctf_internal_mock_st_##name.state + ctf_internal_parallel_thread_index; \
+    ret_type(*const _mock) typed = _data->mock_f;                             \
+    if(_mock == NULL) {                                                       \
+      return __real_##name args;                                              \
+    } else {                                                                  \
+      _data->call_count++;                                                    \
+      if(_data->return_override) {                                            \
+        _mock args;                                                           \
+        if(_data->return_override == 2) _data->return_override = 0;           \
+        return ctf_internal_mock_return_##name                                \
+          [ctf_internal_parallel_thread_index];                               \
+      }                                                                       \
+      return _mock args;                                                      \
+    }                                                                         \
   }
 #define CTF_EXTERN_MOCK(ret_type, name, typed)                            \
   extern ret_type ctf_internal_mock_return_##name[CTF_CONST_MAX_THREADS]; \
-  extern struct ctf_internal_mock ctf_internal_mock_##name;               \
+  extern struct ctf_internal_mock ctf_internal_mock_st_##name;            \
   ret_type __real_##name typed;                                           \
   ret_type __wrap_##name typed;
 #define CTF_MOCK_BIND(fn, mock) \
-  (struct ctf_internal_mock_bind) { &ctf_internal_mock_##fn, mock }
-#define CTF_MOCK_GROUP(name) \
-  struct ctf_internal_mock_bind name[CTF_CONST_MOCK_GROUP_SIZE]
-#define CTF_EXTERN_MOCK_GROUP(name) \
-  extern struct ctf_internal_mock_state_bind name[CTF_CONST_MOCK_GROUP_SIZE];
-#define ctf_mock_group(name)                                                 \
-  do {                                                                       \
-    for(size_t _i = 0; _i < CTF_CONST_MOCK_GROUP_SIZE && name[_i].f; _i++) { \
-      name[_i].mock->state[ctf_internal_parallel_thread_index].mock_f =      \
-        name[_i].f;                                                          \
-      ctf_internal_mock_reset_queue[ctf_internal_mock_reset_count++] =       \
-        name[_i].mock->state + ctf_internal_parallel_thread_index;           \
-    }                                                                        \
+  (struct ctf_internal_mock_bind) { &ctf_internal_mock_st_##fn, mock }
+#define CTF_MOCK_GROUP(name)    \
+  struct ctf_internal_mock_bind \
+    ctf_internal_mock_group_st_##name[CTF_CONST_MOCK_GROUP_SIZE]
+#define CTF_EXTERN_MOCK_GROUP(name)          \
+  extern struct ctf_internal_mock_state_bind \
+    ctf_internal_mock_group_st_##name[CTF_CONST_MOCK_GROUP_SIZE];
+#define ctf_mock_group(name)                                           \
+  do {                                                                 \
+    for(size_t _i = 0; _i < CTF_CONST_MOCK_GROUP_SIZE &&               \
+                       ctf_internal_mock_group_st_##name[_i].f;        \
+        _i++) {                                                        \
+      ctf_internal_mock_group_st_##name[_i]                            \
+        .mock->state[ctf_internal_parallel_thread_index]               \
+        .mock_f = ctf_internal_mock_group_st_##name[_i].f;             \
+      ctf_internal_mock_reset_queue[ctf_internal_mock_reset_count++] = \
+        ctf_internal_mock_group_st_##name[_i].mock->state +            \
+        ctf_internal_parallel_thread_index;                            \
+    }                                                                  \
   } while(0)
 #define ctf_mock(fn, mock)                                                  \
   do {                                                                      \
     struct ctf_internal_mock_state *const state =                           \
-      ctf_internal_mock_##fn.state + ctf_internal_parallel_thread_index;    \
+      ctf_internal_mock_st_##fn.state + ctf_internal_parallel_thread_index; \
     state->mock_f = mock;                                                   \
     ctf_internal_mock_reset_queue[ctf_internal_mock_reset_count++] = state; \
   } while(0)
-#define ctf_unmock(fn) \
-  ctf_internal_mock_##fn.state[ctf_internal_parallel_thread_index].mock_f = NULL
-#define ctf_mock_call_count(name)                                     \
-  (ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index] \
+#define ctf_unmock(fn)                                                         \
+  ctf_internal_mock_st_##fn.state[ctf_internal_parallel_thread_index].mock_f = \
+    NULL
+#define ctf_mock_call_count(name)                                        \
+  (ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index] \
      .call_count)
 #define ctf_mock_will_return(name, val)                                        \
   do {                                                                         \
     ctf_internal_mock_return_##name[ctf_internal_parallel_thread_index] = val; \
-    ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]         \
+    ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index]      \
       .return_override = 1;                                                    \
   } while(0)
 #define ctf_mock_will_return_once(name, val)                                   \
   do {                                                                         \
     ctf_internal_mock_return_##name[ctf_internal_parallel_thread_index] = val; \
-    ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]         \
+    ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index]      \
       .return_override = 2;                                                    \
   } while(0)
 
@@ -230,14 +243,14 @@ define(`MOCK_EXPECT_ONCE_MEMORY', `#define ctf_mock_expect_once_memory_$1_$2(nam
 define(`MOCK_ASSERT_ONCE_MEMORY', `#define ctf_mock_assert_once_memory_$1_$2(name, var, val, length) CTF_INTERNAL_MOCK_ASSERT_MEMORY($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE, name, #var, val, length);')
 define(`MOCK_EXPECT_ONCE_ARRAY', `#define ctf_mock_expect_once_array_$1_$2(name, var, val) CTF_INTERNAL_MOCK_EXPECT_MEMORY($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE, name, #var, val, sizeof(val)/sizeof(*(val)));')
 define(`MOCK_ASSERT_ONCE_ARRAY', `#define ctf_mock_assert_once_array_$1_$2(name, var, val) CTF_INTERNAL_MOCK_ASSERT_MEMORY($1, $2, CTF_INTERNAL_MOCK_TYPE_ONCE, name, #var, val, sizeof(val)/sizeof(*(val)));')
-define(`MOCK_CHECK', `#define ctf_mock_check_$1(name, v) ctf_internal_mock_check_$1(ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index, v, #v)')
+define(`MOCK_CHECK', `#define ctf_mock_check_$1(name, v) ctf_internal_mock_check_$1(ctf_internal_mock_st_##name.state + ctf_internal_parallel_thread_index, v, #v)')
 define(`MOCK_CHECK_STRING', `#define ctf_mock_check_str(name, v) \
-ctf_internal_mock_check_ptr(ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index, v, #v); \
-ctf_internal_mock_check_str(ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index, v, #v)')
+ctf_internal_mock_check_ptr(ctf_internal_mock_st_##name.state + ctf_internal_parallel_thread_index, v, #v); \
+ctf_internal_mock_check_str(ctf_internal_mock_st_##name.state + ctf_internal_parallel_thread_index, v, #v)')
 define(`MOCK_CHECK_MEMORY',
 `format(`#define ctf_mock_check_memory_$1(name, v) \
-ctf_internal_mock_check_ptr(ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index, v, #v); \
-    ctf_internal_mock_check_memory_$1(ctf_internal_mock_##name.state + ctf_internal_parallel_thread_index, v, #v, sizeof(*(v)), %d)'
+ctf_internal_mock_check_ptr(ctf_internal_mock_st_##name.state + ctf_internal_parallel_thread_index, v, #v); \
+    ctf_internal_mock_check_memory_$1(ctf_internal_mock_st_##name.state + ctf_internal_parallel_thread_index, v, #v, sizeof(*(v)), %d)'
   ,ifelse(`$1',`int',1,0))')
 define(`EA_TEMPLATE', `#define ctf_$3_$1_$2(a, b) CTF_INTERNAL_$4(ctf_internal_expect_$1_$2, a, b, #a, #b, __LINE__, __FILE__)')dnl
 define(`EA_MEMORY_TEMPLATE',
@@ -286,44 +299,44 @@ void ctf_internal_mock_memory(struct ctf_internal_mock *mock, int type,
                               const char *var, const void *val, size_t l);
 
 #define CTF_INTERNAL_MOCK_EXPECT_MEMORY(t, comp, type, name, var, val, l)      \
-  if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]        \
+  if(ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index]     \
        .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                          \
   ctf_internal_mock_memory(                                                    \
-    &ctf_internal_mock_##name, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, __LINE__, \
-    __FILE__, #val, (void *)ctf_internal_expect_memory_##t##_##comp, var, val, \
-    l)
-#define CTF_INTERNAL_MOCK_ASSERT_MEMORY(t, comp, type, name, var, val, l)     \
-  do {                                                                        \
-    if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]     \
-         .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                       \
-      ctf_internal_mock_memory(                                               \
-        &ctf_internal_mock_##name,                                            \
-        type | CTF_INTERNAL_MOCK_TYPE_ASSERT | CTF_INTERNAL_MOCK_TYPE_MEMORY, \
-        __LINE__, __FILE__, #val,                                             \
-        (void *)ctf_internal_expect_memory_##t##_##comp, var, val, l);        \
-    if(setjmp(                                                                \
-         ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]   \
-           .assert_jump))                                                     \
-      return;                                                                 \
+    &ctf_internal_mock_st_##name, type | CTF_INTERNAL_MOCK_TYPE_MEMORY,        \
+    __LINE__, __FILE__, #val, (void *)ctf_internal_expect_memory_##t##_##comp, \
+    var, val, l)
+#define CTF_INTERNAL_MOCK_ASSERT_MEMORY(t, comp, type, name, var, val, l)      \
+  do {                                                                         \
+    if(ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index]   \
+         .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                        \
+      ctf_internal_mock_memory(                                                \
+        &ctf_internal_mock_st_##name,                                          \
+        type | CTF_INTERNAL_MOCK_TYPE_ASSERT | CTF_INTERNAL_MOCK_TYPE_MEMORY,  \
+        __LINE__, __FILE__, #val,                                              \
+        (void *)ctf_internal_expect_memory_##t##_##comp, var, val, l);         \
+    if(setjmp(                                                                 \
+         ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index] \
+           .assert_jump))                                                      \
+      return;                                                                  \
   } while(0)
-#define CTF_INTERNAL_MOCK_EXPECT(t, comp, type, name, var, val)              \
-  if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]      \
-       .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                        \
-  ctf_internal_mock_##t(&ctf_internal_mock_##name, type, __LINE__, __FILE__, \
-                        #val, (void *)ctf_internal_expect_##t##_##comp, var, \
-                        val)
-#define CTF_INTERNAL_MOCK_ASSERT(t, comp, type, name, var, val)             \
-  do {                                                                      \
-    if(ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index]   \
-         .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                     \
-      ctf_internal_mock_##t(                                                \
-        &ctf_internal_mock_##name, type | CTF_INTERNAL_MOCK_TYPE_ASSERT,    \
-        __LINE__, __FILE__, #val, (void *)ctf_internal_expect_##t##_##comp, \
-        var, val);                                                          \
-    if(setjmp(                                                              \
-         ctf_internal_mock_##name.state[ctf_internal_parallel_thread_index] \
-           .assert_jump))                                                   \
-      return;                                                               \
+#define CTF_INTERNAL_MOCK_EXPECT(t, comp, type, name, var, val)            \
+  if(ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index] \
+       .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                      \
+  ctf_internal_mock_##t(&ctf_internal_mock_st_##name, type, __LINE__,      \
+                        __FILE__, #val,                                    \
+                        (void *)ctf_internal_expect_##t##_##comp, var, val)
+#define CTF_INTERNAL_MOCK_ASSERT(t, comp, type, name, var, val)                \
+  do {                                                                         \
+    if(ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index]   \
+         .check_count < CTF_CONST_MOCK_CHECKS_PER_TEST)                        \
+      ctf_internal_mock_##t(                                                   \
+        &ctf_internal_mock_st_##name, type | CTF_INTERNAL_MOCK_TYPE_ASSERT,    \
+        __LINE__, __FILE__, #val, (void *)ctf_internal_expect_##t##_##comp,    \
+        var, val);                                                             \
+    if(setjmp(                                                                 \
+         ctf_internal_mock_st_##name.state[ctf_internal_parallel_thread_index] \
+           .assert_jump))                                                      \
+      return;                                                                  \
   } while(0)
 
 #if CTF_ALIASES == CTF_ON
