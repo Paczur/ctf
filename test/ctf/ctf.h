@@ -3,16 +3,16 @@
 
 #include <ctf/ctf.h>
 
-EXTERN_GROUP(mock);
-EXTERN_GROUP(mocked_add);
-EXTERN_GROUP(mocked_strcmp);
-EXTERN_GROUP(mocked_memcmp);
-EXTERN_GROUP(primitive_success);
-EXTERN_GROUP(array_success);
-EXTERN_GROUP(memory_success);
-EXTERN_GROUP(failure);
-EXTERN_GROUP(mocked_add_failure);
-EXTERN_GROUP(mocked_strcmp_failure);
-EXTERN_GROUP(mocked_memcmp_failure);
+CTF_GROUP_EXTERN(mock);
+CTF_GROUP_EXTERN(mocked_add);
+CTF_GROUP_EXTERN(mocked_strcmp);
+CTF_GROUP_EXTERN(mocked_memcmp);
+CTF_GROUP_EXTERN(primitive_success);
+CTF_GROUP_EXTERN(array_success);
+CTF_GROUP_EXTERN(memory_success);
+CTF_GROUP_EXTERN(failure);
+CTF_GROUP_EXTERN(mocked_add_failure);
+CTF_GROUP_EXTERN(mocked_strcmp_failure);
+CTF_GROUP_EXTERN(mocked_memcmp_failure);
 
 #endif

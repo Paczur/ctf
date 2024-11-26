@@ -99,9 +99,8 @@ extern thread_local struct ctf_internal_mock_state
   *ctf_internal_mock_reset_queue[CTF_CONST_MOCKS_PER_TEST];
 extern thread_local int ctf_internal_mock_reset_count;
 
-void ctf_internal_group_run(struct ctf_internal_group group);
+void ctf_group_run(struct ctf_internal_group group);
 void ctf_internal_groups_run(int count, ...);
-#define ctf_group_run(test) ctf_internal_group_run(CTF_P_GROUP(test))
 #define ctf_groups_run(...)                                    \
   ctf_internal_groups_run(                                     \
     sizeof((const struct ctf_internal_group[]){__VA_ARGS__}) / \
@@ -121,48 +120,69 @@ void ctf_parallel_sync(void);
     }                       \
   } while(0)
 
-#define CTF_EXTERN_TEST(name)                        \
-  extern const char ctf_internal_test_name_##name[]; \
-  void ctf_internal_test_fn_##name(void)
-#define CTF_TEST(name)                                \
-  const char ctf_internal_test_name_##name[] = #name; \
-  void ctf_internal_test_fn_##name(void)
-#define CTF_P_TEST(name)                                       \
-  (const struct ctf_internal_test) {                           \
-    ctf_internal_test_fn_##name, ctf_internal_test_name_##name \
-  }
-#define CTF_EXTERN_GROUP(name)                                        \
-  extern const char ctf_internal_group_name_##name[];                 \
-  extern void (*const ctf_internal_group_setup_##name)(void);         \
-  extern void (*const ctf_internal_group_teardown_##name)(void);      \
-  extern void (*const ctf_internal_group_test_setup_##name)(void);    \
-  extern void (*const ctf_internal_group_test_teardown_##name)(void); \
-  extern const struct ctf_internal_test                               \
-    ctf_internal_group_arr_##name[CTF_CONST_GROUP_SIZE];
-#define CTF_GROUP(name)                                        \
-  const char ctf_internal_group_name_##name[] = #name;         \
-  void (*const ctf_internal_group_setup_##name)(void);         \
-  void (*const ctf_internal_group_teardown_##name)(void);      \
-  void (*const ctf_internal_group_test_setup_##name)(void);    \
-  void (*const ctf_internal_group_test_teardown_##name)(void); \
-  const struct ctf_internal_test                               \
-    ctf_internal_group_arr_##name[CTF_CONST_GROUP_SIZE]
-#define CTF_GROUP_SETUP(name, fn) \
-  void (*const ctf_internal_group_setup_##name)(void) = fn;
-#define CTF_GROUP_TEARDOWN(name, fn) \
-  void (*const ctf_internal_group_teardown_##name)(void) = fn;
-#define CTF_GROUP_TEST_SETUP(name, fn) \
-  void (*const ctf_internal_group_test_setup_##name)(void) = fn;
-#define CTF_GROUP_TEST_TEARDOWN(name, fn) \
-  void (*const ctf_internal_group_test_teardown_##name)(void) = fn;
-
-#define CTF_P_GROUP(name)                                                      \
-  (struct ctf_internal_group) {                                                \
-    ctf_internal_group_arr_##name, ctf_internal_group_setup_##name,            \
-      ctf_internal_group_teardown_##name,                                      \
-      ctf_internal_group_test_setup_##name,                                    \
-      ctf_internal_group_test_teardown_##name, ctf_internal_group_name_##name, \
-  }
+#define CTF_TEST_EXTERN(name) extern const struct ctf_internal_test name;
+#define CTF_TEST(test_name)                                            \
+  static void ctf_internal_test_fn_##test_name(void);                  \
+  static const char ctf_internal_test_name_##test_name[] = #test_name; \
+  const struct ctf_internal_test test_name = {                         \
+    .name = ctf_internal_test_name_##test_name,                        \
+    .f = ctf_internal_test_fn_##test_name,                             \
+  };                                                                   \
+  static void ctf_internal_test_fn_##test_name(void)
+#define CTF_GROUP_EXTERN(name) extern const struct ctf_internal_group name;
+#define CTF_GROUP(group_name)                                                  \
+  static const char ctf_internal_group_name_##group_name[] = #group_name;      \
+  static const struct ctf_internal_test ctf_internal_group_arr_##group_name[]; \
+  static void (*ctf_internal_group_setup_p_##group_name)(void);                \
+  static void (*ctf_internal_group_teardown_p_##group_name)(void);             \
+  static void (*ctf_internal_group_test_setup_p_##group_name)(void);           \
+  static void (*ctf_internal_group_test_teardown_p_##group_name)(void);        \
+  static void ctf_internal_group_setup_##group_name(void) {                    \
+    if(ctf_internal_group_setup_p_##group_name)                                \
+      ctf_internal_group_setup_p_##group_name();                               \
+  }                                                                            \
+  static void ctf_internal_group_teardown_##group_name(void) {                 \
+    if(ctf_internal_group_teardown_p_##group_name)                             \
+      ctf_internal_group_teardown_p_##group_name();                            \
+  }                                                                            \
+  static void ctf_internal_group_test_setup_##group_name(void) {               \
+    if(ctf_internal_group_test_setup_p_##group_name)                           \
+      ctf_internal_group_test_setup_p_##group_name();                          \
+  }                                                                            \
+  static void ctf_internal_group_test_teardown_##group_name(void) {            \
+    if(ctf_internal_group_test_teardown_p_##group_name)                        \
+      ctf_internal_group_test_teardown_p_##group_name();                       \
+  }                                                                            \
+  const struct ctf_internal_group group_name = {                               \
+    .tests = ctf_internal_group_arr_##group_name,                              \
+    .setup = ctf_internal_group_setup_##group_name,                            \
+    .teardown = ctf_internal_group_teardown_##group_name,                      \
+    .test_setup = ctf_internal_group_test_setup_##group_name,                  \
+    .test_teardown = ctf_internal_group_test_teardown_##group_name,            \
+    .name = ctf_internal_group_name_##group_name,                              \
+  };                                                                           \
+  static const struct ctf_internal_test                                        \
+    ctf_internal_group_arr_##group_name[CTF_CONST_GROUP_SIZE]
+#define CTF_GROUP_SETUP(name)                              \
+  static void ctf_internal_group_setup_def_##name(void);   \
+  static void (*ctf_internal_group_setup_p_##name)(void) = \
+    ctf_internal_group_setup_def_##name;                   \
+  static void ctf_internal_group_setup_def_##name(void)
+#define CTF_GROUP_TEARDOWN(name)                              \
+  static void ctf_internal_group_teardown_def_##name(void);   \
+  static void (*ctf_internal_group_teardown_p_##name)(void) = \
+    ctf_internal_group_teardown_def_##name;                   \
+  static void ctf_internal_group_teardown_def_##name(void)
+#define CTF_GROUP_TEST_SETUP(name)                              \
+  static void ctf_internal_group_test_setup_def_##name(void);   \
+  static void (*ctf_internal_group_test_setup_p_##name)(void) = \
+    ctf_internal_group_test_setup_def_##name;                   \
+  static void ctf_internal_group_test_setup_def_##name(void)
+#define CTF_GROUP_TEST_TEARDOWN(name)                              \
+  static void ctf_internal_group_test_teardown_def_##name(void);   \
+  static void (*ctf_internal_group_test_teardown_p_##name)(void) = \
+    ctf_internal_group_test_teardown_def_##name;                   \
+  static void ctf_internal_group_test_teardown_def_##name(void)
 
 #define CTF_MOCK(ret_type, name, typed, args)                                 \
   ret_type ctf_internal_mock_return_##name[CTF_CONST_MAX_THREADS];            \
@@ -397,8 +417,6 @@ void ctf_internal_mock_memory(struct ctf_internal_mock *mock, int type,
 /*
 define(`ALIAS', `#define $1 ctf_$1
 ')dnl
-define(`MACRO_ALIAS', `#define $1 CTF_$1
-')dnl
 define(`EA_ALIAS', `ALIAS($3_$1_$2(a, b))')dnl
 define(`EA_MEMORY_ALIAS', `ALIAS($3_memory_$1_$2(a, b, length))')dnl
 define(`EA_ARRAY_ALIAS', `ALIAS($3_array_$1_$2(a, b))')dnl
@@ -410,14 +428,7 @@ define(`MOCK_EA_ONCE_MEMORY_ALIAS', `ALIAS(mock_$3_once_memory_$1_$2(name, var, 
 define(`MOCK_EA_ONCE_ARRAY_ALIAS', `ALIAS(mock_$3_once_array_$1_$2(name, var, val))')
 define(`MOCK_CHECK_ALIAS', `ALIAS(mock_check_$1(name, val))')
 define(`MOCK_CHECK_MEMORY_ALIAS', `ALIAS(mock_check_memory_$1(name, val))')
-define(`EXTERN_P', `$1, EXTERN_$1, P_$1')
 */
-COMB(`MACRO_ALIAS',
-`(EXTERN_P(TEST(name)), EXTERN_P(GROUP(name)),
-  GROUP_TEARDOWN(name, f), GROUP_SETUP(name, f),
-  GROUP_TEST_TEARDOWN(name, f), GROUP_TEST_SETUP(name, f),
-  MOCK(ret_type, name, typed, args), EXTERN_MOCK(ret_type, name, typed),
-  MOCK_BIND(fn, mock), MOCK_GROUP(name), EXTERN_MOCK_GROUP(name))')
 COMB(`ALIAS',
      `(mock(name, f), unmock(f), mock_group(name), unmock_group(name),
        mock_call_count(name),

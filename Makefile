@@ -75,7 +75,7 @@ bin/$(TEST_BIN): $(TEST_OBJECTS) build/src/ctf/ctf.o | build/test/$(TEST_BIN).lf
 
 build/test/$(TEST_BIN).lf: $(TESTS)
 	$(info FLG $@)
-	grep -h '^\s*MOCK(' $^ | sed 's/\s*MOCK([^,]\+,\s*\([^ ,]\+\)\s*,.*/,--wrap=\1/' | sort | uniq | tr -d '\n' | sed 's/^,/-Wl,/' > $@
+	grep -h '^\s*\(CTF_\)\?MOCK(' $^ | sed 's/\s*\(CTF_\)\?MOCK([^,]\+,\s*\([^ ,]\+\)\s*,.*/,--wrap=\2/' | sort | uniq | tr -d '\n' | sed 's/^,/-Wl,/' > $@
 
 build/test/%.c: test/%.c | build/src/ctf/ctf.h
 	mkdir -p $(@D)
