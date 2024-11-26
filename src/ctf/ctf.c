@@ -494,6 +494,7 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
   buff_index +=
     print_group_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
                         group.name, strlen(group.name));
+  if(group.setup) group.setup();
   for(int i = 0; i < CTF_CONST_GROUP_SIZE && group.tests[i].f; i++) {
     test_status = 1;
     ctf_internal_state_index = 0;
@@ -502,7 +503,9 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
     }
     print_test_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
                        group.tests[i].name, strlen(group.tests[i].name));
+    if(group.test_setup) group.test_setup();
     group.tests[i].f();
+    if(group.test_teardown) group.test_teardown();
     test_cleanup();
     if(opt_threads != 1) {
       ctf_internal_state_index =
@@ -536,6 +539,7 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
                         group.tests[i].name, strlen(group.tests[i].name));
     }
   }
+  if(group.teardown) group.teardown();
   if(group_status) {
     print_group_pass(buff, PRINT_BUFF_SIZE, group.name, strlen(group.name));
   } else {
