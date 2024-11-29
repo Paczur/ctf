@@ -288,6 +288,10 @@ int ctf_internal_expect_msg(int, const char *, int, const char *);
 #define ctf_assert_false(a) ctf_assert_int_eq(a, 0);
 #define ctf_expect_true(a) ctf_expect_int_neq(a, 0);
 #define ctf_expect_false(a) ctf_expect_int_eq(a, 0);
+#define ctf_assert_non_null(a) ctf_assert_ptr_neq(a, NULL);
+#define ctf_assert_null(a) ctf_assert_ptr_eq(a, NULL);
+#define ctf_expect_non_null(a) ctf_expect_ptr_neq(a, NULL);
+#define ctf_expect_null(a) ctf_expect_ptr_eq(a, NULL);
 #define ctf_expect_msg(m) \
   CTF_INTERNAL_EXPECT(ctf_internal_expect_msg, m, __LINE__, __FILE__)
 #define ctf_assert_msg(m) \
@@ -436,7 +440,8 @@ COMB(`ALIAS',
      `(mock(name, f), unmock(f), mock_group(name), unmock_group(name),
        mock_call_count(name),
        mock_will_return(name, val), mock_will_return_once(name, val),
-       assert_true, assert_false, expect_true, expect_false)')
+       assert_true, assert_false, expect_true, expect_false,
+       assert_null, assert_non_null, expect_null, expect_non_null)')
 EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `EA_ALIAS')
 EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_MEMORY_ALIAS')
 EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_ARRAY_ALIAS')

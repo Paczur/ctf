@@ -1036,6 +1036,24 @@ CTF_TEST(ptr_assert) {
   assert_ptr_gte(arr, arr);
   assert_ptr_gte(arr + 1, arr);
 }
+CTF_TEST(null_expect_success) {
+  char a[2];
+  expect_null(NULL);
+  expect_non_null(a);
+  expect_non_null(a + 1);
+}
+CTF_TEST(null_expect_failure) {
+  char a[2];
+  expect_non_null(NULL);
+  expect_null(a);
+  expect_null(a + 1);
+}
+CTF_TEST(null_assert) {
+  char a[2];
+  assert_null(NULL);
+  assert_non_null(a);
+  assert_non_null(a + 1);
+}
 CTF_TEST(str_expect_success) {
   const char s1[] = "a";
   const char s2[] = "b";
@@ -1117,7 +1135,8 @@ CTF_TEST(str_assert) {
 CTF_GROUP(primitive_success) = {
   char_expect_success, char_assert, int_expect_success,  int_assert,
   bool_expect_success, bool_assert, uint_expect_success, uint_assert,
-  ptr_expect_success,  ptr_assert,  str_expect_success,  str_assert,
+  ptr_expect_success,  ptr_assert,  null_expect_success, null_assert,
+  str_expect_success,  str_assert,
 };
 
 CTF_TEST(array_char_expect_success) {
@@ -1602,21 +1621,14 @@ CTF_TEST(pass_and_fail) {
 }
 
 CTF_GROUP(failure) = {
-  char_expect_failure,
-  int_expect_failure,
-  bool_expect_failure,
-  uint_expect_failure,
-  ptr_expect_failure,
-  str_expect_failure,
-  array_char_expect_failure,
-  array_int_expect_failure,
-  array_uint_expect_failure,
-  array_ptr_expect_failure,
-  memory_char_expect_failure,
-  memory_int_expect_failure,
-  memory_uint_expect_failure,
-  memory_ptr_expect_failure,
-  pass_and_fail,
+  char_expect_failure,       int_expect_failure,
+  bool_expect_failure,       uint_expect_failure,
+  ptr_expect_failure,        null_expect_failure,
+  str_expect_failure,        array_char_expect_failure,
+  array_int_expect_failure,  array_uint_expect_failure,
+  array_ptr_expect_failure,  memory_char_expect_failure,
+  memory_int_expect_failure, memory_uint_expect_failure,
+  memory_ptr_expect_failure, pass_and_fail,
 };
 CTF_GROUP(mocked_add_failure) = {
   mock_char_expect_failure,
