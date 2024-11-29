@@ -12,7 +12,6 @@ include(`base.m4')
 #include <string.h>
 #include <threads.h>
 
-#define CTF_CONST_STATE_FILE_SIZE 256
 #define CTF_CONST_STATE_MSG_SIZE 4096
 #define CTF_CONST_STATES_PER_THREAD 64
 #define CTF_CONST_MOCKS_PER_TEST 64
