@@ -15,9 +15,9 @@ TEST_RUN=build/$(TEST_BIN).run
 MEMORY_DEBUG_FLAGS=-fsanitize=address -fsanitize=pointer-compare -fsanitize=pointer-subtract
 WARN_FLAGS=-Wall -Wextra -Werror -Wno-error=cpp -Wno-unused-function -Wunused-result -Wvla -Wshadow -Wstrict-prototypes -Wno-maybe-uninitialized -Wno-logical-not-parentheses
 SANTIIZER_FLAGS=-fsanitize=undefined -fsanitize-address-use-after-scope -fstack-check -fno-stack-clash-protection
-DEBUG_FLAGS=$(WARN_FLAGS) $(MEMORY_DEBUG_FLAGS) $(SANITIZER_FLAGS) -Og -ggdb3 -MMD -MP
+DEBUG_FLAGS=$(WARN_FLAGS) -Og -ggdb3 -MMD -MP
 OPTIMIZE_FLAGS=-march=x86-64-v3 -O2 -pipe -D NDEBUG
-LINK_FLAGS=$(BASE_CFLAGS) -s -flto=4 -fwhole-program
+LINK_FLAGS=$(BASE_CFLAGS) -flto=4 -fwhole-program
 TEST_FLAGS=$(CFLAGS) -Ibuild/src
 BASE_CFLAGS=-std=gnu11
 CFLAGS=$(BASE_CFLAGS)

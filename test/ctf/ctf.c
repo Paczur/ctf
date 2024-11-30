@@ -377,7 +377,9 @@ CTF_GROUP(mocked_strcmp) = {
   mock_str_expect_success,
   mock_str_assert,
 };
-CTF_GROUP_SETUP(mocked_strcmp) { mock(wrapped_strcmp, mock_wrapped_strcmp); }
+CTF_GROUP_TEST_SETUP(mocked_strcmp) {
+  mock(wrapped_strcmp, mock_wrapped_strcmp);
+}
 
 CTF_TEST(mock_memory_char_expect_success) {
   const char a[] = {'a'};
@@ -869,7 +871,9 @@ CTF_GROUP(mocked_memcmp) = {
   mock_array_uint_expect_success,  mock_array_uint_assert,
   mock_array_ptr_expect_success,   mock_array_ptr_assert,
 };
-CTF_GROUP_SETUP(mocked_memcmp) { mock(wrapped_memcmp, mock_wrapped_memcmp); }
+CTF_GROUP_TEST_SETUP(mocked_memcmp) {
+  mock(wrapped_memcmp, mock_wrapped_memcmp);
+}
 
 CTF_GROUP(mock) = {
   mock_grouped,
