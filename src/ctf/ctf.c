@@ -18,7 +18,7 @@ include(`base.m4')
   "-u, --unicode  (off|generic|branded*) display of unicode symbols\n"       \
   "-c, --color    (off|on|auto*) color coding for failed and passed tests\n" \
   "-d, --detail   (off|on|auto*) detailed info about failed tests\n"         \
-  "-f, --failed   Print only groups that failed\n"                           \
+  "-p, --passed   (off|on|auto*) printing of passed groups\n"                \
   "-j, --jobs     Number of parallel threads to run (default 1)\n"           \
   "-s, --sigsegv  Don't register SIGSEGV handler\n"
 
@@ -52,7 +52,7 @@ include(`base.m4')
 static int opt_unicode = BRANDED;
 static int opt_color = AUTO;
 static int opt_detail = AUTO;
-static int opt_failed = OFF;
+static int opt_passed = AUTO;
 static int opt_threads = 1;
 static int tty_present = 0;
 static const char print_color_reset[] = "\x1b[0m";
@@ -240,15 +240,18 @@ static unsigned print_name(char *buff, unsigned buff_len, const char *name,
 static unsigned print_group_pass(char *buff, unsigned buff_len,
                                  const char *name, unsigned len) {
   unsigned index;
-  if(opt_failed == OFF) {
+  if(opt_passed != OFF) {
     index = print_pass_indicator(buff, buff_len);
     index += print_name(buff + index, buff_len - index, name, len);
+  }
+  if(opt_passed == AUTO) {
     buff[index] = 0;
-    return index;
-  } else {
+  }
+  if(opt_passed == OFF) {
     buff[0] = 0;
     return 0;
   }
+  return index;
 }
 
 static unsigned print_group_fail(char *buff, unsigned buff_len,
@@ -257,6 +260,7 @@ static unsigned print_group_fail(char *buff, unsigned buff_len,
   index = print_fail_indicator(buff, buff_len);
   index += print_name(buff + index, buff_len - index, name, len);
   return index;
+  return 0;
 }
 
 static unsigned print_group_unknown(char *buff, unsigned buff_len,
@@ -979,8 +983,10 @@ __attribute__((constructor)) void ctf_internal_premain(int argc,
       if(i == argc) err();
       i++;
       opt_detail = get_value(argv[i]);
-    } else if(!strcmp(argv[i] + 1, "f") || !strcmp(argv[i] + 1, "-failed")) {
-      opt_failed = 1;
+    } else if(!strcmp(argv[i] + 1, "p") || !strcmp(argv[i] + 1, "-passed")) {
+      if(i == argc) err();
+      i++;
+      opt_passed = get_value(argv[i]);
     } else if(!strcmp(argv[i] + 1, "j") || !strcmp(argv[i] + 1, "-jobs")) {
       if(i == argc) err();
       i++;
