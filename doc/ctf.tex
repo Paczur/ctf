@@ -1,0 +1,304 @@
+\documentclass[12pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{babel}[english]
+\usepackage[outputdir=../build/doc, newfloat]{minted}
+\usepackage{graphicx}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{float}
+\usepackage{txfonts}
+\usepackage{fancyvrb}
+\usepackage[a4paper, margin=2cm]{geometry}
+\graphicspath{ {./img/} }
+\usepackage[section]{placeins}
+\usepackage[hidelinks]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage{pmboxdraw}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage[skins,minted]{tcolorbox}
+\definecolor{mintedbackground}{rgb}{0.95,0.95,0.95}
+\definecolor{mintedframe}{rgb}{0,0,0}
+\setminted[c]{
+  bgcolor=mintedbackground,
+  breaklines=true,
+  linenos=true,
+  numbersep=5pt,
+  frame=leftline,
+}
+\setminted[bash]{
+  bgcolor=mintedbackground,
+  breaklines=true,
+  linenos=true,
+  numbersep=5pt,
+  frame=leftline,
+  escapeinside=@@,
+}
+\newtcblisting{shell}[1][]{enhanced, listing engine=minted,
+listing only, title=shell, minted language=bash, #1,
+coltitle=mintedbackground!30!black,
+fonttitle=\ttfamily\footnotesize,
+sharp corners, top=0mm, bottom=0mm,
+title code={\path[draw=mintedframe,dashed, fill=mintedbackground](title.south west)--(title.south east);},
+frame code={\path[draw=mintedframe, fill=mintedbackground](frame.south west) rectangle (frame.north east);}
+}
+\newtcblisting{ccode}[1][]{enhanced, listing engine=minted,
+listing only, #1, minted language=c,
+coltitle=mintedbackground!30!black,
+fonttitle=\ttfamily\footnotesize,
+sharp corners, top=0mm, bottom=0mm,
+frame code={\path[draw=mintedframe, fill=mintedbackground](frame.south west) rectangle (frame.north east);}
+}
+\newtcblisting{ccodefile}[2][]{enhanced, listing engine=minted,
+listing only, #1, title=#2, minted language=c,
+coltitle=mintedbackground!30!black,
+fonttitle=\ttfamily\footnotesize,
+sharp corners, top=0mm, bottom=0mm,
+title code={\path[draw=mintedframe,dashed, fill=mintedbackground](title.south west)--(title.south east);},
+frame code={\path[draw=mintedframe, fill=mintedbackground](frame.south west) rectangle (frame.north east);}
+}
+\newtcbinputlisting{\cfile}[3][]{enhanced, listing engine=minted,
+listing only, listing file=#3,#1, title=#2, minted language=c,
+coltitle=mintedbackground!30!black,
+fonttitle=\ttfamily\footnotesize,
+sharp corners, top=0mm, bottom=0mm,
+title code={\path[draw=mintedframe,dashed, fill=mintedbackground](title.south west)--(title.south east);},
+frame code={\path[draw=mintedframe, fill=mintedbackground](frame.south west) rectangle (frame.north east);}
+}
+\title{C Testing Framework Documentation}
+\author{v1.0}
+\date{ }
+\begin{document}
+\maketitle
+\tableofcontents
+\section{Introduction}
+C Testing Framework (CTF for short) is framework designed specifically
+for ease-of-use. CTF focuses on providing quick feedback loops and test corectness.
+It's most notable features are:
+\begin{itemize}
+  \item Clean and information focused output format.
+  \item Rich selection of asserts and expects.
+  \item Simplified mocking.
+  \item Control of parallel test execution.
+\end{itemize}
+\textbf{This document assumes familiarity with:}
+\begin{itemize}
+  \item C language
+  \item Unit tests
+  \item Any toolchain required for compilation of the C language.
+\end{itemize}
+\section{Getting Started}
+CTF doesn't require specific directory structure. For the purpose of this tuturial, we
+will define directory structure as follows:
+\begin{verbatim}
+src
+└──module
+   ├──module.c
+   └──module.h
+test
+├──main.c
+└──module
+   ├──module.c
+   └──module.h
+\end{verbatim}
+Purpose of each directory under \texttt{test} is as follows:
+\begin{itemize}
+  \item \textbf{\texttt{main.c}: test execution control.}
+  \item \texttt{module.c}: tests for \texttt{src/module/module.c}
+  \item \texttt{module.h}: external symbols for tests in \texttt{module.c}
+\end{itemize}
+Foe the purpose of this tutorial, files in \texttt{src} directory are assumed
+to have following code:
+\cfile{src/module/module.c}{../example/basic/src/module/module.c}
+\cfile{src/module/module.h}{../example/basic/src/module/module.h}
+\subsection{Your first test}
+Defining a test is done with \mintinline{c}{CTF_TEST(name)} macro as follows:
+\begin{ccodefile}{test/module/module.c}
+CTF_TEST(add_negative) {
+  ctf_assert_int_eq(-2, add(-1, -1));
+}
+\end{ccodefile}
+This snippet defines a test named \texttt{add\_negative}.
+The test checks if return value of add(-1, -1) equals -2.\\
+Using previously defined directory structure;
+If function add exists in file \texttt{src/module/module.c},
+then above test goes in file \texttt{test/module/module.c}.
+\subsection{Grouping tests}
+Every test belongs to one or more groups.
+Tests not belonging to any group are useless.
+Defining a group is done with \mintinline{c}{CTF_GROUP(name)} macro as follows:
+\begin{ccodefile}{test/module/module.c}
+CTF_GROUP(add_tests) = {
+  add_negative,
+};
+\end{ccodefile}
+This snippet defines a group named \texttt{add\_tests}.
+Group contains one test defined in previous subsection.\\
+Tests frequently belong to only one group. As such this group should be placed in
+the same file as test it contains i.e. \texttt{test/module/module.c}.
+\subsection{Making group externally visible}
+External group declaration is done with \mintinline{c}{CTF_GROUP_EXTERN(name)} macro
+as follows:
+\begin{ccodefile}{test/module/module.h}
+CTF_GROUP_EXTERN(add_tests)
+\end{ccodefile}
+External symbols should be placed in header corresponding to the source file.\\
+In this case \texttt{test/module/module.h}.\\
+Note:\\
+Tests also can be made externally visible
+using \mintinline{c}{CTF_TEST_EXTERNAL(name)} macro.
+\subsection{Running grouped tests}
+CTF reserves function \mintinline{c}{int main(int argc, char *argv[])} for internal
+use.\\
+Group execution is done in \mintinline{c}{void ctf_main(int argc, char *argv[])}
+function.\\
+Running groups of tests is done with either:
+\begin{itemize}
+  \item \mintinline{c}{ctf_group_run(group)} function
+  \item \mintinline{c}{ctf_groups_run(group1, group2, ...)} macro
+\end{itemize}
+Example:
+\begin{ccodefile}{test/main.c}
+int ctf_main(int argc, char *argv[]) {
+  ctf_group_run(add_tests);
+}
+\end{ccodefile}
+This example runs previously defined group named \texttt{add\_tests}.
+CTF exits after \texttt{ctf\_main} function returns.\\
+This snippet frequently belongs in \texttt{test/main.c} file.\\
+Note:\\
+\texttt{test/main.c} should have \mintinline{c}{#include "module/module.h"} clause.
+Otherwise \texttt{add\_tests} is undefined symbol.
+\subsection{Executing binary}
+Compiling above example produces single binary. Executing the binary runs
+expected tests and prints their status.\\
+Output should look like this:
+\begingroup
+\catcode`\?=\active
+\def?#1{\csname #1\endcsname}
+\begin{shell}
+  \\[@?{color}{teal}{?{checkmark}}@] add_tests
+\end{shell}
+\endgroup
+By default if all tests in group are sucessful, only group status is shown.
+This behaviour can be overriden with "\texttt{-p on}" option.
+All available options are listed using \texttt{-h} or \texttt{-{}-help}.
+\subsection{Summary}
+Key points:
+\begin{itemize}
+  \item \texttt{CTF\_TEST(name)} defines test.
+  \item \texttt{CTF\_GROUP(name)} defines group.
+  \item \texttt{CTF\_GROUP(name)} makes group externally visible.
+  \item \texttt{ctf\_main} is used instead of \texttt{main}.
+  \item \texttt{ctf\_group\_run(group)} runs singular group.
+\end{itemize}
+All code used in this tutorial:
+\cfile{src/module/module.c}{../example/basic/src/module/module.c}
+\cfile{src/module/module.h}{../example/basic/src/module/module.h}
+\cfile{test/module/module.c}{../example/basic/test/module/module.c}
+\cfile{test/module/module.h}{../example/basic/test/module/module.h}
+\cfile{test/main.c}{../example/basic/test/main.c}
+\section{Guides}
+\subsection{Mocking function}
+\subsection{Externally visible symbols}
+\subsection{Running tests in parallel}
+\subsection{Early return on group failure}
+\subsection{Redefining SIGSEGV handler}
+\subsection{Removing name collisions}
+\section{Explanations}
+\subsection{Type information in asserts}
+\subsection{Running only grouped tests}
+\subsection{Print format}
+\section{Reference}
+\subsection{Tests and groups}
+\subsection{Group execution}
+\subsection{Mocks}
+\subsection{Assertions and expectations}
+\subsubsection{Comparisons}
+\subsubsection{Special}
+
+
+\begin{minted}{c}
+CTF_TEST(name) { }
+CTF_TEST_EXTERN(name);
+CTF_GROUP(name) = {}
+CTF_GROUP_EXTERN(name);
+CTF_GROUP_SETUP(name) {}
+CTF_GROUP_TEARDOWN(name) {}
+CTF_GROUP_TEST_SETUP(name) {}
+CTF_GROUP_TEST_TEARDOWN(name) {}
+\end{minted}
+\section{Assertions and Expectations}
+\subsection{Comparisons}
+Available comparison functions:
+\begin{minted}{c}
+ctf_[a/e]_[type/str]_[cmp](a, b);
+ctf_[a/e]_memory_[type]_[cmp](a, b, length);
+ctf_[a/e]_array_[type]_[cmp](a, b);
+ctf_[a/e]_true(a);
+ctf_[a/e]_false(a);
+ctf_[a/e]_null(a);
+ctf_[a/e]_non_null(a);
+\end{minted}
+Legend:
+\begin{verbatim}
+[a/e] = [assert, expect]
+[type] = [char, int, uint, ptr]
+[type/str] = [char, int, uint, ptr, str]
+[cmp] = [eq, neq, gt, gte, lt, lte]
+\end{verbatim}
+\subsection{Special}
+\begin{minted}{c}
+ctf_assert_msg(cmp, msg);
+ctf_expect_msg(cmp, msg);
+ctf_pass(msg);
+ctf_fail(msg);
+ctf_assert_fold(count, msg);
+ctf_assert_barrier();
+\end{minted}
+\section{Control Flow}
+\begin{minted}{c}
+ctf_sigsegv_handler(unused);
+ctf_parallel_start();
+ctf_parallel_stop();
+ctf_parallel_sync();
+ctf_barrier();
+ctf_group_run(group);
+ctf_groups_run(group1, group2, ...)
+int ctf_exit_code;
+int ctf_entry_point(argc, argv) {}
+\end{minted}
+\section{Mocks}
+\begin{minted}{c}
+CTF_MOCK(ret, name, typed_args, args)
+CTF_MOCK_VOID_RET(name, typed_args, args)
+CTF_MOCK_EXTERN(ret_type, name, typed_args)
+CTF_MOCK_COID_RET_EXTERN(ret_type, name, typed_args)
+CTF_MOCK_GROUP(name) = { CTF_MOCK_BIND(fn, mock) }
+CTF_MOCK_GROUP_EXTERN(name)
+
+ctf_mock_[a/e]_[type/str]_[cmp](a, b);
+ctf_mock_[a/e]_memory_[type]_[cmp](a, b, length);
+ctf_mock_[a/e]_array_[type]_[cmp](a, b);
+ctf_mock_[a/e]_true(a);
+ctf_mock_[a/e]_false(a);
+ctf_mock_[a/e]_null(a);
+ctf_mock_[a/e]_non_null(a);
+
+ctf_mock(mock, fn);
+ctf_unmock(mock);
+ctf_mock_group(group);
+ctf_mock_ungroup(group);
+ctf_mock_call_count(mock);
+ctf_mock_will_return(mock, val);
+ctf_mock_will_return_once(mock, val);
+ctf_mock_real(mock);
+\end{minted}
+Legend:
+\begin{verbatim}
+[a/e] = [assert, expect]
+[type] = [char, int, uint, ptr]
+[type/str] = [char, int, uint, ptr, str]
+[cmp] = [eq, neq, gt, gte, lt, lte]
+\end{verbatim}
+\end{document}

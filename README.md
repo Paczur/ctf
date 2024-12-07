@@ -33,55 +33,22 @@ int main(void) {
     return ctf_exit_code;
 }
 ```
-#### MOCKS
+
+### Installation
+#### Requirements
+- C11 (<threads.h> support)
+#### Instructions
 ```
-CTF_MOCK(int, add, (int a, int b), (a, b))
-
-int mock_add(int a, int b) {
-    mock_check_int(add, a);
-    mock_check_int(add, b);
-    return a+b;
-}
-
-TEST(mocked_add) {
-    ctf_mock(add, mock_add);
-    mock_expect_char_eq(add, a, 1);
-    mock_expect_char_eq(add, a, 2);
-    add(1, 2);
-}
+make && sudo make install
 ```
-#### Parallel execution of tests
-```
-static int add(int a, int b) {
-    return a+b;
-}
 
-CTF_TEST(add_signed) {
-  assert_int_eq(3, 1+2);
-}
-
-CTF_GROUP(add, add_signed)
-
-int main(void) {
-    ctf_parallel_start();
-    ctf_group_run(&add);
-    ctf_parallel_stop();
-    return ctf_exit_code;
-}
-```
+### Notes
 #### Vim support
 Adding following line to .vimrc allows vim to parse detailed test info, and add it
 to quickfix list.
 ```
 set errorformat^=%.%#[%f\|%l\|%t]\ %m,
 ```
-
-### Building
-#### Prerequisites
-- C11
-- `__attribute__((constructor))`(GCC/Clang) support
-#### Notes
-Framework is distributed as source and header pair.
 
 ### Documentation
 #### Declarations and definitions

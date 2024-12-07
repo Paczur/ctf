@@ -20,8 +20,8 @@ include(`base.m4')
   "-d, --detail   (off|on|auto*) detailed info about failed tests\n"         \
   "-p, --passed   (off|on|auto*) printing of passed groups\n"                \
   "-j, --jobs     Number of parallel threads to run (default 1)\n"           \
-  "-s, --sigsegv  Don't register SIGSEGV handler\n"
-
+  "-s, --sigsegv  Don't register SIGSEGV handler\n"                          \
+  "--,            Stop parsing arguments\n"
 #define OFF 0
 #define ON 1
 #define AUTO 2
@@ -669,30 +669,45 @@ static void parallel_groups_run(int count, va_list args) {
     parallel_states_index[ctf_internal_parallel_thread_index]++;        \
   }
 
-uintmax_t ctf_internal_fail(const char *m, int line, const char *file) {
-  ctf_internal_states[ctf_internal_state_index].status = 1;
-  EXPECT_START;
-  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line, file);
-  strlcpy(ctf_internal_states[ctf_internal_state_index - 1].msg, m,
-          CTF_CONST_STATE_MSG_SIZE);
-  return 0;
-}
-uintmax_t ctf_internal_pass(const char *m, int line, const char *file) {
-  ctf_internal_states[ctf_internal_state_index].status = 0;
-  EXPECT_START;
-  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line, file);
-  strlcpy(ctf_internal_states[ctf_internal_state_index - 1].msg, m,
-          CTF_CONST_STATE_MSG_SIZE);
-  return 1;
-}
-uintmax_t ctf_internal_expect_msg(int status, const char *msg, int line,
-                            const char *file) {
+static uintmax_t assert_msg_v(int status, const char *msg, int line, const char *file,
+                         va_list v) {
   ctf_internal_states[ctf_internal_state_index].status = status;
   EXPECT_START;
   assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line, file);
-  strlcpy(ctf_internal_states[ctf_internal_state_index - 1].msg, msg,
-          CTF_CONST_STATE_MSG_SIZE);
+  vsnprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+            CTF_CONST_STATE_MSG_SIZE, msg, v);
   return status;
+}
+
+uintmax_t ctf_internal_fail(const char *m, int line, const char *file, ...) {
+  va_list v;
+  ctf_internal_states[ctf_internal_state_index].status = 1;
+  EXPECT_START;
+  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line, file);
+  va_start(v, file);
+  vsnprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+            CTF_CONST_STATE_MSG_SIZE, m, v);
+  va_end(v);
+  return 0;
+}
+uintmax_t ctf_internal_pass(const char *m, int line, const char *file, ...) {
+  va_list v;
+  ctf_internal_states[ctf_internal_state_index].status = 0;
+  EXPECT_START;
+  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line, file);
+  va_start(v, file);
+  vsnprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+            CTF_CONST_STATE_MSG_SIZE, m, v);
+  va_end(v);
+  return 1;
+}
+uintmax_t ctf_internal_assert_msg(int status, const char *msg, int line,
+                            const char *file, ...) {
+  va_list args;
+  va_start(args, file);
+  uintmax_t st = assert_msg_v(status, msg, line, file, args);
+  va_end(args);
+  return st;
 }
 void ctf_internal_mock_check_base(struct ctf_internal_mock_state *state,
                                   const char *v, int memory) {
@@ -953,15 +968,15 @@ COMB(`MOCK_CHECK', `(PRIMITIVE_TYPES)')
 MOCK_CHECK_STR
 COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
 // clang-format on
-__attribute__((constructor)) void ctf_internal_premain(int argc,
-                                                         char *argv[]) {
+int main(int argc, char *argv[]) {
+  int i;
   int handle_sigsegv = 1;
   mtx_init(&parallel_print_mutex, mtx_plain);
   mtx_init(&parallel_task_queue_mutex, mtx_plain);
   cnd_init(&parallel_threads_waiting_all);
   cnd_init(&parallel_task_queue_non_empty);
   cnd_init(&parallel_task_queue_non_full);
-  for(int i = 1; i < argc; i++) {
+  for(i = 1; i < argc; i++) {
     if(argv[i][0] != '-') err();
     if(!strcmp(argv[i] + 1, "h") || !strcmp(argv[i] + 1, "-help")) {
       err();
@@ -996,6 +1011,9 @@ __attribute__((constructor)) void ctf_internal_premain(int argc,
       if(opt_threads < 1) opt_threads = 1;
     } else if(!strcmp(argv[i] + 1, "s") || !strcmp(argv[i] + 1, "-sigsegv")) {
       handle_sigsegv = 0;
+    } else if(!strcmp(argv[i] + 1, "-")) {
+      i++;
+      break;
     }
   }
   tty_present = !IS_TTY;
@@ -1018,6 +1036,8 @@ __attribute__((constructor)) void ctf_internal_premain(int argc,
                            .ss_size = CTF_CONST_SIGNAL_STACK_SIZE},
                 NULL);
   }
+  ctf_main(argc - i, argv + i);
+  return ctf_exit_code;
 }
 
 void ctf_parallel_sync(void) {
@@ -1073,6 +1093,10 @@ void ctf_assert_barrier(void) {
   }
 }
 void ctf_internal_assert_fold(uintmax_t count, const char *msg, int line, const char *file) {
+  ctf_assert_hide(count);
+  ctf_internal_pass(msg, line, file);
+}
+void ctf_assert_hide(uintmax_t count) {
   if(ctf_internal_state_index <= count) {
     for(uintmax_t i = 0; i < ctf_internal_state_index; i++) {
       if(ctf_internal_states[i].status) {
@@ -1087,9 +1111,12 @@ void ctf_internal_assert_fold(uintmax_t count, const char *msg, int line, const 
       }
     }
   }
-
   ctf_internal_state_index -= count;
-  ctf_internal_pass(msg, line, file);
+}
+int ctf_internal_mock_call_count(struct ctf_internal_mock_state *state) {
+  int x = state->call_count;
+  state->call_count = 0;
+  return x;
 }
 
 void ctf_sigsegv_handler(int unused) {
@@ -1129,8 +1156,6 @@ void ctf_sigsegv_handler(int unused) {
         PRINT_BUFF_SIZE - buff_index, ctf_internal_states + i);
     }
   }
-  write(STDOUT_FILENO, print_buff[ctf_internal_parallel_thread_index],
-        strlen(print_buff[ctf_internal_parallel_thread_index]));
   if(color) write(STDOUT_FILENO, err_color, sizeof(err_color));
   write(STDOUT_FILENO, postmsg, sizeof(postmsg));
   if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));

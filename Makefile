@@ -3,12 +3,9 @@ rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(su
 SOURCES=$(call rwildcard,src,*.c)
 TESTS=$(call rwildcard,test,*.c)
 LINKER_FLAGS=$(patsubst %.c, build/%.lf, $(TESTS))
-EXAMPLES=$(call rwildcard,example,*.c)
 SRC_OBJECTS=$(patsubst %.c, build/%.o, $(SOURCES))
 TEST_OBJECTS=$(patsubst %.c, build/%.o, $(TESTS))
-EXAMPLE_OBJECTS=$(patsubst %.c, build/%.o, $(EXAMPLES))
-EXAMPLE_BINARIES=$(patsubst %.c, bin/%, $(EXAMPLES))
-DEPENDENCIES=$(patsubst %.c, build/%.d, $(SOURCES)$(TESTS)$(EXAMPLES))
+DEPENDENCIES=$(patsubst %.c, build/%.d, $(SOURCES)$(TESTS))
 TEST_BIN=tests
 TEST_RUN=build/$(TEST_BIN).run
 
@@ -25,7 +22,7 @@ CFLAGS=$(BASE_CFLAGS)
 all: release
 
 release: CFLAGS += $(OPTIMIZE_FLAGS)
-release: dist
+release: dist doc
 
 debug: CFLAGS += $(DEBUG_FLAGS)
 debug: $(TEST_RUN) dist
@@ -35,11 +32,11 @@ check: $(TEST_RUN)
 clean:
 	rm -rf build bin dist
 
-dist: dist/include/ctf/ctf.h dist/lib/libctf.so
+dist: dist/include/ctf/ctf.h dist/lib64/libctf.so dist/share/doc/ctf/ctf.pdf
 
 install: dist
 	install -D dist/include/ctf/ctf.h /usr/include/ctf/ctf.h
-	install -D dist/lib/libctf.so /usr/lib64/libctf.so
+	install -D dist/lib64/libctf.so /usr/lib64/libctf.so
 
 uninstall:
 	rm -r /usr/include/ctf/ctf.h /usr/lib64/libctf.so
@@ -47,57 +44,67 @@ uninstall:
 MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 .DELETE_ON_ERROR:
-.PHONY: all release debug check clean dist install uninstall
+.PHONY: all release debug check clean dist install uninstall doc
 $(VERBOSE).SILENT:
 $(shell mkdir -p $(dir $(DEPENDENCIES)))
 -include $(DEPENDENCIES)
 
-dist/include/ctf/ctf.h: build/src/ctf/ctf.h
+build/doc/ctf.pdf: doc/ctf.tex
 	mkdir -p $(@D)
-	$(info INC $@)
+	$(info DOC  $@)
+	cd doc; latexmk -pdf ctf.tex > /dev/null
+
+dist/share/doc/ctf/ctf.pdf: build/doc/ctf.pdf
+	mkdir -p $(@D)
+	$(info COPY $@)
 	cp $^ $@
 
-dist/lib/libctf.so: build/src/ctf/ctf.c
+dist/include/ctf/ctf.h: build/src/ctf/ctf.h
 	mkdir -p $(@D)
-	$(info SO $@)
+	$(info COPY $@)
+	cp $^ $@
+
+dist/lib64/libctf.so: build/src/ctf/ctf.c
+	mkdir -p $(@D)
+	$(info SO   $@)
 	$(CC) $(CFLAGS) -fPIC -shared -o $@ $^
 
 $(TEST_RUN): bin/$(TEST_BIN)
 	mkdir -p $(@D)
-	$(info RUN $<)
+	$(info RUN  $<)
 	./$<
 	touch $@
 
 bin/$(TEST_BIN): $(TEST_OBJECTS) build/src/ctf/ctf.o | build/test/$(TEST_BIN).lf
 	mkdir -p $(@D)
-	$(info LN  $@)
+	$(info LN   $@)
 	$(CC) $(LINK_FLAGS) $(TEST_FLAGS) `cat $|` -o $@ $^
 
 build/test/$(TEST_BIN).lf: $(TESTS)
-	$(info FLG $@)
+	$(info FLG  $@)
 	grep -h '^\s*\(CTF_\)\?MOCK(' $^ | sed 's/\s*\(CTF_\)\?MOCK([^,]\+,\s*\([^ ,]\+\)\s*,.*/,--wrap=\2/' | sort | uniq | tr -d '\n' | sed 's/^,/-Wl,/' > $@
 
 build/test/%.c: test/%.c | build/src/ctf/ctf.h
 	mkdir -p $(@D)
-	$(info E   $@)
+	$(info E    $@)
 	$(CC) $(TEST_FLAGS) -E -o $@ $<
 
 build/test/%.o: test/%.c | build/src/ctf/ctf.h
 	mkdir -p $(@D)
-	$(info CC  $@)
+	$(info CC   $@)
 	$(CC) $(TEST_FLAGS) -c -o $@ $<
 
 build/test/main.o: test/main.c | build/src/ctf/ctf.h
 	mkdir -p $(@D)
-	$(info CC  $@)
+	$(info CC   $@)
 	$(CC) $(TEST_FLAGS) -c -o $@ $<
 
 build/src/%.o: build/src/%.c build/src/%.h
 	mkdir -p $(@D)
-	$(info CC  $@)
+	$(info CC   $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 build/%: %
 	mkdir -p $(@D)
-	$(info GEN $@)
+	$(info GEN  $@)
 	m4 -Im4 $< > $@
