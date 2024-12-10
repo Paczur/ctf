@@ -404,15 +404,16 @@ CTF_TEST(mock_str_assert) {
 }
 
 CTF_GROUP(mocked_add) = {
-  mock_char_expect_success, mock_char_assert,         mock_int_expect_success,
-  mock_int_assert,          mock_uint_expect_success, mock_uint_assert,
+  &mock_char_expect_success, &mock_char_assert,
+  &mock_int_expect_success,  &mock_int_assert,
+  &mock_uint_expect_success, &mock_uint_assert,
 };
 
 CTF_GROUP(mocked_strcmp) = {
-  mock_ptr_expect_success,
-  mock_ptr_assert,
-  mock_str_expect_success,
-  mock_str_assert,
+  &mock_ptr_expect_success,
+  &mock_ptr_assert,
+  &mock_str_expect_success,
+  &mock_str_assert,
 };
 CTF_GROUP_TEST_SETUP(mocked_strcmp) {
   mock_global(wrapped_strcmp, mock_wrapped_strcmp);
@@ -803,19 +804,19 @@ CTF_TEST(mock_array_ptr_assert) {
 }
 
 CTF_GROUP(mocked_memcmp) = {
-  mock_memory_char_expect_success, mock_memory_char_assert,
-  mock_memory_int_expect_success,  mock_memory_int_assert,
-  mock_memory_uint_expect_success, mock_memory_uint_assert,
-  mock_memory_ptr_expect_success,  mock_memory_ptr_assert,
-  mock_array_char_expect_success,  mock_array_char_assert,
-  mock_array_int_expect_success,   mock_array_int_assert,
-  mock_array_uint_expect_success,  mock_array_uint_assert,
-  mock_array_ptr_expect_success,   mock_array_ptr_assert,
+  &mock_memory_char_expect_success, &mock_memory_char_assert,
+  &mock_memory_int_expect_success,  &mock_memory_int_assert,
+  &mock_memory_uint_expect_success, &mock_memory_uint_assert,
+  &mock_memory_ptr_expect_success,  &mock_memory_ptr_assert,
+  &mock_array_char_expect_success,  &mock_array_char_assert,
+  &mock_array_int_expect_success,   &mock_array_int_assert,
+  &mock_array_uint_expect_success,  &mock_array_uint_assert,
+  &mock_array_ptr_expect_success,   &mock_array_ptr_assert,
 };
 
 CTF_GROUP(mock) = {
-  mock_grouped,
-  mock_return,
+  &mock_grouped,
+  &mock_return,
 };
 
 CTF_TEST(char_expect_success) {
@@ -1074,10 +1075,10 @@ CTF_TEST(str_assert) {
   assert_str_gte(s4, s1);
 }
 CTF_GROUP(primitive_success) = {
-  char_expect_success, char_assert, int_expect_success,  int_assert,
-  bool_expect_success, bool_assert, uint_expect_success, uint_assert,
-  ptr_expect_success,  ptr_assert,  null_expect_success, null_assert,
-  str_expect_success,  str_assert,
+  &char_expect_success, &char_assert, &int_expect_success,  &int_assert,
+  &bool_expect_success, &bool_assert, &uint_expect_success, &uint_assert,
+  &ptr_expect_success,  &ptr_assert,  &null_expect_success, &null_assert,
+  &str_expect_success,  &str_assert,
 };
 
 CTF_TEST(array_char_expect_success) {
@@ -1396,10 +1397,10 @@ CTF_TEST(array_ptr_assert) {
   assert_array_ptr_gte(a4, a1);
 }
 CTF_GROUP(array_success) = {
-  array_char_expect_success, array_char_assert,
-  array_int_expect_success,  array_int_assert,
-  array_uint_expect_success, array_uint_assert,
-  array_ptr_expect_success,  array_ptr_assert,
+  &array_char_expect_success, &array_char_assert,
+  &array_int_expect_success,  &array_int_assert,
+  &array_uint_expect_success, &array_uint_assert,
+  &array_ptr_expect_success,  &array_ptr_assert,
 };
 
 CTF_TEST(memory_char_expect_success) {
@@ -1550,10 +1551,10 @@ CTF_TEST(memory_ptr_assert) {
   assert_memory_ptr_gte(a2, a1, 1);
 }
 CTF_GROUP(memory_success) = {
-  memory_char_expect_success, memory_char_assert,
-  memory_int_expect_success,  memory_int_assert,
-  memory_uint_expect_success, memory_uint_assert,
-  memory_ptr_expect_success,  memory_ptr_assert,
+  &memory_char_expect_success, &memory_char_assert,
+  &memory_int_expect_success,  &memory_int_assert,
+  &memory_uint_expect_success, &memory_uint_assert,
+  &memory_ptr_expect_success,  &memory_ptr_assert,
 };
 
 CTF_TEST(pass_and_fail) {
@@ -1562,27 +1563,27 @@ CTF_TEST(pass_and_fail) {
 }
 
 CTF_GROUP(failure) = {
-  char_expect_failure,       int_expect_failure,
-  bool_expect_failure,       uint_expect_failure,
-  ptr_expect_failure,        null_expect_failure,
-  str_expect_failure,        array_char_expect_failure,
-  array_int_expect_failure,  array_uint_expect_failure,
-  array_ptr_expect_failure,  memory_char_expect_failure,
-  memory_int_expect_failure, memory_uint_expect_failure,
-  memory_ptr_expect_failure, pass_and_fail,
+  &char_expect_failure,       &int_expect_failure,
+  &bool_expect_failure,       &uint_expect_failure,
+  &ptr_expect_failure,        &null_expect_failure,
+  &str_expect_failure,        &array_char_expect_failure,
+  &array_int_expect_failure,  &array_uint_expect_failure,
+  &array_ptr_expect_failure,  &memory_char_expect_failure,
+  &memory_int_expect_failure, &memory_uint_expect_failure,
+  &memory_ptr_expect_failure, &pass_and_fail,
 };
 CTF_GROUP(mocked_add_failure) = {
-  mock_char_expect_failure,
-  mock_int_expect_failure,
-  mock_uint_expect_failure,
+  &mock_char_expect_failure,
+  &mock_int_expect_failure,
+  &mock_uint_expect_failure,
 };
 CTF_GROUP(mocked_strcmp_failure) = {
-  mock_ptr_expect_failure,
-  mock_str_expect_failure,
+  &mock_ptr_expect_failure,
+  &mock_str_expect_failure,
 };
 CTF_GROUP(mocked_memcmp_failure) = {
-  mock_memory_char_expect_failure, mock_memory_int_expect_failure,
-  mock_memory_uint_expect_failure, mock_memory_ptr_expect_failure,
-  mock_array_char_expect_failure,  mock_array_int_expect_failure,
-  mock_array_uint_expect_failure,  mock_array_ptr_expect_failure,
+  &mock_memory_char_expect_failure, &mock_memory_int_expect_failure,
+  &mock_memory_uint_expect_failure, &mock_memory_ptr_expect_failure,
+  &mock_array_char_expect_failure,  &mock_array_int_expect_failure,
+  &mock_array_uint_expect_failure,  &mock_array_ptr_expect_failure,
 };

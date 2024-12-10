@@ -59,31 +59,25 @@ static const char print_color_reset[] = "\x1b[0m";
 static int color = 0;
 static int detail = 1;
 
-int ctf_exit_code = 0;
-
 char ctf_signal_altstack[CTF_CONST_SIGNAL_STACK_SIZE];
-static mtx_t parallel_print_mutex;
-static thrd_t parallel_threads[CTF_CONST_MAX_THREADS];
+static pthread_mutex_t parallel_print_mutex;
+static pthread_t parallel_threads[CTF_CONST_MAX_THREADS];
 static int parallel_threads_waiting = 0;
 static struct ctf_internal_group parallel_task_queue[TASK_QUEUE_MAX] = {0};
-static mtx_t parallel_task_queue_mutex;
-static cnd_t parallel_threads_waiting_all;
-static cnd_t parallel_task_queue_non_empty;
-static cnd_t parallel_task_queue_non_full;
+static pthread_mutex_t parallel_task_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t parallel_threads_waiting_all = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t parallel_task_queue_non_empty = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t parallel_task_queue_non_full = PTHREAD_COND_INITIALIZER;
 static uintmax_t parallel_state = 0;
-static struct ctf_internal_state parallel_states[CTF_CONST_MAX_THREADS]
-                                                [CTF_CONST_STATES_PER_THREAD];
-static uintmax_t parallel_states_index[CTF_CONST_MAX_THREADS];
-static struct ctf_internal_state states[CTF_CONST_STATES_PER_THREAD];
 static char print_buff[CTF_CONST_MAX_THREADS][PRINT_BUFF_SIZE];
-static thread_local jmp_buf ctf_internal_assert_jmp_buff;
+static jmp_buf ctf_internal_assert_jmp_buff[CTF_CONST_MAX_THREADS];
 
-thread_local uintmax_t ctf_internal_parallel_thread_index;
-thread_local struct ctf_internal_mock_state *ctf_internal_mock_reset_queue[CTF_CONST_MOCKS_PER_TEST];
-thread_local uintmax_t ctf_internal_mock_reset_count;
-thread_local struct ctf_internal_state *ctf_internal_states = states;
-thread_local uintmax_t ctf_internal_state_index = 0;
+pthread_key_t ctf_internal_thread_index;
+int ctf_exit_code = 0;
+struct ctf_internal_thread_data ctf_internal_thread_data[CTF_CONST_MAX_THREADS];
 
+static void pthread_key_destr(void *v) {
+  (void)v;}
 
 static int get_value(const char *opt) {
   if(!strcmp(opt, "on")) return ON;
@@ -91,6 +85,7 @@ static int get_value(const char *opt) {
   if(!strcmp(opt, "auto")) return AUTO;
   puts(HELP_MSG);
   exit(0);
+  return 0;
 }
 
 static void err(void) {
@@ -489,16 +484,24 @@ static uintmax_t print_mem(struct ctf_internal_state *state, const void *a,
 }
 
 static void test_cleanup(void) {
-  for(uintmax_t i = 0; i < ctf_internal_mock_reset_count; i++) {
-    ctf_internal_mock_reset_queue[i]->call_count = 0;
-    ctf_internal_mock_reset_queue[i]->mock_f = NULL;
-    ctf_internal_mock_reset_queue[i]->return_count = 0;
-    ctf_internal_mock_reset_queue[i]->check_count = 0;
+  intptr_t thread_index =
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);
+  struct ctf_internal_thread_data *thread_data =
+    ctf_internal_thread_data + thread_index;
+  for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++) {
+    thread_data->mock_reset_stack[i]->call_count = 0;
+    thread_data->mock_reset_stack[i]->mock_f = NULL;
+    thread_data->mock_reset_stack[i]->return_count = 0;
+    thread_data->mock_reset_stack[i]->check_count = 0;
   }
-  ctf_internal_mock_reset_count = 0;
+  thread_data->mock_reset_stack_size = 0;
 }
 
 static void group_run_helper(struct ctf_internal_group group, char *buff) {
+  intptr_t thread_index =
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);
+  struct ctf_internal_thread_data *thread_data =
+    ctf_internal_thread_data + thread_index;
   volatile unsigned buff_index = 0;
   int test_status;
   volatile int group_status = 1;
@@ -506,24 +509,19 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
     print_group_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
                         group.name, strlen(group.name));
   group.setup();
-  for(int i = 0; i < CTF_CONST_GROUP_SIZE && group.tests[i].f; i++) {
-    ctf_internal_state_index = 0;
-    if(opt_threads != 1) {
-      parallel_states_index[ctf_internal_parallel_thread_index] = 0;
-    }
+  for(int i = 0;
+      i < CTF_CONST_GROUP_SIZE && group.tests[i] != NULL && group.tests[i]->f;
+      i++) {
+    thread_data->state_index = 0;
     print_test_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                       group.tests[i].name, strlen(group.tests[i].name));
+                       group.tests[i]->name, strlen(group.tests[i]->name));
     group.test_setup();
-    if(!setjmp(ctf_internal_assert_jmp_buff)) group.tests[i].f();
+    if(!setjmp(ctf_internal_assert_jmp_buff[thread_index])) group.tests[i]->f();
     group.test_teardown();
     test_cleanup();
-    if(opt_threads != 1) {
-      ctf_internal_state_index =
-        parallel_states_index[ctf_internal_parallel_thread_index];
-    }
     test_status = 1;
-    for(uintmax_t j = 0; j < ctf_internal_state_index; j++) {
-      if(ctf_internal_states[j].status == 1) {
+    for(uintmax_t j = 0; j < thread_data->state_index; j++) {
+      if(thread_data->states[j].status == 1) {
         test_status = 0;
         group_status = 0;
         break;
@@ -532,22 +530,22 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
     if(!test_status) {
       buff_index +=
         print_test_fail(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                        group.tests[i].name, strlen(group.tests[i].name));
-      for(uintmax_t j = 0; j < ctf_internal_state_index; j++) {
-        if(ctf_internal_states[j].status == 0) {
+                        group.tests[i]->name, strlen(group.tests[i]->name));
+      for(uintmax_t j = 0; j < thread_data->state_index; j++) {
+        if(thread_data->states[j].status == 0) {
           buff_index += print_test_pass_info(buff + buff_index,
                                              PRINT_BUFF_SIZE - buff_index,
-                                             ctf_internal_states + j);
-        } else if(ctf_internal_states[j].status == 1) {
+                                             thread_data->states + j);
+        } else if(thread_data->states[j].status == 1) {
           buff_index += print_test_fail_info(buff + buff_index,
                                              PRINT_BUFF_SIZE - buff_index,
-                                             ctf_internal_states + j);
+                                             thread_data->states + j);
         }
       }
     } else {
       buff_index +=
         print_test_pass(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                        group.tests[i].name, strlen(group.tests[i].name));
+                        group.tests[i]->name, strlen(group.tests[i]->name));
     }
   }
   group.teardown();
@@ -560,17 +558,21 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
 }
 
 static void group_run(struct ctf_internal_group group) {
-  group_run_helper(group, print_buff[ctf_internal_parallel_thread_index]);
-  printf("%s", print_buff[ctf_internal_parallel_thread_index]);
+  intptr_t thread_index =
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);
+  group_run_helper(group, print_buff[thread_index]);
+  printf("%s", print_buff[thread_index]);
   fflush(stdout);
 }
 
 static void groups_run(uintmax_t count, va_list args) {
   struct ctf_internal_group group;
+  intptr_t thread_index =
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);
   for(uintmax_t i = 0; i < count; i++) {
     group = va_arg(args, struct ctf_internal_group);
-    group_run_helper(group, print_buff[ctf_internal_parallel_thread_index]);
-    printf("%s", print_buff[ctf_internal_parallel_thread_index]);
+    group_run_helper(group, print_buff[thread_index]);
+    printf("%s", print_buff[thread_index]);
     fflush(stdout);
   }
 }
@@ -582,32 +584,33 @@ static void assert_copy(struct ctf_internal_state *state, int line,
 }
 
 static uintmax_t parallel_get_thread_index(void) {
-  const thrd_t thread = thrd_current();
+  const pthread_t thread = pthread_self();
   for(int i = 0; i < opt_threads; i++) {
-    if(thrd_equal(parallel_threads[i], thread)) {
+    if(pthread_equal(parallel_threads[i], thread)) {
       return i;
     }
   }
   return -1;
 }
 
-static int parallel_thread_loop(void *data) {
+static void *parallel_thread_loop(void *data) {
   (void)data;
   struct ctf_internal_group group;
-  ctf_internal_parallel_thread_index = parallel_get_thread_index();
-  ctf_internal_states = parallel_states[ctf_internal_parallel_thread_index];
+  intptr_t thread_index = (intptr_t)data;
+  pthread_setspecific(ctf_internal_thread_index, (void *)thread_index);
   while(1) {
-    mtx_lock(&parallel_task_queue_mutex);
+    pthread_mutex_lock(&parallel_task_queue_mutex);
     if(parallel_task_queue[0].tests == NULL) {
       if(parallel_threads_waiting == opt_threads - 1)
-        cnd_signal(&parallel_threads_waiting_all);
+        pthread_cond_signal(&parallel_threads_waiting_all);
       parallel_threads_waiting++;
       while(parallel_task_queue[0].tests == NULL && parallel_state) {
-        cnd_wait(&parallel_task_queue_non_empty, &parallel_task_queue_mutex);
+        pthread_cond_wait(&parallel_task_queue_non_empty,
+                          &parallel_task_queue_mutex);
       }
       parallel_threads_waiting--;
       if(parallel_task_queue[0].tests == NULL && !parallel_state) {
-        mtx_unlock(&parallel_task_queue_mutex);
+        pthread_mutex_unlock(&parallel_task_queue_mutex);
         return 0;
       }
     }
@@ -616,21 +619,22 @@ static int parallel_thread_loop(void *data) {
         i < TASK_QUEUE_MAX - 1 && parallel_task_queue[i].tests != NULL; i++) {
       parallel_task_queue[i] = parallel_task_queue[i + 1];
     }
-    cnd_signal(&parallel_task_queue_non_full);
-    mtx_unlock(&parallel_task_queue_mutex);
-    group_run_helper(group, print_buff[ctf_internal_parallel_thread_index]);
-    mtx_lock(&parallel_print_mutex);
-    printf("%s", print_buff[ctf_internal_parallel_thread_index]);
-    print_buff[ctf_internal_parallel_thread_index][0] = 0;
+    pthread_cond_signal(&parallel_task_queue_non_full);
+    pthread_mutex_unlock(&parallel_task_queue_mutex);
+    group_run_helper(group, print_buff[thread_index]);
+    pthread_mutex_lock(&parallel_print_mutex);
+    printf("%s", print_buff[thread_index]);
+    print_buff[thread_index][0] = 0;
     fflush(stdout);
-    mtx_unlock(&parallel_print_mutex);
+    pthread_mutex_unlock(&parallel_print_mutex);
   }
 }
 
 static void parallel_group_run(struct ctf_internal_group group) {
-  mtx_lock(&parallel_task_queue_mutex);
+  pthread_mutex_lock(&parallel_task_queue_mutex);
   while(parallel_task_queue[TASK_QUEUE_MAX - 1].tests != NULL) {
-    cnd_wait(&parallel_task_queue_non_full, &parallel_task_queue_mutex);
+    pthread_cond_wait(&parallel_task_queue_non_full,
+                      &parallel_task_queue_mutex);
   }
   for(int i = 0; i < TASK_QUEUE_MAX; i++) {
     if(parallel_task_queue[i].tests == NULL) {
@@ -638,18 +642,19 @@ static void parallel_group_run(struct ctf_internal_group group) {
       break;
     }
   }
-  cnd_signal(&parallel_task_queue_non_empty);
-  mtx_unlock(&parallel_task_queue_mutex);
+  pthread_cond_signal(&parallel_task_queue_non_empty);
+  pthread_mutex_unlock(&parallel_task_queue_mutex);
 }
 
 static void parallel_groups_run(int count, va_list args) {
   struct ctf_internal_group group;
 
-  mtx_lock(&parallel_task_queue_mutex);
+  pthread_mutex_lock(&parallel_task_queue_mutex);
   for(int j = 0; j < count; j++) {
     group = va_arg(args, struct ctf_internal_group);
     while(parallel_task_queue[TASK_QUEUE_MAX - 1].tests != NULL) {
-      cnd_wait(&parallel_task_queue_non_full, &parallel_task_queue_mutex);
+      pthread_cond_wait(&parallel_task_queue_non_full,
+                        &parallel_task_queue_mutex);
     }
     for(int i = 0; i < TASK_QUEUE_MAX; i++) {
       if(parallel_task_queue[i].tests == NULL) {
@@ -658,45 +663,46 @@ static void parallel_groups_run(int count, va_list args) {
       }
     }
   }
-  cnd_broadcast(&parallel_task_queue_non_empty);
-  mtx_unlock(&parallel_task_queue_mutex);
+  pthread_cond_broadcast(&parallel_task_queue_non_empty);
+  pthread_mutex_unlock(&parallel_task_queue_mutex);
 }
 
 #define EXPECT_START                                                    \
-  if(ctf_internal_state_index >= CTF_CONST_STATES_PER_THREAD) return 0; \
-  ctf_internal_state_index++;                                           \
-  if(opt_threads != 1) {                                                \
-    parallel_states_index[ctf_internal_parallel_thread_index]++;        \
-  }
+  intptr_t thread_index =                                               \
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);           \
+  struct ctf_internal_thread_data *thread_data =                        \
+    ctf_internal_thread_data + thread_index;                            \
+  if(thread_data->state_index >= CTF_CONST_STATES_PER_THREAD) return 0; \
+  thread_data->state_index++;                                           \
 
 static uintmax_t assert_msg_v(int status, const char *msg, int line, const char *file,
                          va_list v) {
-  ctf_internal_states[ctf_internal_state_index].status = status;
   EXPECT_START;
-  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line, file);
-  vsnprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+  thread_data->states[thread_data->state_index].status = status;
+  assert_copy(thread_data->states + thread_data->state_index - 1, line, file);
+  vsnprintf(thread_data->states[thread_data->state_index - 1].msg,
             CTF_CONST_STATE_MSG_SIZE, msg, v);
   return status;
 }
 
 uintmax_t ctf_internal_fail(const char *m, int line, const char *file, ...) {
   va_list v;
-  ctf_internal_states[ctf_internal_state_index].status = 1;
   EXPECT_START;
-  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line, file);
+  thread_data->states[thread_data->state_index].status = 1;
+  assert_copy(thread_data->states + thread_data->state_index - 1, line, file);
   va_start(v, file);
-  vsnprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+  vsnprintf(thread_data->states[thread_data->state_index - 1].msg,
             CTF_CONST_STATE_MSG_SIZE, m, v);
   va_end(v);
   return 0;
 }
 uintmax_t ctf_internal_pass(const char *m, int line, const char *file, ...) {
   va_list v;
-  ctf_internal_states[ctf_internal_state_index].status = 0;
   EXPECT_START;
-  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line, file);
+  thread_data->states[thread_data->state_index].status = 0;
+  assert_copy(thread_data->states + thread_data->state_index - 1, line, file);
   va_start(v, file);
-  vsnprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+  vsnprintf(thread_data->states[thread_data->state_index - 1].msg,
             CTF_CONST_STATE_MSG_SIZE, m, v);
   va_end(v);
   return 1;
@@ -753,15 +759,15 @@ define(`EXPECT_HELPER',
 const char *b_str, int line, const char *file) {
 int status;
 EXPECT_START;
-ctf_internal_states[ctf_internal_state_index-1].status = 2;
-assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,
+thread_data->states[thread_data->state_index-1].status = 2;
+assert_copy(thread_data->states + thread_data->state_index - 1, line,
             file);
-snprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+snprintf(thread_data->states[thread_data->state_index - 1].msg,
          CTF_CONST_STATE_MSG_SIZE,
          "%s $4 %s ( "$5" $4 "$5" )", a_str, b_str, a,
          b);
 status = $6 $4 $7;
-ctf_internal_states[ctf_internal_state_index - 1].status = !status;
+thread_data->states[thread_data->state_index - 1].status = !status;
 return status;
 }')
 define(`EXPECT_MEMORY_HELPER',
@@ -770,13 +776,13 @@ $3(a), $3(b), uintmax_t l, uintmax_t step, int sign,        \
 const char *a_str, const char *b_str, int line, const char *file) {       \
     int status;                                                               \
     EXPECT_START;                                                               \
-    ctf_internal_states[ctf_internal_state_index-1].status = 2;                 \
-    assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,     \
+    thread_data->states[thread_data->state_index-1].status = 2;                 \
+    assert_copy(thread_data->states + thread_data->state_index - 1, line,     \
                 file);                                                        \
-    print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, l, l, \
+    print_mem(thread_data->states + thread_data->state_index - 1, a, b, l, l, \
               step, sign, a_str, b_str, "$4", $5 ", ");        \
-    status = ctf_internal_states[ctf_internal_state_index - 1].status $4 0;   \
-    ctf_internal_states[ctf_internal_state_index - 1].status = !status;       \
+    status = thread_data->states[thread_data->state_index - 1].status $4 0;   \
+    thread_data->states[thread_data->state_index - 1].status = !status;       \
     return status;                                                            \
   }')
 define(`EXPECT_ARRAY_HELPER',
@@ -786,18 +792,18 @@ define(`EXPECT_ARRAY_HELPER',
   const char *file) {                                                     \
   int status;                                                             \
   EXPECT_START;                                                             \
-  ctf_internal_states[ctf_internal_state_index-1].status = 2;               \
-  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,   \
+  thread_data->states[thread_data->state_index-1].status = 2;               \
+  assert_copy(thread_data->states + thread_data->state_index - 1, line,   \
               file);                                                      \
-  print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, la, \
+  print_mem(thread_data->states + thread_data->state_index - 1, a, b, la, \
             lb, step, sign, a_str, b_str, "$4", $5 ", ");  \
-  if(ctf_internal_states[ctf_internal_state_index - 1].status == 0) {     \
+  if(thread_data->states[thread_data->state_index - 1].status == 0) {     \
     status = (la $4 lb);                                                  \
   } else {                                                                \
     status =                                                              \
-      (ctf_internal_states[ctf_internal_state_index - 1].status $4 0);    \
+      (thread_data->states[thread_data->state_index - 1].status $4 0);    \
   }                                                                       \
-  ctf_internal_states[ctf_internal_state_index - 1].status = !status;     \
+  thread_data->states[thread_data->state_index - 1].status = !status;     \
   return status;                                                          \
 }')
 define(`ASSERT_HELPER',
@@ -805,16 +811,16 @@ define(`ASSERT_HELPER',
 const char *b_str, int line, const char *file) {
 int status;
 EXPECT_START;
-ctf_internal_states[ctf_internal_state_index-1].status = 2;
-assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,
+thread_data->states[thread_data->state_index-1].status = 2;
+assert_copy(thread_data->states + thread_data->state_index - 1, line,
             file);
-snprintf(ctf_internal_states[ctf_internal_state_index - 1].msg,
+snprintf(thread_data->states[thread_data->state_index - 1].msg,
          CTF_CONST_STATE_MSG_SIZE,
          "%s $4 %s ( "$5" $4 "$5" )", a_str, b_str, a,
          b);
 status = $6 $4 $7;
-ctf_internal_states[ctf_internal_state_index - 1].status = !status;
-  if(!status) longjmp(ctf_internal_assert_jmp_buff, 1);                           \
+thread_data->states[thread_data->state_index - 1].status = !status;
+if(!status) longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);                           \
 return status;
 }')
 define(`ASSERT_MEMORY_HELPER',
@@ -823,14 +829,14 @@ $3(a), $3(b), uintmax_t l, uintmax_t step, int sign,        \
 const char *a_str, const char *b_str, int line, const char *file) {       \
     int status;                                                               \
     EXPECT_START;                                                               \
-    ctf_internal_states[ctf_internal_state_index-1].status = 2;                 \
-    assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,     \
+    thread_data->states[thread_data->state_index-1].status = 2;                 \
+    assert_copy(thread_data->states + thread_data->state_index - 1, line,     \
                 file);                                                        \
-    print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, l, l, \
+    print_mem(thread_data->states + thread_data->state_index - 1, a, b, l, l, \
               step, sign, a_str, b_str, "$4", $5 ", ");        \
-    status = ctf_internal_states[ctf_internal_state_index - 1].status $4 0;   \
-    ctf_internal_states[ctf_internal_state_index - 1].status = !status;       \
-  if(!status) longjmp(ctf_internal_assert_jmp_buff, 1);                           \
+    status = thread_data->states[thread_data->state_index - 1].status $4 0;   \
+    thread_data->states[thread_data->state_index - 1].status = !status;       \
+    if(!status) longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);                           \
     return status;                                                            \
   }')
 define(`ASSERT_ARRAY_HELPER',
@@ -840,19 +846,19 @@ define(`ASSERT_ARRAY_HELPER',
   const char *file) {                                                     \
   int status;                                                             \
   EXPECT_START;                                                             \
-  ctf_internal_states[ctf_internal_state_index-1].status = 2;               \
-  assert_copy(ctf_internal_states + ctf_internal_state_index - 1, line,   \
+  thread_data->states[thread_data->state_index-1].status = 2;               \
+  assert_copy(thread_data->states + thread_data->state_index - 1, line,   \
               file);                                                      \
-  print_mem(ctf_internal_states + ctf_internal_state_index - 1, a, b, la, \
+  print_mem(thread_data->states + thread_data->state_index - 1, a, b, la, \
             lb, step, sign, a_str, b_str, "$4", $5 ", ");  \
-  if(ctf_internal_states[ctf_internal_state_index - 1].status == 0) {     \
+  if(thread_data->states[thread_data->state_index - 1].status == 0) {     \
     status = (la $4 lb);                                                  \
   } else {                                                                \
     status =                                                              \
-      (ctf_internal_states[ctf_internal_state_index - 1].status $4 0);    \
+      (thread_data->states[thread_data->state_index - 1].status $4 0);    \
   }                                                                       \
-  ctf_internal_states[ctf_internal_state_index - 1].status = !status;     \
-  if(!status) longjmp(ctf_internal_assert_jmp_buff, 1);                           \
+  thread_data->states[thread_data->state_index - 1].status = !status;     \
+  if(!status) longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);                           \
   return status;                                                          \
 }')
 */
@@ -888,6 +894,8 @@ define(`MOCK_CHECK_HELPER',
 `void ctf_internal_mock_check_$1(struct ctf_internal_mock_state *state, $2 v,
 const char *v_print) {
   int ret = 1;
+    intptr_t thread_index =                                                   \
+      (intptr_t)pthread_getspecific(ctf_internal_thread_index);               \
   for(uintmax_t i=0; i<state->check_count; i++) {
     if(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY) continue;
     if(strcmp(state->check[i].var, v_print)) continue;
@@ -897,7 +905,7 @@ const char *v_print) {
       state->check[i].print_var, v_print, state->check[i].line,
         state->check[i].file);
     if(!ret && state->check[i].type & CTF_INTERNAL_MOCK_TYPE_ASSERT) {
-      longjmp(ctf_internal_assert_jmp_buff, 1);
+    longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);
     }
   }
   ctf_internal_mock_check_base(state, v_print, 0);
@@ -906,6 +914,8 @@ define(`MOCK_CHECK_STR',
        `void ctf_internal_mock_check_str(struct ctf_internal_mock_state *state,
                                          const char *v, const char *v_print) {
   int ret = 1;
+    intptr_t thread_index =                                                   \
+      (intptr_t)pthread_getspecific(ctf_internal_thread_index);               \
   for(uintmax_t i=0; i<state->check_count; i++) {
     if(!(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY)) continue;
     if(strcmp(state->check[i].var, v_print)) continue;
@@ -915,7 +925,7 @@ define(`MOCK_CHECK_STR',
       state->check[i].print_var, v_print, state->check[i].line,
         state->check[i].file);
     if(!ret && state->check[i].type & CTF_INTERNAL_MOCK_TYPE_ASSERT) {
-      longjmp(ctf_internal_assert_jmp_buff, 1);
+    longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);
     }
   }
   ctf_internal_mock_check_base(state, v_print, 1);
@@ -925,6 +935,8 @@ define(`MOCK_CHECK_MEMORY_HELPER',
 const void * v,
                                                const char *v_print, uintmax_t step, int sign) {
   int ret = 1;
+    intptr_t thread_index =                                                   \
+      (intptr_t)pthread_getspecific(ctf_internal_thread_index);               \
   for(uintmax_t i=0; i<state->check_count; i++) {
     if(!(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY)) continue;
     if(strcmp(state->check[i].var, v_print)) continue;
@@ -933,7 +945,7 @@ const void * v,
       state->check[i].print_var, v_print, state->check[i].line,
         state->check[i].file);
     if(!ret && state->check[i].type & CTF_INTERNAL_MOCK_TYPE_ASSERT) {
-      longjmp(ctf_internal_assert_jmp_buff, 1);
+    longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);
     }
   }
   ctf_internal_mock_check_base(state, v_print, 1);
@@ -975,11 +987,6 @@ COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
 int main(int argc, char *argv[]) {
   int i;
   int handle_sigsegv = 1;
-  mtx_init(&parallel_print_mutex, mtx_plain);
-  mtx_init(&parallel_task_queue_mutex, mtx_plain);
-  cnd_init(&parallel_threads_waiting_all);
-  cnd_init(&parallel_task_queue_non_empty);
-  cnd_init(&parallel_task_queue_non_full);
   for(i = 1; i < argc; i++) {
     if(argv[i][0] != '-') err();
     if(!strcmp(argv[i] + 1, "h") || !strcmp(argv[i] + 1, "-help")) {
@@ -1040,36 +1047,40 @@ int main(int argc, char *argv[]) {
                            .ss_size = CTF_CONST_SIGNAL_STACK_SIZE},
                 NULL);
   }
+  pthread_key_create(&ctf_internal_thread_index, pthread_key_destr);
+  pthread_setspecific(ctf_internal_thread_index, (void *)0);
   ctf_main(argc - i, argv + i);
+  pthread_key_delete(ctf_internal_thread_index);
   return ctf_exit_code;
 }
 
 void ctf_parallel_sync(void) {
   if(opt_threads == 1) return;
   if(!parallel_state) return;
-  mtx_lock(&parallel_task_queue_mutex);
+  pthread_mutex_lock(&parallel_task_queue_mutex);
   while(parallel_threads_waiting != opt_threads ||
         parallel_task_queue[0].tests != NULL) {
-    cnd_wait(&parallel_threads_waiting_all, &parallel_task_queue_mutex);
+    pthread_cond_wait(&parallel_threads_waiting_all,
+                      &parallel_task_queue_mutex);
   }
   fflush(stdout);
-  mtx_unlock(&parallel_task_queue_mutex);
+  pthread_mutex_unlock(&parallel_task_queue_mutex);
 }
 void ctf_parallel_start(void) {
   if(opt_threads == 1) return;
   parallel_state = 1;
-  for(int i = 0; i < opt_threads; i++) {
-    thrd_create(parallel_threads + i, parallel_thread_loop, NULL);
+  for(intptr_t i = 0; i < opt_threads; i++) {
+    pthread_create(parallel_threads + i, NULL, parallel_thread_loop, (void *)i);
   }
 }
 void ctf_parallel_stop(void) {
   if(opt_threads == 1) return;
   parallel_state = 0;
-  mtx_lock(&parallel_task_queue_mutex);
-  cnd_broadcast(&parallel_task_queue_non_empty);
-  mtx_unlock(&parallel_task_queue_mutex);
+  pthread_mutex_lock(&parallel_task_queue_mutex);
+  pthread_cond_broadcast(&parallel_task_queue_non_empty);
+  pthread_mutex_unlock(&parallel_task_queue_mutex);
   for(int i = 0; i < opt_threads; i++) {
-    thrd_join(parallel_threads[i], NULL);
+    pthread_join(parallel_threads[i], NULL);
   }
 }
 void ctf_group_run(const struct ctf_internal_group group) {
@@ -1090,9 +1101,13 @@ void ctf_internal_groups_run(int count, ...) {
   va_end(args);
 }
 void ctf_assert_barrier(void) {
-  for(uintmax_t i = 0; i < ctf_internal_state_index; i++) {
-    if(ctf_internal_states[i].status) {
-      longjmp(ctf_internal_assert_jmp_buff, 1);
+  intptr_t thread_index =
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);
+  struct ctf_internal_thread_data *thread_data =
+    ctf_internal_thread_data + thread_index;
+  for(uintmax_t i = 0; i < thread_data->state_index; i++) {
+    if(thread_data->states[i].status) {
+      longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);
     }
   }
 }
@@ -1101,32 +1116,43 @@ void ctf_internal_assert_fold(uintmax_t count, const char *msg, int line, const 
   ctf_internal_pass(msg, line, file);
 }
 void ctf_assert_hide(uintmax_t count) {
-  if(ctf_internal_state_index <= count) {
-    for(uintmax_t i = 0; i < ctf_internal_state_index; i++) {
-      if(ctf_internal_states[i].status) {
-        longjmp(ctf_internal_assert_jmp_buff, 1);
+  intptr_t thread_index =
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);
+  struct ctf_internal_thread_data *thread_data =
+    ctf_internal_thread_data + thread_index;
+  if(thread_data->state_index <= count) {
+    for(uintmax_t i = 0; i < thread_data->state_index; i++) {
+      if(thread_data->states[i].status) {
+        longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);
       }
     }
   } else {
-    for(uintmax_t i = ctf_internal_state_index - count;
-        i < ctf_internal_state_index; i++) {
-      if(ctf_internal_states[i].status) {
-        longjmp(ctf_internal_assert_jmp_buff, 1);
+    for(uintmax_t i = thread_data->state_index - count;
+        i < thread_data->state_index; i++) {
+      if(thread_data->states[i].status) {
+        longjmp(ctf_internal_assert_jmp_buff[thread_index], 1);
       }
     }
   }
-  ctf_internal_state_index -= count;
+  thread_data->state_index -= count;
 }
 void ctf_unmock(void) {
+  intptr_t thread_index =
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);
+  struct ctf_internal_thread_data *thread_data =
+    ctf_internal_thread_data + thread_index;
   struct ctf_internal_mock_state *state =
-    ctf_internal_mock_reset_queue[ctf_internal_mock_reset_count - 1];
+    thread_data->mock_reset_stack[--thread_data->mock_reset_stack_size];
   state->mock_f = NULL;
-  ctf_internal_mock_reset_count--;
   ctf_internal_mock_reset(state);
 }
 
 void ctf_sigsegv_handler(int unused) {
   (void)unused;
+  intptr_t thread_index =
+    (intptr_t)pthread_getspecific(ctf_internal_thread_index);
+  struct ctf_internal_thread_data *thread_data =
+    ctf_internal_thread_data + thread_index;
   const char err_color[] = "\x1b[33m";
   uintmax_t buff_index = 0;
   const char premsg[] =
@@ -1139,31 +1165,32 @@ void ctf_sigsegv_handler(int unused) {
     "----------------------------------------\n"
     "             BUFFER STATE\n"
     "----------------------------------------\n";
-  _Pragma("GCC diagnostic ignored \"-Wunused-result\"");
+#pragma GCC diagnostic ignored "-Wunused-result"
   if(color) {
     write(STDOUT_FILENO, err_color, sizeof(err_color));
   }
   write(STDOUT_FILENO, premsg, sizeof(premsg));
   if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
-  write(STDOUT_FILENO, print_buff[ctf_internal_parallel_thread_index],
-        strlen(print_buff[ctf_internal_parallel_thread_index]));
-  for(uintmax_t i = 0; i < ctf_internal_state_index; i++) {
-    if(ctf_internal_states[i].status == 0) {
-      buff_index += print_test_pass_info(
-        print_buff[ctf_internal_parallel_thread_index] + buff_index,
-        PRINT_BUFF_SIZE - buff_index, ctf_internal_states + i);
-    } else if(ctf_internal_states[i].status == 1) {
-      buff_index += print_test_fail_info(
-        print_buff[ctf_internal_parallel_thread_index] + buff_index,
-        PRINT_BUFF_SIZE - buff_index, ctf_internal_states + i);
-    } else if(ctf_internal_states[i].status == 2) {
+  write(STDOUT_FILENO, print_buff[thread_index],
+        strlen(print_buff[thread_index]));
+  for(uintmax_t i = 0; i < thread_data->state_index; i++) {
+    if(thread_data->states[i].status == 0) {
+      buff_index += print_test_pass_info(print_buff[thread_index] + buff_index,
+                                         PRINT_BUFF_SIZE - buff_index,
+                                         thread_data->states + i);
+    } else if(thread_data->states[i].status == 1) {
+      buff_index += print_test_fail_info(print_buff[thread_index] + buff_index,
+                                         PRINT_BUFF_SIZE - buff_index,
+                                         thread_data->states + i);
+    } else if(thread_data->states[i].status == 2) {
       buff_index += print_test_unknown_info(
-        print_buff[ctf_internal_parallel_thread_index] + buff_index,
-        PRINT_BUFF_SIZE - buff_index, ctf_internal_states + i);
+        print_buff[thread_index] + buff_index, PRINT_BUFF_SIZE - buff_index,
+        thread_data->states + i);
     }
   }
   if(color) write(STDOUT_FILENO, err_color, sizeof(err_color));
   write(STDOUT_FILENO, postmsg, sizeof(postmsg));
   if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
-  _Pragma("GCC diagnostic pop") fflush(stdout);
+#pragma GCC diagnostic pop
+  fflush(stdout);
 }
