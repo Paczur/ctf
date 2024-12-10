@@ -59,7 +59,6 @@ static const char print_color_reset[] = "\x1b[0m";
 static int color = 0;
 static int detail = 1;
 
-char ctf_signal_altstack[CTF_CONST_SIGNAL_STACK_SIZE];
 static pthread_mutex_t parallel_print_mutex;
 static pthread_t parallel_threads[CTF_CONST_MAX_THREADS];
 static int parallel_threads_waiting = 0;
@@ -72,6 +71,7 @@ static uintmax_t parallel_state = 0;
 static char print_buff[CTF_CONST_MAX_THREADS][PRINT_BUFF_SIZE];
 static jmp_buf ctf_internal_assert_jmp_buff[CTF_CONST_MAX_THREADS];
 
+char ctf_signal_altstack[CTF_CONST_SIGNAL_STACK_SIZE];
 pthread_key_t ctf_internal_thread_index;
 int ctf_exit_code = 0;
 struct ctf_internal_thread_data ctf_internal_thread_data[CTF_CONST_MAX_THREADS];
@@ -491,7 +491,8 @@ static void test_cleanup(void) {
   for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++) {
     thread_data->mock_reset_stack[i]->call_count = 0;
     thread_data->mock_reset_stack[i]->mock_f = NULL;
-    thread_data->mock_reset_stack[i]->return_count = 0;
+    memset(thread_data->mock_reset_stack[i]->return_overrides, 0,
+           sizeof(thread_data->mock_reset_stack[i]->return_overrides));
     thread_data->mock_reset_stack[i]->check_count = 0;
   }
   thread_data->mock_reset_stack_size = 0;
@@ -509,14 +510,12 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
     print_group_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
                         group.name, strlen(group.name));
   group.setup();
-  for(int i = 0;
-      i < CTF_CONST_GROUP_SIZE && group.tests[i] != NULL && group.tests[i]->f;
-      i++) {
+  for(int i = 0; i < CTF_CONST_GROUP_SIZE && group.tests[i].f; i++) {
     thread_data->state_index = 0;
     print_test_unknown(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                       group.tests[i]->name, strlen(group.tests[i]->name));
+                       group.tests[i].name, strlen(group.tests[i].name));
     group.test_setup();
-    if(!setjmp(ctf_internal_assert_jmp_buff[thread_index])) group.tests[i]->f();
+    if(!setjmp(ctf_internal_assert_jmp_buff[thread_index])) group.tests[i].f();
     group.test_teardown();
     test_cleanup();
     test_status = 1;
@@ -530,7 +529,7 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
     if(!test_status) {
       buff_index +=
         print_test_fail(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                        group.tests[i]->name, strlen(group.tests[i]->name));
+                        group.tests[i].name, strlen(group.tests[i].name));
       for(uintmax_t j = 0; j < thread_data->state_index; j++) {
         if(thread_data->states[j].status == 0) {
           buff_index += print_test_pass_info(buff + buff_index,
@@ -545,7 +544,7 @@ static void group_run_helper(struct ctf_internal_group group, char *buff) {
     } else {
       buff_index +=
         print_test_pass(buff + buff_index, PRINT_BUFF_SIZE - buff_index,
-                        group.tests[i]->name, strlen(group.tests[i]->name));
+                        group.tests[i].name, strlen(group.tests[i].name));
     }
   }
   group.teardown();
