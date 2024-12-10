@@ -37,7 +37,7 @@ int mock_wrapped_strcmp(const char *a, const char *b) {
   return mock_real(wrapped_strcmp)(a, b);
 }
 int mock_wrapped_memcmp(const void *a, const void *b, size_t l) {
-  mock_check(wrapped_strcmp);
+  mock_check(wrapped_memcmp);
   mock_check_memory_int(a);
   mock_check_memory_int(b);
   return mock_real(wrapped_memcmp)(a, b, l);
@@ -408,16 +408,12 @@ CTF_GROUP(mocked_add) = {
   &mock_int_expect_success,  &mock_int_assert,
   &mock_uint_expect_success, &mock_uint_assert,
 };
-
 CTF_GROUP(mocked_strcmp) = {
   &mock_ptr_expect_success,
   &mock_ptr_assert,
   &mock_str_expect_success,
   &mock_str_assert,
 };
-CTF_GROUP_TEST_SETUP(mocked_strcmp) {
-  mock_global(wrapped_strcmp, mock_wrapped_strcmp);
-}
 
 CTF_TEST(mock_memory_char_expect_success) {
   const char a[] = {'a'};
