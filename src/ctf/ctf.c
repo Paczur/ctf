@@ -492,7 +492,7 @@ static void test_cleanup(void) {
   for(uintmax_t i = 0; i < ctf_internal_mock_reset_count; i++) {
     ctf_internal_mock_reset_queue[i]->call_count = 0;
     ctf_internal_mock_reset_queue[i]->mock_f = NULL;
-    ctf_internal_mock_reset_queue[i]->return_override = 0;
+    ctf_internal_mock_reset_queue[i]->return_count = 0;
     ctf_internal_mock_reset_queue[i]->check_count = 0;
   }
   ctf_internal_mock_reset_count = 0;
@@ -709,21 +709,20 @@ uintmax_t ctf_internal_assert_msg(int status, const char *msg, int line,
   va_end(args);
   return st;
 }
-void ctf_internal_mock_check_base(struct ctf_internal_mock_state *state,
+static void ctf_internal_mock_check_base(struct ctf_internal_mock_state *state,
                                   const char *v, int memory) {
   int removed = 0;
-  for(int i = 0; i < state->check_count; i++) {
+  for(uintmax_t i = 0; i < state->check_count; i++) {
     if(!(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY) == memory)
       continue;
     if(strcmp(state->check[i].var, v)) continue;
-    if(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_ONCE) {
-      state->check[i].f.i = NULL;
-      removed++;
-    }
+    if(state->check[i].call_count != state->call_count) continue;
+    state->check[i].f.i = NULL;
+    removed++;
   }
-  for(int i = 0; i < state->check_count; i++) {
+  for(uintmax_t i = 0; i < state->check_count; i++) {
     if(state->check[i].f.i == NULL) {
-      for(int j = i + 1; j < state->check_count; j++) {
+      for(uintmax_t j = i + 1; j < state->check_count; j++) {
         if(state->check[j].f.i != NULL) {
           state->check[i] = state->check[j];
           state->check[j].f.i = NULL;
@@ -734,12 +733,13 @@ void ctf_internal_mock_check_base(struct ctf_internal_mock_state *state,
   }
   state->check_count -= removed;                                        \
 }
-static void mock_base(struct ctf_internal_mock_state *state, int type,
+static void mock_base(struct ctf_internal_mock_state *state, int call_count, int type,
                       int line, const char *file, const char *print_var,
                       void *f, const char *var) {
   struct ctf_internal_check *const check = state->check + state->check_count;
   check->f.i = f;
   check->var = var;
+  check->call_count = call_count;
   check->type = type;
   check->line = line;
   check->file = file;
@@ -747,7 +747,7 @@ static void mock_base(struct ctf_internal_mock_state *state, int type,
   state->check_count++;
 }
 // clang-format off
-/*
+/* EXPECTS AND ASSERTS
 define(`EXPECT_HELPER',
 `int ctf_internal_expect_$1_$2($3 a, $3 b, const char *a_str,
 const char *b_str, int line, const char *file) {
@@ -855,44 +855,43 @@ define(`ASSERT_ARRAY_HELPER',
   if(!status) longjmp(ctf_internal_assert_jmp_buff, 1);                           \
   return status;                                                          \
 }')
+*/
+/* MOCKS
 define(`MOCK_HELPER',
-`void ctf_internal_mock_$1(struct ctf_internal_mock *mock, int type,
+`void ctf_internal_mock_$1(struct ctf_internal_mock_state *state,uintmax_t call_count, int type,
                             int line, const char *file, const char *print_var,
                             void *f, const char *var, $2 val) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
   struct ctf_internal_check *const check = state->check + state->check_count;
   check->val.$3 = val;
-  mock_base(state, type | $4, line, file, print_var, f, var);
+  mock_base(state, call_count, type | $4, line, file, print_var, f, var);
 }')
 define(`MOCK_STR',
-`void ctf_internal_mock_str(struct ctf_internal_mock *mock, int type,
+`void ctf_internal_mock_str(struct ctf_internal_mock_state *state,uintmax_t call_count, int type,
                             int line, const char *file, const char *print_var,
                             void *f, const char *var, const char *val) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
   struct ctf_internal_check *const check = state->check + state->check_count;
   check->val.p = val;
-  mock_base(state, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, line, file, print_var, f, var);
+  mock_base(state, call_count, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, line, file, print_var, f, var);
 }')
 define(`MOCK_MEMORY_HELPER',
-`void ctf_internal_mock_$1(struct ctf_internal_mock *mock, int type,
+`void ctf_internal_mock_$1(struct ctf_internal_mock_state *state,uintmax_t call_count, int type,
                             int line, const char *file, const char *print_var,
                             void *f, const char *var, $2 val, uintmax_t l) {
-  struct ctf_internal_mock_state *const state =
-    mock->state + ctf_internal_parallel_thread_index;
   struct ctf_internal_check *const check = state->check + state->check_count;
   check->val.$3 = val;
   check->length = l;
-  mock_base(state, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, line, file, print_var, f, var);
+  mock_base(state, call_count, type | CTF_INTERNAL_MOCK_TYPE_MEMORY, line, file, print_var, f, var);
 }')
+*/
+/* MOCK CHECKS
 define(`MOCK_CHECK_HELPER',
 `void ctf_internal_mock_check_$1(struct ctf_internal_mock_state *state, $2 v,
 const char *v_print) {
   int ret = 1;
-  for(int i=0; i<state->check_count; i++) {
+  for(uintmax_t i=0; i<state->check_count; i++) {
     if(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY) continue;
     if(strcmp(state->check[i].var, v_print)) continue;
+    if(state->check[i].call_count != state->call_count) continue;
     ret = state->check[i].f.$3(
       state->check[i].val.$3, v,
       state->check[i].print_var, v_print, state->check[i].line,
@@ -907,9 +906,10 @@ define(`MOCK_CHECK_STR',
        `void ctf_internal_mock_check_str(struct ctf_internal_mock_state *state,
                                          const char *v, const char *v_print) {
   int ret = 1;
-  for(int i=0; i<state->check_count; i++) {
+  for(uintmax_t i=0; i<state->check_count; i++) {
     if(!(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY)) continue;
     if(strcmp(state->check[i].var, v_print)) continue;
+    if(state->check[i].call_count != state->call_count) continue;
     ret = state->check[i].f.p(
       state->check[i].val.p, v,
       state->check[i].print_var, v_print, state->check[i].line,
@@ -921,12 +921,14 @@ define(`MOCK_CHECK_STR',
   ctf_internal_mock_check_base(state, v_print, 1);
 }')
 define(`MOCK_CHECK_MEMORY_HELPER',
-       `void ctf_internal_mock_check_memory_$1(struct ctf_internal_mock_state *state, const void * v,
+`void ctf_internal_mock_check_memory_$1(struct ctf_internal_mock_state *state,
+const void * v,
                                                const char *v_print, uintmax_t step, int sign) {
   int ret = 1;
-  for(int i=0; i<state->check_count; i++) {
+  for(uintmax_t i=0; i<state->check_count; i++) {
     if(!(state->check[i].type & CTF_INTERNAL_MOCK_TYPE_MEMORY)) continue;
     if(strcmp(state->check[i].var, v_print)) continue;
+    if(state->check[i].call_count != state->call_count) continue;
     ret = state->check[i].f.m( state->check[i].val.p, v, state->check[i].length, step, sign,
       state->check[i].print_var, v_print, state->check[i].line,
         state->check[i].file);
@@ -936,6 +938,8 @@ define(`MOCK_CHECK_MEMORY_HELPER',
   }
   ctf_internal_mock_check_base(state, v_print, 1);
 }')
+*/
+/* DEFINES
 define(`MOCK', `MOCK_HELPER(`$1', TYPE(`$1'), SHORT(`$1'), 0)')
 define(`MOCK_MEMORY', `MOCK_MEMORY_HELPER(`$1', `const void *', `p')')
 define(`EXPECT_PRIMITIVE', `EXPECT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),a,b)')
@@ -1113,10 +1117,12 @@ void ctf_assert_hide(uintmax_t count) {
   }
   ctf_internal_state_index -= count;
 }
-int ctf_internal_mock_call_count(struct ctf_internal_mock_state *state) {
-  int x = state->call_count;
-  state->call_count = 0;
-  return x;
+void ctf_unmock(void) {
+  struct ctf_internal_mock_state *state =
+    ctf_internal_mock_reset_queue[ctf_internal_mock_reset_count - 1];
+  state->mock_f = NULL;
+  ctf_internal_mock_reset_count--;
+  ctf_internal_mock_reset(state);
 }
 
 void ctf_sigsegv_handler(int unused) {
