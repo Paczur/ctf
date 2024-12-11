@@ -108,4 +108,4 @@ build/src/%.o: build/src/%.c build/src/%.h
 build/%: %
 	mkdir -p $(@D)
 	$(info GEN  $@)
-	m4 -Im4 $< > $@
+	m4 -Im4 -Isrc/ctf $< > $@
