@@ -814,6 +814,31 @@ CTF_GROUP(mock) = {
   mock_return,
 };
 
+CTF_TEST(msg_limit) {
+  ctf_pass("%8192s", "long formated msg");
+  ctf_pass(
+    "veryyyy longgg messageeeeee                                               "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                                                                          "
+    "                ");
+}
+CTF_TEST(print_buff_limit) { ctf_pass("%1048576s", "long"); }
+CTF_GROUP(misc) = {
+  msg_limit,
+  print_buff_limit,
+};
+
 CTF_TEST(char_expect_success) {
   char a = 'a';
   char b = 'b';

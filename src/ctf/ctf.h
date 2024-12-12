@@ -21,27 +21,19 @@ include(`base.m4')
 #include <stdio.h>
 #include <string.h>
 
-#define CTF_CONST_STATE_MSG_SIZE 4096
-#define CTF_CONST_STATES_PER_THREAD 64
 #define CTF_CONST_MAX_THREADS 16
 #define CTF_CONST_GROUP_SIZE 128
 #define CTF_CONST_SIGNAL_STACK_SIZE 1024
 
-#define CTF_CONST_MOCKS_PER_TEST 64
-
-#define CTF__EA(f, ...)                                              \
-  do {                                                               \
-    prereq_assert((intptr_t)pthread_getspecific(ctf__thread_index) < \
-                    CTF_CONST_STATES_PER_THREAD,                     \
-                  "Limit for asserts/expects per test reached");     \
-    f(__VA_ARGS__);                                                  \
-  } while(0)
+#define CTF__EA(f, ...) f(__VA_ARGS__);
 
 struct ctf__state {
   int status;
   int line;
   const char *file;
-  char msg[CTF_CONST_STATE_MSG_SIZE];
+  char *msg;
+  uintmax_t msg_size;
+  uintmax_t msg_capacity;
 };
 struct ctf__test {
   void (*const f)(void);
@@ -55,38 +47,13 @@ struct ctf__group {
   void (*test_teardown)(void);
   const char *name;
 };
-struct ctf__check {
-  const char *var;
-  union {
-    int (*i)(intmax_t, intmax_t, const char *, const char *, int, const char *);
-    int (*u)(uintmax_t, uintmax_t, const char *, const char *, int,
-             const char *);
-    int (*p)(const void *, const void *, const char *, const char *, int,
-             const char *);
-    int (*c)(char, char, const char *, const char *, int, const char *);
-    int (*s)(const char *, const char *, const char *, const char *, int,
-             const char *);
-    int (*m)(const void *, const void *, uintmax_t, uintmax_t, int,
-             const char *, const char *, int, const char *);
-  } f;
-  int type;
-  uintmax_t length;
-  int line;
-  uintmax_t call_count;
-  const char *file;
-  const char *print_var;
-  union {
-    uintmax_t u;
-    intmax_t i;
-    char c;
-    const void *p;
-  } val;
-};
 struct ctf__thread_data {
-  struct ctf__state states[CTF_CONST_STATES_PER_THREAD];
-  uintmax_t state_index;
-  struct ctf__mock_state *mock_reset_stack[CTF_CONST_MOCKS_PER_TEST];
+  struct ctf__state *states;
+  uintmax_t states_size;
+  uintmax_t states_capacity;
+  struct ctf__mock_state **mock_reset_stack;
   uintmax_t mock_reset_stack_size;
+  uintmax_t mock_reset_stack_capacity;
 };
 
 extern struct ctf__thread_data ctf__thread_data[CTF_CONST_MAX_THREADS];
@@ -214,6 +181,14 @@ void ctf_group_run(struct ctf__group group);
 
 void ctf_sigsegv_handler(int unused);
 
+#define ctf_barrier()      \
+  do {                     \
+    ctf_parallel_sync();   \
+    if(ctf_exit_code) {    \
+      ctf_parallel_stop(); \
+      return;              \
+    }                      \
+  } while(0)
 void ctf_parallel_start(void);
 void ctf_parallel_stop(void);
 void ctf_parallel_sync(void);
@@ -274,12 +249,7 @@ define(`EA_MEMORY_ALIAS', `ALIAS($3_memory_$1_$2(a, b, length))')dnl
 define(`EA_ARRAY_ALIAS', `ALIAS($3_array_$1_$2(a, b))')dnl
 */
 COMB(`ALIAS',
-     `(mock_global(name, f), mock(name, f), unmock(), mock_select(fn),
-       mock_group(name), unmock_group(name),
-       mock_call_count, mock_real(name),
-       mock_check(name),
-       mock_will_return(val), mock_will_return_nth(n, val),
-       assert_barrier(), assert_fold(count, msg),
+     `(assert_barrier(), assert_fold(count, msg),
        assert_true(a), assert_false(a), expect_true(a), expect_false(a),
        assert_null(a), assert_non_null(a), expect_null(a), expect_non_null(a))')
 EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `EA_ALIAS')

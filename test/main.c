@@ -5,7 +5,7 @@
 void ctf_main(int argc, char *argv[]) {
   (void)argc, (void)argv;
   ctf_parallel_start();
-  ctf_groups_run(primitive_success, array_success, memory_success);
+  ctf_groups_run(misc, primitive_success, array_success, memory_success);
   ctf_barrier();
   ctf_groups_run(mock, mocked_add, mocked_strcmp, mocked_memcmp);
   ctf_barrier();
