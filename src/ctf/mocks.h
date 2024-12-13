@@ -322,18 +322,20 @@ define(`MOCK_CHECK_FUNCTION_HELPER', `void ctf__mock_check_$1(struct ctf__mock_s
 define(`MOCK_CHECK_MEMORY_FUNCTION_HELPER', `void ctf__mock_check_memory_$1(struct ctf__mock_state *state, const void *v, const char *v_print, uintmax_t step, int sign);')
 define(`MOCK_CHECK_FUNCTION', `MOCK_CHECK_FUNCTION_HELPER(`$1', TYPE(`$1'))')
 define(`MOCK_CHECK_MEMORY_FUNCTION', `MOCK_CHECK_MEMORY_FUNCTION_HELPER(`$1', TYPE(`$1'))')
-define(`MOCK_EXPECT', `#define ctf_mock_expect_$1_$2(var, val) CTF__MOCK_EXPECT($1, 1, $2, 0, name, #var, val);')
-define(`MOCK_ASSERT', `#define ctf_mock_assert_$1_$2(var, val) CTF__MOCK_EXPECT($1, 1, $2, CTF__MOCK_TYPE_ASSERT, name, #var, val);')
-define(`MOCK_EXPECT_MEMORY', `#define ctf_mock_expect_memory_$1_$2(var, val, length) CTF__MOCK_EXPECT_MEMORY($1, 1, $2, 0, name, #var, val, length);')
-define(`MOCK_ASSERT_MEMORY', `#define ctf_mock_assert_memory_$1_$2(var, val, length) CTF__MOCK_ASSERT_MEMORY($1, 1, $2, 0, name, #var, val, length);')
-define(`MOCK_EXPECT_ARRAY', `#define ctf_mock_expect_array_$1_$2(var, val) CTF__MOCK_EXPECT_MEMORY($1, 1, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));')
-define(`MOCK_ASSERT_ARRAY', `#define ctf_mock_assert_array_$1_$2(var, val) CTF__MOCK_ASSERT_MEMORY($1, 1, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));')
-define(`MOCK_EXPECT_NTH', `#define ctf_mock_expect_nth_$1_$2(n, var, val) CTF__MOCK_EXPECT($1, n, $2, 0, name, #var, val);')
-define(`MOCK_ASSERT_NTH', `#define ctf_mock_assert_nth_$1_$2(n, var, val) CTF__MOCK_EXPECT($1, n, $2, CTF__MOCK_TYPE_ASSERT, name, #var, val);')
-define(`MOCK_EXPECT_NTH_MEMORY', `#define ctf_mock_expect_nth_memory_$1_$2(n, var, val, length) CTF__MOCK_EXPECT_MEMORY($1, n, $2, 0, name, #var, val, length);')
-define(`MOCK_ASSERT_NTH_MEMORY', `#define ctf_mock_assert_nth_memory_$1_$2(n, var, val, length) CTF__MOCK_ASSERT_MEMORY($1, n, $2, 0, name, #var, val, length);')
-define(`MOCK_EXPECT_NTH_ARRAY', `#define ctf_mock_expect_nth_array_$1_$2(n, var, val) CTF__MOCK_EXPECT_MEMORY($1, n, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));')
-define(`MOCK_ASSERT_NTH_ARRAY', `#define ctf_mock_assert_nth_array_$1_$2(n, var, val) CTF__MOCK_ASSERT_MEMORY($1, n, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));')
+
+define(`MOCK_EA_TEMPLATE',
+`format(`#define $4mock_$3_$1_$2(var, val) CTF__MOCK_EXPECT($1, 1, $2, %s, name, #var, val);', ifelse(`$3', `assert', `CTF__MOCK_TYPE_ASSERT', `0' ))')
+define(`MOCK_EA_MEMORY_TEMPLATE',
+`format(`#define $4mock_$3_memory_$1_$2(var, val, length) CTF__MOCK_%s_MEMORY($1, 1, $2, 0, name, #var, val, length);', ifelse(`$3', `assert', `ASSERT', `EXPECT'))')
+define(`MOCK_EA_ARRAY_TEMPLATE',
+`format(`#define $4mock_$3_array_$1_$2(var, val) CTF__MOCK_%s_MEMORY($1, 1, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));', ifelse(`$3', `assert', `ASSERT', `EXPECT'))')
+define(`MOCK_EA_NTH_TEMPLATE',
+`format(`#define $4mock_$3_nth_$1_$2(n, var, val) CTF__MOCK_EXPECT($1, n, $2, %s, name, #var, val);', ifelse(`$3', `assert', `CTF__MOCK_TYPE_ASSERT', `0' ))')
+define(`MOCK_EA_NTH_MEMORY_TEMPLATE',
+`format(`#define $4mock_$3_nth_memory_$1_$2(n, var, val, length) CTF__MOCK_%s_MEMORY($1, n, $2, 0, name, #var, val, length);', ifelse(`$3', `assert', `ASSERT', `EXPECT'))')
+define(`MOCK_EA_NTH_ARRAY_TEMPLATE',
+`format(`#define $4mock_$3_nth_array_$1_$2(n, var, val) CTF__MOCK_%s_MEMORY($1, n, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));', ifelse(`$3', `assert', `ASSERT', `EXPECT'))')
+
 define(`MOCK_CHECK', `#define ctf_mock_check_$1(v) ctf__mock_check_$1(ctf__mock_check_state, v, #v)')
 define(`MOCK_CHECK_STRING', `#define ctf_mock_check_str(v) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
@@ -345,18 +347,12 @@ ctf__mock_check_memory_$1(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
   ,ifelse(`$1',`int',1,0))')
 */
 COMB(`MOCK_FUNCTION', `(PRIMITIVE_TYPES, str)')
-COMB2(`MOCK_EXPECT', `(char, int, uint, ptr, str)', `(CMPS)')
-COMB2(`MOCK_ASSERT', `(char, int, uint, ptr, str)', `(CMPS)')
-COMB2(`MOCK_EXPECT_MEMORY', `(char, int, uint, ptr)', `(CMPS)')
-COMB2(`MOCK_EXPECT_ARRAY', `(char, int, uint, ptr)', `(CMPS)')
-COMB2(`MOCK_ASSERT_MEMORY', `(char, int, uint, ptr)', `(CMPS)')
-COMB2(`MOCK_ASSERT_ARRAY', `(char, int, uint, ptr)', `(CMPS)')
-COMB2(`MOCK_EXPECT_NTH', `(char, int, uint, ptr, str)', `(CMPS)')
-COMB2(`MOCK_ASSERT_NTH', `(char, int, uint, ptr, str)', `(CMPS)')
-COMB2(`MOCK_EXPECT_NTH_MEMORY', `(char, int, uint, ptr)', `(CMPS)')
-COMB2(`MOCK_EXPECT_NTH_ARRAY', `(char, int, uint, ptr)', `(CMPS)')
-COMB2(`MOCK_ASSERT_NTH_MEMORY', `(char, int, uint, ptr)', `(CMPS)')
-COMB2(`MOCK_ASSERT_NTH_ARRAY', `(char, int, uint, ptr)', `(CMPS)')
+EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_TEMPLATE')
+EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_MEMORY_TEMPLATE')
+EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_ARRAY_TEMPLATE')
+EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_TEMPLATE')
+EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_MEMORY_TEMPLATE')
+EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_ARRAY_TEMPLATE')
 COMB(`MOCK_CHECK_FUNCTION', `(PRIMITIVE_TYPES, str)')
 COMB(`MOCK_CHECK_MEMORY_FUNCTION', `(PRIMITIVE_TYPES, str)')
 COMB(`MOCK_CHECK', `(PRIMITIVE_TYPES)')
@@ -367,22 +363,24 @@ COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
 #if CTF_ALIASES == CTF_ON
 // clang-format off
 /*
-define(`MOCK_EA_ALIAS', `ALIAS(mock_$3_$1_$2(var, val))')
-define(`MOCK_EA_MEMORY_ALIAS', `ALIAS(mock_$3_memory_$1_$2(var, val, length))')
-define(`MOCK_EA_ARRAY_ALIAS', `ALIAS(mock_$3_array_$1_$2(var, val))')
-define(`MOCK_EA_NTH_ALIAS', `ALIAS(mock_$3_nth_$1_$2(n, var, val))')
-define(`MOCK_EA_NTH_MEMORY_ALIAS', `ALIAS(mock_$3_nth_memory_$1_$2(n, var, val, length))')
-define(`MOCK_EA_NTH_ARRAY_ALIAS', `ALIAS(mock_$3_nth_array_$1_$2(n, var, val))')
-define(`MOCK_CHECK_ALIAS', `ALIAS(mock_check_$1(val))')
-define(`MOCK_CHECK_MEMORY_ALIAS', `ALIAS(mock_check_memory_$1(val))')
+define(`MOCK_CHECK_ALIAS', `#define mock_check_$1(v) ctf__mock_check_$1(ctf__mock_check_state, v, #v)')
+define(`MOCK_CHECK_STRING_ALIAS', `#define mock_check_str(v) \
+ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
+ctf__mock_check_str(ctf__mock_check_state, v, #v)')
+define(`MOCK_CHECK_MEMORY_ALIAS',
+`format(`#define mock_check_memory_$1(v) \
+ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
+ctf__mock_check_memory_$1(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
+  ,ifelse(`$1',`int',1,0))')
 */
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_ALIAS')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `MOCK_EA_MEMORY_ALIAS')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `MOCK_EA_ARRAY_ALIAS')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_ALIAS')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `MOCK_EA_NTH_MEMORY_ALIAS')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `MOCK_EA_NTH_ARRAY_ALIAS')
-COMB(`MOCK_CHECK_ALIAS', `(PRIMITIVE_TYPES, str)')
+EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_TEMPLATE')
+EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_MEMORY_TEMPLATE')
+EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_ARRAY_TEMPLATE')
+EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_TEMPLATE')
+EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_MEMORY_TEMPLATE')
+EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_ARRAY_TEMPLATE')
+COMB(`MOCK_CHECK_ALIAS', `(PRIMITIVE_TYPES)')
+MOCK_CHECK_STRING_ALIAS
 COMB(`MOCK_CHECK_MEMORY_ALIAS', `(PRIMITIVE_TYPES)')
 COMB(`ALIAS',
      `(mock_global(name, f), mock(name, f), unmock(), mock_select(fn),
