@@ -60,6 +60,8 @@ extern struct ctf__thread_data *restrict ctf__thread_data;
 extern int ctf_exit_code;
 extern pthread_key_t ctf__thread_index;
 extern char ctf_signal_altstack[CTF_CONST_SIGNAL_STACK_SIZE];
+extern int ctf__opt_threads;
+extern int ctf__opt_cleanup;
 
 #define CTF_TEST(test_name)                                    \
   static void ctf__test_fn_##test_name(void);                  \
@@ -166,8 +168,10 @@ extern char ctf_signal_altstack[CTF_CONST_SIGNAL_STACK_SIZE];
     ctf__group_test_teardown_def_##name;                   \
   static void ctf__group_test_teardown_def_##name(void)
 
+void ctf__cleanup_append(void *p, intptr_t thread_index);
 void ctf__groups_run(int count, ...);
-void ctf__assert_fold(uintmax_t count, const char *msg, int line, const char *file);
+void ctf__assert_fold(uintmax_t count, const char *msg, int line,
+                      const char *file);
 uintmax_t ctf__pass(const char *, int, const char *,...);
 uintmax_t ctf__fail(const char *, int, const char *,...);
 uintmax_t ctf__assert_msg(int, const char *, int, const char *,...);
