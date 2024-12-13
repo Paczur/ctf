@@ -24,8 +24,6 @@ include(`base.m4')
 #define CTF_CONST_GROUP_SIZE 128
 #define CTF_CONST_SIGNAL_STACK_SIZE 1024
 
-#define CTF__EA(f, ...) f(__VA_ARGS__);
-
 struct ctf__state {
   int status;
   int line;
@@ -212,7 +210,7 @@ void ctf_assert_hide(uintmax_t count);
 #define ctf_expect_non_null(a) ctf_expect_ptr_neq(a, NULL);
 #define ctf_expect_null(a) ctf_expect_ptr_eq(a, NULL);
 #define ctf_assert_msg(cmp, m, ...) \
-  CTF__EA(ctf__assert_msg, cmp, m, __LINE__, __FILE__, ##__VA_ARGS__)
+  ctf__assert_msg(, cmp, m, __LINE__, __FILE__, ##__VA_ARGS__)
 #define ctf_assert(cmp)        \
   do {                         \
     ctf_assert_msg(cmp, #cmp); \
@@ -221,11 +219,11 @@ void ctf_assert_hide(uintmax_t count);
 
 // clang-format off
 /*
-define(`EA_TEMPLATE', `#define ctf_$3_$1_$2(a, b) CTF__EA(ctf__$3_$1_$2, a, b, #a, #b, __LINE__, __FILE__)')dnl
+define(`EA_TEMPLATE', `#define ctf_$3_$1_$2(a, b) ctf__$3_$1_$2(a, b, #a, #b, __LINE__, __FILE__)')dnl
 define(`EA_MEMORY_TEMPLATE',
-`format(`#define ctf_$3_memory_$1_$2(a, b, length) CTF__EA(ctf__$3_memory_$1_$2,(const void *)a, (const void *)b, length,  sizeof(*(a)), %d, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+`format(`#define ctf_$3_memory_$1_$2(a, b, length) ctf__$3_memory_$1_$2((const void *)a, (const void *)b, length,  sizeof(*(a)), %d, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
 define(`EA_ARRAY_TEMPLATE',
-`format(`#define ctf_$3_array_$1_$2(a, b) CTF__EA(ctf__$3_array_$1_$2,(const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+`format(`#define ctf_$3_array_$1_$2(a, b) ctf__$3_array_$1_$2((const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
 define(`EA_FUNCTION',
 `format(`int ctf__$3_$1_$2(%s, %s, const char *, const char *, int, const char *);',TYPE(`$1'),TYPE(`$1'))')dnl
 define(`EA_MEMORY_PRIMITIVE_FUNCTION',
@@ -263,5 +261,5 @@ EA_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_ARRAY_ALIAS')
 
 #endif
 
-include(`ctf_mocks.h')
+include(`mocks.h')
 #endif

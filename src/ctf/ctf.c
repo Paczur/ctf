@@ -30,61 +30,12 @@ include(`base.m4')
 #define BRANDED 2
 
 #define TASK_QUEUE_MAX 64
-#define MIN_DIGITS_FOR_LINE 4
 
-#define DEFAULT_PRINT_BUFF_SIZE 1024
 #define DEFAULT_STATE_MSG_CAPACITY 128
 #define DEFAULT_THREAD_DATA_STATES_CAPACITY 16
 #define DEFAULT_THREAD_DATA_MOCK_RESET_STACK_CAPACITY 8
-#define DEFAULT_MOCK_RETURN_CAPACITY 16
-#define DEFAULT_MOCK_STATE_CHECKS_CAPACITY 16
 #define DEFAULT_CLEANUP_LIST_CAPACITY 32
 
-#define MSG_SPRINTF_APPEND(msg, ...)                                        \
-  do {                                                                      \
-    const uintmax_t printf_size = snprintf(NULL, 0, __VA_ARGS__) + 1;       \
-    uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1;           \
-    mul += (mul % 2 != 0 && mul != 1);                                      \
-    if(msg == NULL) {                                                       \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;                    \
-      msg = malloc(msg##_capacity);                                         \
-    } else if(printf_size >= msg##_capacity) {                              \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;                    \
-      msg = realloc(msg, msg##_capacity);                                   \
-    }                                                                       \
-    msg##_size +=                                                           \
-      snprintf(msg + msg##_size, msg##_capacity - msg##_size, __VA_ARGS__); \
-  } while(0)
-#define MSG_SPRINTF(msg, ...)                                         \
-  do {                                                                \
-    const uintmax_t printf_size = snprintf(NULL, 0, __VA_ARGS__) + 1; \
-    uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1;     \
-    mul += (mul % 2 != 0 && mul != 1);                                \
-    if(msg == NULL) {                                                 \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;              \
-      msg = malloc(msg##_capacity);                                   \
-    } else if(printf_size >= msg##_capacity) {                        \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;              \
-      msg = realloc(msg, msg##_capacity);                             \
-    }                                                                 \
-    msg##_size = snprintf(msg, msg##_capacity, __VA_ARGS__);          \
-  } while(0)
-#define MSG_VSPRINTF(msg, f, v)                                   \
-  do {                                                            \
-    va_list vc;                                                   \
-    va_copy(vc, v);                                               \
-    const uintmax_t printf_size = vsnprintf(NULL, 0, f, v) + 1;   \
-    uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1; \
-    mul += (mul % 2 != 0 && mul != 1);                            \
-    if(msg == NULL) {                                             \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;          \
-      msg = malloc(msg##_capacity);                               \
-    } else if(printf_size >= msg##_capacity) {                    \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;          \
-      msg = realloc(msg, msg##_capacity);                         \
-    }                                                             \
-    msg##_size = vsnprintf(msg, msg##_capacity, f, vc);           \
-  } while(0)
 #define ISSPACE(c) (((c) >= '\t' && (c) <= '\r') || (c) == ' ')
 #define SKIP_SPACE(c)      \
   do {                     \
@@ -102,12 +53,6 @@ include(`base.m4')
 #define STRINGIFY2(x) #x
 #define STRINGIFY(x) STRINGIFY2(x)
 
-struct buff {
-  char *buff;
-  uintmax_t size;
-  uintmax_t capacity;
-};
-
 static int opt_unicode = BRANDED;
 static int opt_color = AUTO;
 static int opt_detail = AUTO;
@@ -115,11 +60,7 @@ static int opt_passed = AUTO;
 int ctf__opt_cleanup = 0;
 int ctf__opt_threads = 1;
 static int tty_present = 0;
-static const char print_color_reset[] = "\x1b[0m";
-static int color = 0;
-static int detail = 1;
 
-static pthread_mutex_t parallel_print_mutex;
 static pthread_t *restrict parallel_threads;
 static int parallel_threads_waiting = 0;
 static struct ctf__group parallel_task_queue[TASK_QUEUE_MAX] = {0};
@@ -128,10 +69,7 @@ static pthread_cond_t parallel_threads_waiting_all = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t parallel_task_queue_non_empty = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t parallel_task_queue_non_full = PTHREAD_COND_INITIALIZER;
 static uintmax_t parallel_state = 0;
-static struct buff *restrict print_buff;
 static jmp_buf *restrict ctf__assert_jmp_buff;
-static pthread_rwlock_t mock_states_lock = PTHREAD_RWLOCK_INITIALIZER;
-pthread_rwlock_t ctf__mock_returns_lock = PTHREAD_RWLOCK_INITIALIZER;
 static struct {
   void **pointers;
   uintmax_t size;
@@ -143,6 +81,8 @@ pthread_key_t ctf__thread_index;
 int ctf_exit_code = 0;
 struct ctf__thread_data *restrict ctf__thread_data;
 
+include(`print.c')
+
 void ctf__cleanup_append(void *ptr, intptr_t thread_index) {
   if(cleanup_list[thread_index].size + 1 >=
      cleanup_list[thread_index].capacity) {
@@ -153,95 +93,6 @@ void ctf__cleanup_append(void *ptr, intptr_t thread_index) {
                 cleanup_list[thread_index].capacity);
   }
   cleanup_list[thread_index].pointers[cleanup_list[thread_index].size++] = ptr;
-}
-
-static void buff_resize(struct buff *buff, uintmax_t cap) {
-  uintmax_t mul = (cap + 1) / DEFAULT_PRINT_BUFF_SIZE + 1;
-  mul += (mul % 2 != 0 && mul != 1);
-  buff->capacity = DEFAULT_PRINT_BUFF_SIZE * mul;
-  buff->buff = realloc(buff->buff, buff->capacity);
-}
-
-static void mock_state_init(struct ctf__mock_state *state) {
-  state->mock_f = NULL;
-  state->call_count = 0;
-  state->checks_count = 0;
-  state->checks_capacity = 0;
-  state->checks = NULL;
-  state->return_overrides = NULL;
-  state->return_overrides_size = 0;
-  state->return_overrides_capacity = 0;
-}
-
-static void mock_state_reset(struct ctf__mock_state *state) {
-  state->call_count = 0;
-  state->checks_count = 0;
-  memset(state->return_overrides,
-         -1,
-         state->return_overrides_size * sizeof(state->return_overrides[0]));
-  state->return_overrides_size = 0;
-}
-
-static void mock_state_deinit(struct ctf__mock_state *state) {
-  if(state->return_overrides != NULL) free(state->return_overrides);
-  if(state->checks != NULL) free(state->checks);
-  free(state);
-}
-
-static void mock_return_init(struct ctf__mock_return *ret) {
-  ret->values = NULL;
-  ret->size = 0;
-  ret->capacity = 0;
-}
-
-static void mock_states_alloc(struct ctf__mock *mock, int thread_index) {
-  if(ctf__opt_threads > 1) {
-    while(!mock->states_initialized) {
-      if(pthread_rwlock_trywrlock(&mock_states_lock) == 0) {
-        if(mock->states_initialized) {
-          pthread_rwlock_unlock(&mock_states_lock);
-          mock_state_reset(mock->states + thread_index);
-          return;
-        } else {
-          goto init;
-        }
-      }
-    }
-    mock_state_reset(mock->states + thread_index);
-    return;
-  }
-init:
-  mock->states = malloc(sizeof(mock->states[0]) * ctf__opt_threads);
-  for(int j = 0; j < ctf__opt_threads; j++) mock_state_init(mock->states + j);
-  mock->states_initialized = 1;
-  if(ctf__opt_threads > 1) {
-    pthread_rwlock_unlock(&mock_states_lock);
-  }
-  if(ctf__opt_cleanup) ctf__cleanup_append(mock->states, thread_index);
-}
-
-void ctf__mock_returns_alloc(struct ctf__mock *mock, intptr_t thread_index) {
-  if(ctf__opt_threads > 1) {
-    while(!mock->returns_initialized) {
-      if(pthread_rwlock_trywrlock(&ctf__mock_returns_lock) == 0) {
-        if(mock->returns_initialized) {
-          pthread_rwlock_unlock(&ctf__mock_returns_lock);
-          return;
-        } else {
-          goto init;
-        }
-      }
-    }
-    return;
-  }
-init:
-  mock->returns = malloc(sizeof(mock->returns[0]) * ctf__opt_threads);
-  for(int i = 0; i < ctf__opt_threads; i++) mock_return_init(mock->returns + i);
-  mock->returns_initialized = 1;
-  if(ctf__opt_threads > 1) {
-    pthread_rwlock_unlock(&ctf__mock_returns_lock);
-  }
-  if(ctf__opt_cleanup) ctf__cleanup_append(mock->returns, thread_index);
 }
 
 static void state_init(struct ctf__state *state) {
@@ -300,465 +151,6 @@ static int get_value(const char *opt) {
 static void err(void) {
   puts(HELP_MSG);
   exit(0);
-}
-
-static uintmax_t print_pass_indicator(struct buff *buff) {
-  uintmax_t full_size = 0;
-  static const char print_pass_color[] = "\x1b[32m";
-  static const char print_pass_branded[] = "✓";
-  static const char print_pass_generic[] = "✓";
-  static const char print_pass_off[] = "P";
-  if(buff == NULL) {
-    full_size++;  // '[' char
-    if(color) {
-      full_size += sizeof(print_pass_color) - 1;
-      full_size += sizeof(print_color_reset) - 1;
-    }
-    switch(opt_unicode) {
-    case OFF:
-      full_size += sizeof(print_pass_off) - 1;
-      break;
-    case GENERIC:
-      full_size += sizeof(print_pass_generic) - 1;
-      break;
-    case BRANDED:
-      full_size += sizeof(print_pass_branded) - 1;
-      break;
-    }
-    full_size++;  // ']' char
-    return full_size;
-  }
-  buff->buff[buff->size++] = '[';
-  if(color) {
-    strcpy(buff->buff + buff->size, print_pass_color);
-    buff->size += sizeof(print_pass_color) - 1;
-  }
-  switch(opt_unicode) {
-  case OFF:
-    strcpy(buff->buff + buff->size, print_pass_off);
-    buff->size += sizeof(print_pass_off) - 1;
-    break;
-  case GENERIC:
-    strcpy(buff->buff + buff->size, print_pass_generic);
-    buff->size += sizeof(print_pass_generic) - 1;
-    break;
-  case BRANDED:
-    strcpy(buff->buff + buff->size, print_pass_branded);
-    buff->size += sizeof(print_pass_branded) - 1;
-    break;
-  }
-  if(color) {
-    strcpy(buff->buff + buff->size, print_color_reset);
-    buff->size += sizeof(print_color_reset) - 1;
-  }
-  buff->buff[buff->size++] = ']';
-  return 0;
-}
-
-static uintmax_t print_fail_indicator(struct buff *buff) {
-  uintmax_t full_size = 0;
-  static const char print_fail_color[] = "\x1b[31m";
-  static const char print_fail_branded[] = "⚑";
-  static const char print_fail_generic[] = "✗";
-  static const char print_fail_off[] = "F";
-  if(buff == NULL) {
-    full_size++;  // '[' char
-    if(color) {
-      full_size += sizeof(print_fail_color) - 1;
-      full_size += sizeof(print_color_reset) - 1;
-    }
-    switch(opt_unicode) {
-    case OFF:
-      full_size += sizeof(print_fail_off) - 1;
-      break;
-    case GENERIC:
-      full_size += sizeof(print_fail_generic) - 1;
-      break;
-    case BRANDED:
-      full_size += sizeof(print_fail_branded) - 1;
-      break;
-    }
-    full_size++;  // ']' char
-    return full_size;
-  }
-  buff->buff[buff->size++] = '[';
-  if(color) {
-    strcpy(buff->buff + buff->size, print_fail_color);
-    buff->size += sizeof(print_fail_color) - 1;
-  }
-  switch(opt_unicode) {
-  case OFF:
-    strcpy(buff->buff + buff->size, print_fail_off);
-    buff->size += sizeof(print_fail_off) - 1;
-    break;
-  case GENERIC:
-    strcpy(buff->buff + buff->size, print_fail_generic);
-    buff->size += sizeof(print_fail_generic) - 1;
-    break;
-  case BRANDED:
-    strcpy(buff->buff + buff->size, print_fail_branded);
-    buff->size += sizeof(print_fail_branded) - 1;
-    break;
-  }
-  if(color) {
-    strcpy(buff->buff + buff->size, print_color_reset);
-    buff->size += sizeof(print_color_reset) - 1;
-  }
-  buff->buff[buff->size++] = ']';
-  return 0;
-}
-
-static uintmax_t print_unknown_indicator(struct buff *buff) {
-  uintmax_t full_size = 0;
-  static const char print_unknown_color[] = "\x1b[33m";
-  // Padding required in order to replace it with fail indicators easily
-  static const char print_unknown_branded[] = "\x1a\x1a?";
-  static const char print_unknown_generic[] = "\x1a\x1a?";
-  static const char print_unknown_off[] = "?";
-  if(buff == NULL) {
-    full_size++;  // '[' char
-    if(color) {
-      full_size += sizeof(print_unknown_color) - 1;
-      full_size += sizeof(print_color_reset) - 1;
-    }
-    switch(opt_unicode) {
-    case OFF:
-      full_size += sizeof(print_unknown_off) - 1;
-      break;
-    case GENERIC:
-      full_size += sizeof(print_unknown_generic) - 1;
-      break;
-    case BRANDED:
-      full_size += sizeof(print_unknown_branded) - 1;
-      break;
-    }
-    full_size++;  // ']' char
-    return full_size;
-  }
-  buff->buff[buff->size++] = '[';
-  if(color) {
-    strcpy(buff->buff + buff->size, print_unknown_color);
-    buff->size += sizeof(print_unknown_color) - 1;
-  }
-  switch(opt_unicode) {
-  case OFF:
-    strcpy(buff->buff + buff->size, print_unknown_off);
-    buff->size += sizeof(print_unknown_off) - 1;
-    break;
-  case GENERIC:
-    strcpy(buff->buff + buff->size, print_unknown_generic);
-    buff->size += sizeof(print_unknown_generic) - 1;
-    break;
-  case BRANDED:
-    strcpy(buff->buff + buff->size, print_unknown_branded);
-    buff->size += sizeof(print_unknown_branded) - 1;
-    break;
-  }
-  if(color) {
-    strcpy(buff->buff + buff->size, print_color_reset);
-    buff->size += sizeof(print_color_reset) - 1;
-  }
-  buff->buff[buff->size++] = ']';
-  return 0;
-}
-
-static uintmax_t print_group_pass(struct buff *buff,
-                                  const char *name, uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    if(opt_passed != OFF) {
-      full_size += print_pass_indicator(NULL);
-      full_size += 2;  // ' ' '\n' chars
-      full_size += name_len;
-    }
-    return full_size;
-  }
-  if(opt_passed != OFF) {
-    print_pass_indicator(buff);
-    buff->size += sprintf(buff->buff + buff->size, " %s", name);
-    buff->buff[buff->size++] = '\n';
-  }
-  return 0;
-}
-
-static uintmax_t print_group_fail(struct buff *buff,
-                                  const char *name, uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += print_fail_indicator(NULL);
-    full_size += 2;  // ' ' '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  print_fail_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s", name);
-  buff->buff[buff->size++] = '\n';
-  return 0;
-}
-
-static uintmax_t print_group_unknown(struct buff *buff,
-                                     const char *name, uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += print_unknown_indicator(NULL);
-    full_size += 2;  // ' ' '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  print_unknown_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", name);
-  return 0;
-}
-
-static uintmax_t print_test_pass(struct buff *buff, const char *name,
-                                 uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 4;  // indent
-    full_size += print_pass_indicator(NULL);
-    full_size += 2;  // ' ' and '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 4);
-  buff->size += 4;
-  print_pass_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", name);
-  return 0;
-}
-
-static uintmax_t print_test_fail(struct buff *buff, const char *name,
-                                 uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 4;  // indent
-    full_size += print_fail_indicator(NULL);
-    full_size += 2;  // ' ' and '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 4);
-  buff->size += 4;
-  print_fail_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", name);
-  return 0;
-}
-
-static uintmax_t print_test_unknown(struct buff *buff,
-                                    const char *name, uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 4;  // indent
-    full_size += print_unknown_indicator(buff);
-    full_size += 2;  // ' ' '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 4);
-  buff->size += 4;
-  print_unknown_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", name);
-  return 0;
-}
-
-static uintmax_t print_test_pass_info(struct buff *buff,
-                                      const struct ctf__state *state) {
-  uintmax_t spaces = 8;
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    if(detail) {
-      full_size += snprintf(NULL,
-                            0,
-                            "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
-                            state->file,
-                            state->line);
-    }
-    full_size += print_pass_indicator(NULL);
-    full_size += 2;  // ' ' '\n' chars
-    full_size += state->msg_size;
-    return full_size;
-  }
-  if(detail) {
-    spaces += snprintf(NULL,
-                       0,
-                       "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
-                       state->file,
-                       state->line);
-  }
-  memset(buff->buff + buff->size, ' ', spaces);
-  buff->size += spaces;
-  print_pass_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", state->msg);
-  return 0;
-}
-
-static uintmax_t print_test_fail_info(struct buff *buff,
-                                      const struct ctf__state *state) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 8;  // indent
-    if(detail) {
-      full_size += snprintf(NULL,
-                            0,
-                            "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                            state->file,
-                            state->line);
-      if(color) {
-        full_size += sizeof("\x1b[31mE\x1b[0m");
-      } else {
-        full_size++;  // 'E' char
-      }
-
-      full_size += 2;  // "] " string
-      full_size += state->msg_size;
-      full_size += 1;  // '\n' char
-    } else {
-      full_size += print_fail_indicator(NULL);
-      full_size += 2;  // ' ' '\n' chars
-      full_size += state->msg_size;
-    }
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 8);
-  buff->size += 8;
-  if(detail) {
-    buff->size += sprintf(buff->buff + buff->size,
-                          "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                          state->file,
-                          state->line);
-    if(color) {
-      strcpy(buff->buff + buff->size, "\x1b[31mE\x1b[0m");
-      buff->size += sizeof("\x1b[31mE\x1b[0m") - 1;
-    } else {
-      buff->buff[buff->size++] = 'E';
-    }
-    buff->size += sprintf(buff->buff + buff->size, "] %s\n", state->msg);
-  } else {
-    print_fail_indicator(buff);
-    buff->size += sprintf(buff->buff + buff->size, " %s\n", state->msg);
-    buff->buff[buff->size] = 0;
-  }
-  return 0;
-}
-
-static uintmax_t print_test_unknown_info(struct buff *buff,
-                                         struct ctf__state *state) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 8;  // indent
-    if(detail) {
-      full_size += snprintf(NULL,
-                            0,
-                            "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                            state->file,
-                            state->line);
-      if(color) {
-        full_size += sizeof("\x1b[33mW\x1b[0m");
-        ;
-      } else {
-        full_size++;  // 'W' char
-      }
-      full_size += 2;  // "] " chars
-      full_size += state->msg_size;
-      full_size += 1;  // '\n' char
-    } else {
-      full_size += print_unknown_indicator(NULL);
-      full_size += 2;  // ' ' '\n' chars
-      full_size += state->msg_size;
-    }
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 8);
-  buff->size += 8;
-  if(detail) {
-    buff->size += sprintf(buff->buff + buff->size,
-                          "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                          state->file,
-                          state->line);
-    if(color) {
-      strcpy(buff->buff + buff->size, "\x1b[33mW\x1b[0m");
-      buff->size += sizeof("\x1b[33mW\x1b[0m") - 1;
-    } else {
-      buff->buff[buff->size++] = 'W';
-    }
-    buff->size += sprintf(buff->buff + buff->size, "] %s\n", state->msg);
-  } else {
-    print_unknown_indicator(buff);
-    buff->size += sprintf(buff->buff + buff->size, " %s\n", state->msg);
-    buff->buff[buff->size] = 0;
-  }
-  return 0;
-}
-
-static void print_arr(struct ctf__state *state,
-                      const void *data, uintmax_t size, uintmax_t step,
-                      int sign, const char *format) {
-  struct {
-    union {
-      const int8_t *i8;
-      const int16_t *i16;
-      const int32_t *i32;
-      const int64_t *i64;
-      const uint8_t *u8;
-      const uint16_t *u16;
-      const uint32_t *u32;
-      const uint64_t *u64;
-    };
-  } iterator;
-  iterator.u8 = data;
-  switch(step) {
-  case 1:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i8[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u8[i]);
-    }
-    break;
-  case 2:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i16[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u16[i]);
-    }
-    break;
-  case 4:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i32[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u32[i]);
-    }
-    break;
-  case 8:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i64[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u64[i]);
-    }
-    break;
-  }
-  state->msg_size -= 2;
-}
-
-static void print_mem(struct ctf__state *state, const void *a,
-                      const void *b, uintmax_t la, uintmax_t lb,
-                      uintmax_t step, int sign, const char *a_str,
-                      const char *b_str,
-                      const char *op_str, const char *format) {
-  int status = memcmp(a, b, MIN(la, lb) * step);
-  MSG_SPRINTF(state->msg, "%s %s %s ({", a_str, op_str, b_str);
-  print_arr(state, a, la, step, sign, format);
-  MSG_SPRINTF_APPEND(state->msg, "} %s {", op_str);
-  print_arr(state, b, lb, step, sign, format);
-  MSG_SPRINTF_APPEND(state->msg, "})");
-  state->status = status;
 }
 
 static void test_cleanup(void) {
@@ -850,8 +242,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
 static void group_run(struct ctf__group group) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   group_run_helper(group, print_buff + thread_index);
-  write(STDOUT_FILENO,
-        print_buff[thread_index].buff,
+  write(STDOUT_FILENO, print_buff[thread_index].buff,
         print_buff[thread_index].size);
 }
 
@@ -861,8 +252,7 @@ static void groups_run(uintmax_t count, va_list args) {
   for(uintmax_t i = 0; i < count; i++) {
     group = va_arg(args, struct ctf__group);
     group_run_helper(group, print_buff + thread_index);
-    write(STDOUT_FILENO,
-          print_buff[thread_index].buff,
+    write(STDOUT_FILENO, print_buff[thread_index].buff,
           print_buff[thread_index].size);
   }
 }
@@ -906,16 +296,14 @@ static void *parallel_thread_loop(void *data) {
     }
     group = parallel_task_queue[0];
     for(int i = 0;
-        i < TASK_QUEUE_MAX - 1 && parallel_task_queue[i].tests != NULL;
-        i++) {
+        i < TASK_QUEUE_MAX - 1 && parallel_task_queue[i].tests != NULL; i++) {
       parallel_task_queue[i] = parallel_task_queue[i + 1];
     }
     pthread_cond_signal(&parallel_task_queue_non_full);
     pthread_mutex_unlock(&parallel_task_queue_mutex);
     group_run_helper(group, print_buff + thread_index);
     pthread_mutex_lock(&parallel_print_mutex);
-    write(STDOUT_FILENO,
-          print_buff[thread_index].buff,
+    write(STDOUT_FILENO, print_buff[thread_index].buff,
           print_buff[thread_index].size);
     print_buff[thread_index].size = 0;
     pthread_mutex_unlock(&parallel_print_mutex);
@@ -1063,6 +451,7 @@ int main(int argc, char *argv[]) {
   }
   return ctf_exit_code;
 }
+
 void ctf_sigsegv_handler(int unused) {
   (void)unused;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
@@ -1084,8 +473,7 @@ void ctf_sigsegv_handler(int unused) {
   }
   write(STDOUT_FILENO, premsg, sizeof(premsg));
   if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
-  write(STDOUT_FILENO,
-        print_buff[thread_index].buff,
+  write(STDOUT_FILENO, print_buff[thread_index].buff,
         print_buff[thread_index].size);
   for(uintmax_t i = 0; i < thread_data->states_size; i++) {
     if(thread_data->states[i].status == 0) {
@@ -1116,6 +504,7 @@ void ctf_parallel_sync(void) {
   fflush(stdout);
   pthread_mutex_unlock(&parallel_task_queue_mutex);
 }
+
 void ctf_parallel_start(void) {
   if(ctf__opt_threads == 1) return;
   parallel_state = 1;
@@ -1123,6 +512,7 @@ void ctf_parallel_start(void) {
     pthread_create(parallel_threads + i, NULL, parallel_thread_loop, (void *)i);
   }
 }
+
 void ctf_parallel_stop(void) {
   if(ctf__opt_threads == 1) return;
   parallel_state = 0;
@@ -1141,6 +531,7 @@ void ctf_group_run(const struct ctf__group group) {
     group_run(group);
   }
 }
+
 void ctf__groups_run(int count, ...) {
   va_list args;
   va_start(args, count);
@@ -1151,427 +542,6 @@ void ctf__groups_run(int count, ...) {
   }
   va_end(args);
 }
-void ctf_assert_barrier(void) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  for(uintmax_t i = 0; i < thread_data->states_size; i++) {
-    if(thread_data->states[i].status) {
-      longjmp(ctf__assert_jmp_buff[thread_index], 1);
-    }
-  }
-}
-void ctf__assert_fold(uintmax_t count, const char *msg, int line,
-                      const char *file) {
-  ctf_assert_hide(count);
-  ctf__pass(msg, line, file);
-}
-void ctf_assert_hide(uintmax_t count) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  if(thread_data->states_size <= count) {
-    for(uintmax_t i = 0; i < thread_data->states_size; i++) {
-      if(thread_data->states[i].status) {
-        longjmp(ctf__assert_jmp_buff[thread_index], 1);
-      }
-    }
-    thread_data->states_size = 0;
-  } else {
-    for(uintmax_t i = thread_data->states_size - count;
-        i < thread_data->states_size;
-        i++) {
-      if(thread_data->states[i].status) {
-        longjmp(ctf__assert_jmp_buff[thread_index], 1);
-      }
-    }
-    thread_data->states_size -= count;
-  }
-}
 
-void ctf_unmock(void) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  if(thread_data->mock_reset_stack_size == 0) return;
-  struct ctf__mock *mock =
-    thread_data->mock_reset_stack[--thread_data->mock_reset_stack_size];
-  if(mock->states == NULL) return;
-  mock->states[thread_index].mock_f = NULL;
-}
-void ctf__mock_group(struct ctf__mock_bind *bind) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__mock *mock;
-  for(uintmax_t i = 0; i < CTF_CONST_MOCK_GROUP_SIZE && bind[i].f; i++) {
-    mock = bind[i].mock;
-    if(ctf__opt_threads > 1) pthread_rwlock_rdlock(&mock_states_lock);
-    if(!mock->states_initialized) {
-      if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
-      mock_states_alloc(mock, thread_index);
-    } else {
-      if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
-      mock_state_reset(mock->states + thread_index);
-    }
-    thread_data->mock_reset_stack[thread_data->mock_reset_stack_size++] = mock;
-    mock->states[thread_index].mock_f = (void (*)(void))bind[i].f;
-  }
-}
-void ctf__mock_global(struct ctf__mock *mock, void (*f)(void)) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  if(ctf__opt_threads > 1) pthread_rwlock_rdlock(&mock_states_lock);
-  if(mock->states == NULL) {
-    if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
-    mock_states_alloc(mock, thread_index);
-  } else {
-    if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
-    mock_state_reset(mock->states + thread_index);
-  }
-  mock->states[thread_index].mock_f = f;
-  thread_data->mock_reset_stack[thread_data->mock_reset_stack_size++] = mock;
-}
-void ctf__unmock_group(struct ctf__mock_bind *bind) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__mock *mock;
-  for(uintmax_t i = 0; i < CTF_CONST_MOCK_GROUP_SIZE && bind[i].f; i++) {
-    mock = bind[i].mock;
-    if(mock->states == NULL) continue;
-    mock->states[thread_index].mock_f = NULL;
-  }
-}
-uintmax_t ctf__mock_return_capacity(uintmax_t cap) {
-  uintmax_t mul = (cap + 1) / DEFAULT_MOCK_RETURN_CAPACITY + 1;
-  mul = mul + (mul % 2 != 0 && mul != 1);
-  return DEFAULT_MOCK_RETURN_CAPACITY * mul;
-}
-
-uintmax_t ctf__fail(const char *m, int line, const char *file, ...) {
-  va_list v;
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  thread_data_states_increment(thread_data);
-  thread_data->states[thread_data->states_size - 1].status = 1;
-  assert_copy(thread_data->states + thread_data->states_size - 1, line, file);
-  va_start(v, file);
-  MSG_VSPRINTF(thread_data->states[thread_data->states_size - 1].msg, m, v);
-  va_end(v);
-  return 0;
-}
-uintmax_t ctf__pass(const char *m, int line, const char *file, ...) {
-  va_list v;
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  thread_data_states_increment(thread_data);
-  thread_data->states[thread_data->states_size - 1].status = 0;
-  assert_copy(thread_data->states + thread_data->states_size - 1, line, file);
-  va_start(v, file);
-  MSG_VSPRINTF(thread_data->states[thread_data->states_size - 1].msg, m, v);
-  va_end(v);
-  return 1;
-}
-uintmax_t ctf__assert_msg(int status, const char *msg, int line,
-                          const char *file, ...) {
-  va_list args;
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  thread_data_states_increment(thread_data);
-  thread_data->states[thread_data->states_size - 1].status = status;
-  assert_copy(thread_data->states + thread_data->states_size - 1, line, file);
-  thread_data->states[thread_data->states_size - 1].msg_size = 0;
-  va_start(args, file);
-  MSG_VSPRINTF(
-    thread_data->states[thread_data->states_size - 1].msg, msg, args);
-  va_end(args);
-  return status;
-}
-static void mock_check_base(struct ctf__mock_state *state, const char *v,
-                            int memory) {
-  int removed = 0;
-  for(uintmax_t i = 0; i < state->checks_count; i++) {
-    if(!(state->checks[i].type & CTF__MOCK_TYPE_MEMORY) == memory) continue;
-    if(strcmp(state->checks[i].var, v)) continue;
-    if(state->checks[i].call_count != state->call_count) continue;
-    state->checks[i].f.i = NULL;
-    removed++;
-  }
-  for(uintmax_t i = 0; i < state->checks_count; i++) {
-    if(state->checks[i].f.i == NULL) {
-      for(uintmax_t j = i + 1; j < state->checks_count; j++) {
-        if(state->checks[j].f.i != NULL) {
-          state->checks[i] = state->checks[j];
-          state->checks[j].f.i = NULL;
-          break;
-        }
-      }
-    }
-  }
-  state->checks_count -= removed;
-}
-
-static void mock_base(struct ctf__mock_state *state, int call_count, int type,
-                      int line, const char *file, const char *print_var,
-                      void *f, const char *var) {
-  if(state->checks_count + 1 >= state->checks_capacity) {
-    if(state->checks == NULL) {
-      state->checks_capacity = DEFAULT_MOCK_STATE_CHECKS_CAPACITY;
-      state->checks =
-        malloc(sizeof(state->checks[0]) * DEFAULT_MOCK_STATE_CHECKS_CAPACITY);
-      if(ctf__opt_cleanup)
-        ctf__cleanup_append(state->checks,
-                            (intptr_t)pthread_getspecific(ctf__thread_index));
-    } else {
-      state->checks_capacity *= 2;
-      state->checks = realloc(
-        state->checks, sizeof(state->checks[0]) * state->checks_capacity);
-    }
-  }
-  struct ctf__check *const check = state->checks + state->checks_count;
-  check->f.i = f;
-  check->var = var;
-  check->call_count = call_count;
-  check->type = type;
-  check->line = line;
-  check->file = file;
-  check->print_var = print_var;
-  state->checks_count++;
-}
-// clang-format off
-/* EXPECTS AND ASSERTS
-   define(`EXPECT_HELPER',
-   `int ctf__expect_$1_$2($3 a, $3 b, const char *a_str,
-   const char *b_str, int line, const char *file) {
-   int status;
-   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-   thread_data_states_increment(thread_data);
-   thread_data->states[thread_data->states_size-1].status = 2;
-   assert_copy(thread_data->states + thread_data->states_size - 1, line,
-   file);
-   MSG_SPRINTF(thread_data->states[thread_data->states_size -1].msg, "%s $4 %s ( "$5" $4 "$5" )", a_str, b_str, a,
-   b);
-   status = $6 $4 $7;
-   thread_data->states[thread_data->states_size - 1].status = !status;
-   return status;
-   }')
-   define(`EXPECT_MEMORY_HELPER',
-   `int ctf__expect_memory_$1_$2(                                      \
-   $3(a), $3(b), uintmax_t l, uintmax_t step, int sign,        \
-   const char *a_str, const char *b_str, int line, const char *file) {       \
-   int status;                                                               \
-   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-   thread_data_states_increment(thread_data);
-   thread_data->states[thread_data->states_size-1].status = 2;                 \
-   assert_copy(thread_data->states + thread_data->states_size - 1, line,     \
-   file);                                                        \
-   print_mem(thread_data->states + thread_data->states_size - 1, a, b, l, l, \
-   step, sign, a_str, b_str, "$4", $5 ", ");        \
-   status = thread_data->states[thread_data->states_size - 1].status $4 0;   \
-   thread_data->states[thread_data->states_size - 1].status = !status;       \
-   return status;                                                            \
-   }')
-   define(`EXPECT_ARRAY_HELPER',
-   `int ctf__expect_array_$1_$2(                                     \
-   $3(a), $3(b), uintmax_t la, uintmax_t lb, uintmax_t step,    \
-   int sign, const char *a_str, const char *b_str, int line,               \
-   const char *file) {                                                     \
-   int status;                                                             \
-   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-   thread_data_states_increment(thread_data);
-   thread_data->states[thread_data->states_size-1].status = 2;               \
-   assert_copy(thread_data->states + thread_data->states_size - 1, line,   \
-   file);                                                      \
-   print_mem(thread_data->states + thread_data->states_size - 1, a, b, la, \
-   lb, step, sign, a_str, b_str, "$4", $5 ", ");  \
-   if(thread_data->states[thread_data->states_size - 1].status == 0) {     \
-   status = (la $4 lb);                                                  \
-   } else {                                                                \
-   status =                                                              \
-   (thread_data->states[thread_data->states_size - 1].status $4 0);    \
-   }                                                                       \
-   thread_data->states[thread_data->states_size - 1].status = !status;     \
-   return status;                                                          \
-   }')
-   define(`ASSERT_HELPER',
-   `int ctf__assert_$1_$2($3 a, $3 b, const char *a_str,
-   const char *b_str, int line, const char *file) {
-   int status;
-   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-   thread_data_states_increment(thread_data);
-   thread_data->states[thread_data->states_size-1].status = 2;
-   assert_copy(thread_data->states + thread_data->states_size - 1, line,
-   file);
-   MSG_SPRINTF(thread_data->states[thread_data->states_size - 1].msg,
-   "%s $4 %s ( "$5" $4 "$5" )", a_str, b_str, a,
-   b);
-   status = $6 $4 $7;
-thread_data->states[thread_data->states_size - 1].status = !status;
-if(!status) longjmp(ctf__assert_jmp_buff[thread_index], 1);                           \
-    return status;
-}')
-define(`ASSERT_MEMORY_HELPER',
-       `int ctf__assert_memory_$1_$2(                                      \
-                                                                           $3(a), $3(b), uintmax_t l, uintmax_t step, int sign,        \
-                                                                           const char *a_str, const char *b_str, int line, const char *file) {       \
-       int status;                                                               \
-       intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-       struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-       thread_data_states_increment(thread_data);
-       thread_data->states[thread_data->states_size-1].status = 2;                 \
-       assert_copy(thread_data->states + thread_data->states_size - 1, line,     \
-                   file);                                                        \
-       print_mem(thread_data->states + thread_data->states_size - 1, a, b, l, l, \
-                 step, sign, a_str, b_str, "$4", $5 ", ");        \
-       status = thread_data->states[thread_data->states_size - 1].status $4 0;   \
-       thread_data->states[thread_data->states_size - 1].status = !status;       \
-       if(!status) longjmp(ctf__assert_jmp_buff[thread_index], 1);                           \
-       return status;                                                            \
-       }')
-define(`ASSERT_ARRAY_HELPER',
-       `int ctf__assert_array_$1_$2(                                     \
-                                                                         $3(a), $3(b), uintmax_t la, uintmax_t lb, uintmax_t step,    \
-                                                                         int sign, const char *a_str, const char *b_str, int line,               \
-                                                                         const char *file) {                                                     \
-       int status;                                                             \
-       intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-       struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-       thread_data_states_increment(thread_data);
-       thread_data->states[thread_data->states_size-1].status = 2;               \
-       assert_copy(thread_data->states + thread_data->states_size - 1, line,   \
-                   file);                                                      \
-       print_mem(thread_data->states + thread_data->states_size - 1, a, b, la, \
-                 lb, step, sign, a_str, b_str, "$4", $5 ", ");  \
-       if(thread_data->states[thread_data->states_size - 1].status == 0) {     \
-       status = (la $4 lb);                                                  \
-       } else {                                                                \
-       status =                                                              \
-       (thread_data->states[thread_data->states_size - 1].status $4 0);    \
-       }                                                                       \
-       thread_data->states[thread_data->states_size - 1].status = !status;     \
-         if(!status) longjmp(ctf__assert_jmp_buff[thread_index], 1);                           \
-           return status;                                                          \
-       }')
-*/
-/* MOCKS
-   define(`MOCK_HELPER',
-   `void ctf__mock_$1(struct ctf__mock_state *state,uintmax_t call_count, int type,
-   int line, const char *file, const char *print_var,
-   void *f, const char *var, $2 val) {
-   mock_base(state, call_count, type | $4, line, file, print_var, f, var);
-   struct ctf__check *const check = state->checks + state->checks_count-1;
-   check->val.$3 = val;
-   }')
-   define(`MOCK_STR',
-   `void ctf__mock_str(struct ctf__mock_state *state,uintmax_t call_count, int type,
-   int line, const char *file, const char *print_var,
-   void *f, const char *var, const char *val) {
-   mock_base(state, call_count, type | CTF__MOCK_TYPE_MEMORY, line, file, print_var, f, var);
-   struct ctf__check *const check = state->checks + state->checks_count-1;
-   check->val.p = val;
-   }')
-   define(`MOCK_MEMORY_HELPER',
-   `void ctf__mock_$1(struct ctf__mock_state *state,uintmax_t call_count, int type,
-   int line, const char *file, const char *print_var,
-   void *f, const char *var, $2 val, uintmax_t l) {
-   mock_base(state, call_count, type | CTF__MOCK_TYPE_MEMORY, line, file, print_var, f, var);
-   struct ctf__check *const check = state->checks + state->checks_count-1;
-   check->val.$3 = val;
-   check->length = l;
-   }')
-   */
-/* MOCK CHECKS
-   define(`MOCK_CHECK_HELPER',
-   `void ctf__mock_check_$1(struct ctf__mock_state *state, $2 v,
-   const char *v_print) {
-   int ret = 1;
-   intptr_t thread_index =                                                   \
-   (intptr_t)pthread_getspecific(ctf__thread_index);               \
-   for(uintmax_t i=0; i<state->checks_count; i++) {
-   if(state->checks[i].type & CTF__MOCK_TYPE_MEMORY) continue;
-   if(strcmp(state->checks[i].var, v_print)) continue;
-   if(state->checks[i].call_count != state->call_count) continue;
-   ret = state->checks[i].f.$3(
-   state->checks[i].val.$3, v,
-   state->checks[i].print_var, v_print, state->checks[i].line,
-   state->checks[i].file);
-   if(!ret && state->checks[i].type & CTF__MOCK_TYPE_ASSERT) {
-   longjmp(ctf__assert_jmp_buff[thread_index], 1);
-   }
-   }
-   mock_check_base(state, v_print, 0);
-   }')
-   define(`MOCK_CHECK_STR',
-   `void ctf__mock_check_str(struct ctf__mock_state *state,
-   const char *v, const char *v_print) {
-   int ret = 1;
-   intptr_t thread_index =                                                   \
-   (intptr_t)pthread_getspecific(ctf__thread_index);               \
-   for(uintmax_t i=0; i<state->checks_count; i++) {
-   if(!(state->checks[i].type & CTF__MOCK_TYPE_MEMORY)) continue;
-   if(strcmp(state->checks[i].var, v_print)) continue;
-   if(state->checks[i].call_count != state->call_count) continue;
-   ret = state->checks[i].f.p(
-   state->checks[i].val.p, v,
-   state->checks[i].print_var, v_print, state->checks[i].line,
-   state->checks[i].file);
-   if(!ret && state->checks[i].type & CTF__MOCK_TYPE_ASSERT) {
-   longjmp(ctf__assert_jmp_buff[thread_index], 1);
-   }
-   }
-   mock_check_base(state, v_print, 1);
-   }')
-   define(`MOCK_CHECK_MEMORY_HELPER',
-   `void ctf__mock_check_memory_$1(struct ctf__mock_state *state,
-   const void * v,
-   const char *v_print, uintmax_t step, int sign) {
-   int ret = 1;
-   intptr_t thread_index =                                                   \
-   (intptr_t)pthread_getspecific(ctf__thread_index);               \
-   for(uintmax_t i=0; i<state->checks_count; i++) {
-   if(!(state->checks[i].type & CTF__MOCK_TYPE_MEMORY)) continue;
-   if(strcmp(state->checks[i].var, v_print)) continue;
-   if(state->checks[i].call_count != state->call_count) continue;
-   ret = state->checks[i].f.m( state->checks[i].val.p, v, state->checks[i].length, step, sign,
-   state->checks[i].print_var, v_print, state->checks[i].line,
-   state->checks[i].file);
-   if(!ret && state->checks[i].type & CTF__MOCK_TYPE_ASSERT) {
-   longjmp(ctf__assert_jmp_buff[thread_index], 1);
-   }
-   }
-   mock_check_base(state, v_print, 1);
-   }')
-   */
-/* DEFINES
-   define(`MOCK', `MOCK_HELPER(`$1', TYPE(`$1'), SHORT(`$1'), 0)')
-   define(`MOCK_MEMORY', `MOCK_MEMORY_HELPER(`$1', `const void *', `p')')
-   define(`EXPECT_PRIMITIVE', `EXPECT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),a,b)')
-   define(`EXPECT_STRING', `EXPECT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),strcmp(a,b),0)')
-   define(`EXPECT_MEMORY', `EXPECT_MEMORY_HELPER(`$1',`$2',`$3',CMP_SYMBOL(`$2'),FORMAT(`$1'))')
-   define(`EXPECT_ARRAY', `EXPECT_ARRAY_HELPER(`$1',`$2',`$3',CMP_SYMBOL(`$2'),FORMAT(`$1'))')
-   define(`ASSERT_PRIMITIVE', `ASSERT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),a,b)')
-   define(`ASSERT_STRING', `ASSERT_HELPER(`$1',`$2',TYPE(`$1'),CMP_SYMBOL(`$2'),FORMAT(`$1'),strcmp(a,b),0)')
-   define(`ASSERT_MEMORY', `ASSERT_MEMORY_HELPER(`$1',`$2',`$3',CMP_SYMBOL(`$2'),FORMAT(`$1'))')
-   define(`ASSERT_ARRAY', `ASSERT_ARRAY_HELPER(`$1',`$2',`$3',CMP_SYMBOL(`$2'),FORMAT(`$1'))')
-   define(`MOCK_CHECK', `MOCK_CHECK_HELPER(`$1', TYPE(`$1'), SHORT(`$1'))')
-   define(`MOCK_CHECK_MEMORY', `MOCK_CHECK_MEMORY_HELPER(`$1')')
-   */
-COMB2(`EXPECT_PRIMITIVE', `(PRIMITIVE_TYPES)', `(CMPS)')
-COMB2(`EXPECT_STRING', `(str)', `(CMPS)')
-COMB3(`EXPECT_MEMORY', `(char, int, uint)', `(CMPS)', `(const void *)')
-COMB3(`EXPECT_MEMORY', `(ptr)', `(CMPS)', `(const void *)')
-COMB3(`EXPECT_ARRAY', `(char, int, uint)', `(CMPS)', `(const void *)')
-COMB3(`EXPECT_ARRAY', `(ptr)', `(CMPS)', `(const void *)')
-COMB2(`ASSERT_PRIMITIVE', `(PRIMITIVE_TYPES)', `(CMPS)')
-COMB2(`ASSERT_STRING', `(str)', `(CMPS)')
-COMB3(`ASSERT_MEMORY', `(char, int, uint)', `(CMPS)', `(const void *)')
-COMB3(`ASSERT_MEMORY', `(ptr)', `(CMPS)', `(const void *)')
-COMB3(`ASSERT_ARRAY', `(char, int, uint)', `(CMPS)', `(const void *)')
-COMB3(`ASSERT_ARRAY', `(ptr)', `(CMPS)', `(const void *)')
-COMB(`MOCK', `(PRIMITIVE_TYPES)')
-MOCK_STR
-COMB(`MOCK_MEMORY', `(memory)')
-COMB(`MOCK_CHECK', `(PRIMITIVE_TYPES)')
-MOCK_CHECK_STR
-COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
-// clang-format on
-
+include(`assert.c')
+include(`mocks.c')
