@@ -21,7 +21,6 @@ include(`base.m4')
 #include <stdio.h>
 #include <string.h>
 
-#define CTF_CONST_MAX_THREADS 16
 #define CTF_CONST_GROUP_SIZE 128
 #define CTF_CONST_SIGNAL_STACK_SIZE 1024
 
@@ -41,6 +40,7 @@ struct ctf__test {
 };
 struct ctf__group {
   const struct ctf__test *tests;
+  uintmax_t tests_size;
   void (*setup)(void);
   void (*teardown)(void);
   void (*test_setup)(void);
@@ -51,12 +51,12 @@ struct ctf__thread_data {
   struct ctf__state *states;
   uintmax_t states_size;
   uintmax_t states_capacity;
-  struct ctf__mock_state **mock_reset_stack;
+  struct ctf__mock **mock_reset_stack;
   uintmax_t mock_reset_stack_size;
   uintmax_t mock_reset_stack_capacity;
 };
 
-extern struct ctf__thread_data ctf__thread_data[CTF_CONST_MAX_THREADS];
+extern struct ctf__thread_data *restrict ctf__thread_data;
 extern int ctf_exit_code;
 extern pthread_key_t ctf__thread_index;
 extern char ctf_signal_altstack[CTF_CONST_SIGNAL_STACK_SIZE];

@@ -20,7 +20,8 @@ include(`base.m4')
   "-d, --detail   (off|on|auto*) detailed info about failed tests\n"         \
   "-p, --passed   (off|on|auto*) printing of passed groups\n"                \
   "-j, --jobs     Number of parallel threads to run (default 1)\n"           \
-  "-s, --sigsegv  Don't register SIGSEGV handler\n"                          \
+  "--sigsegv      Don't register SIGSEGV handler\n"                          \
+  "--cleanup      Free memory allocations\n"                                 \
   "--,            Stop parsing arguments\n"
 #define OFF 0
 #define ON 1
@@ -35,12 +36,14 @@ include(`base.m4')
 #define DEFAULT_STATE_MSG_CAPACITY 128
 #define DEFAULT_THREAD_DATA_STATES_CAPACITY 16
 #define DEFAULT_THREAD_DATA_MOCK_RESET_STACK_CAPACITY 8
+#define DEFAULT_MOCK_RETURN_CAPACITY 16
+#define DEFAULT_CLEANUP_LIST_CAPACITY 32
 
 #define MSG_SPRINTF_APPEND(msg, ...)                                        \
   do {                                                                      \
     const uintmax_t printf_size = snprintf(NULL, 0, __VA_ARGS__) + 1;       \
     uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1;           \
-    mul = mul % 2 == 0 ? mul : mul + 1;                                     \
+    mul += (mul % 2 != 0 && mul != 1);                                      \
     if(msg == NULL) {                                                       \
       msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;                    \
       msg = malloc(msg##_capacity);                                         \
@@ -55,7 +58,7 @@ include(`base.m4')
   do {                                                                \
     const uintmax_t printf_size = snprintf(NULL, 0, __VA_ARGS__) + 1; \
     uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1;     \
-    mul = mul % 2 == 0 ? mul : mul + 1;                               \
+    mul += (mul % 2 != 0 && mul != 1);                                \
     if(msg == NULL) {                                                 \
       msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;              \
       msg = malloc(msg##_capacity);                                   \
@@ -71,7 +74,7 @@ include(`base.m4')
     va_copy(vc, v);                                               \
     const uintmax_t printf_size = vsnprintf(NULL, 0, f, v) + 1;   \
     uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1; \
-    mul = mul % 2 == 0 ? mul : mul + 1;                           \
+    mul += (mul % 2 != 0 && mul != 1);                            \
     if(msg == NULL) {                                             \
       msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;          \
       msg = malloc(msg##_capacity);                               \
@@ -108,14 +111,15 @@ static int opt_unicode = BRANDED;
 static int opt_color = AUTO;
 static int opt_detail = AUTO;
 static int opt_passed = AUTO;
-static int opt_threads = 1;
+static int opt_cleanup = 0;
+int ctf__opt_threads = 1;
 static int tty_present = 0;
 static const char print_color_reset[] = "\x1b[0m";
 static int color = 0;
 static int detail = 1;
 
 static pthread_mutex_t parallel_print_mutex;
-static pthread_t parallel_threads[CTF_CONST_MAX_THREADS];
+static pthread_t *restrict parallel_threads;
 static int parallel_threads_waiting = 0;
 static struct ctf__group parallel_task_queue[TASK_QUEUE_MAX] = {0};
 static pthread_mutex_t parallel_task_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -123,28 +127,134 @@ static pthread_cond_t parallel_threads_waiting_all = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t parallel_task_queue_non_empty = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t parallel_task_queue_non_full = PTHREAD_COND_INITIALIZER;
 static uintmax_t parallel_state = 0;
-static struct buff print_buff[CTF_CONST_MAX_THREADS];
-static jmp_buf ctf__assert_jmp_buff[CTF_CONST_MAX_THREADS];
+static struct buff *restrict print_buff;
+static jmp_buf *restrict ctf__assert_jmp_buff;
+static pthread_rwlock_t mock_states_lock = PTHREAD_RWLOCK_INITIALIZER;
+pthread_rwlock_t ctf__mock_returns_lock = PTHREAD_RWLOCK_INITIALIZER;
+static struct {
+  void **pointers;
+  uintmax_t size;
+  uintmax_t capacity;
+} *cleanup_list;
 
 char ctf_signal_altstack[CTF_CONST_SIGNAL_STACK_SIZE];
 pthread_key_t ctf__thread_index;
 int ctf_exit_code = 0;
-struct ctf__thread_data ctf__thread_data[CTF_CONST_MAX_THREADS] = {0};
+struct ctf__thread_data *restrict ctf__thread_data;
 
 static void buff_resize(struct buff *buff, uintmax_t cap) {
   uintmax_t mul = (cap + 1) / DEFAULT_PRINT_BUFF_SIZE + 1;
-  mul = mul % 2 == 0 ? mul : mul + 1;
+  mul += (mul % 2 != 0 && mul != 1);
   buff->capacity = DEFAULT_PRINT_BUFF_SIZE * mul;
   buff->buff = realloc(buff->buff, buff->capacity);
+}
+
+static void mock_state_init(struct ctf__mock_state *state) {
+  state->mock_f = NULL;
+  state->call_count = 0;
+  state->check_count = 0;
+  state->return_overrides = NULL;
+  state->return_overrides_size = 0;
+  state->return_overrides_capacity = 0;
+}
+
+static void mock_state_reset(struct ctf__mock_state *state) {
+  state->call_count = 0;
+  state->check_count = 0;
+  memset(state->return_overrides, -1,
+         state->return_overrides_size * sizeof(state->return_overrides[0]));
+  state->return_overrides_size = 0;
+}
+
+static void mock_state_deinit(struct ctf__mock_state *state) {
+  if(state->return_overrides != NULL) free(state->return_overrides);
+  free(state);
+}
+
+static void mock_return_init(struct ctf__mock_return *ret) {
+  ret->values = NULL;
+  ret->size = 0;
+  ret->capacity = 0;
+}
+
+static void mock_states_alloc(struct ctf__mock *mock, int thread_index) {
+  if(ctf__opt_threads > 1) {
+    while(!mock->states_initialized) {
+      if(pthread_rwlock_trywrlock(&mock_states_lock) == 0) {
+        if(mock->states_initialized) {
+          pthread_rwlock_unlock(&mock_states_lock);
+          mock_state_reset(mock->states + thread_index);
+          return;
+        } else {
+          goto init;
+        }
+      }
+    }
+    mock_state_reset(mock->states + thread_index);
+    return;
+  }
+init:
+  mock->states = malloc(sizeof(mock->states[0]) * ctf__opt_threads);
+  for(int j = 0; j < ctf__opt_threads; j++) mock_state_init(mock->states + j);
+  mock->states_initialized = 1;
+  if(ctf__opt_threads > 1) {
+    pthread_rwlock_unlock(&mock_states_lock);
+  }
+  if(opt_cleanup) {
+    if(cleanup_list[thread_index].size + 1 >=
+       cleanup_list[thread_index].capacity) {
+      cleanup_list[thread_index].capacity *= 2;
+      cleanup_list[thread_index].pointers =
+        realloc(cleanup_list[thread_index].pointers,
+                sizeof(cleanup_list[0].pointers[0]) *
+                  cleanup_list[thread_index].capacity);
+    }
+    cleanup_list[thread_index].pointers[cleanup_list[thread_index].size++] =
+      mock->states;
+  }
+}
+
+void ctf__mock_returns_alloc(struct ctf__mock *mock, intptr_t thread_index) {
+  if(ctf__opt_threads > 1) {
+    while(!mock->returns_initialized) {
+      if(pthread_rwlock_trywrlock(&ctf__mock_returns_lock) == 0) {
+        if(mock->returns_initialized) {
+          pthread_rwlock_unlock(&ctf__mock_returns_lock);
+          return;
+        } else {
+          goto init;
+        }
+      }
+    }
+    return;
+  }
+init:
+  mock->returns = malloc(sizeof(mock->returns[0]) * ctf__opt_threads);
+  for(int i = 0; i < ctf__opt_threads; i++) mock_return_init(mock->returns + i);
+  mock->returns_initialized = 1;
+  if(ctf__opt_threads > 1) {
+    pthread_rwlock_unlock(&ctf__mock_returns_lock);
+  }
+  if(opt_cleanup) {
+    if(cleanup_list[thread_index].size + 1 >=
+       cleanup_list[thread_index].capacity) {
+      cleanup_list[thread_index].capacity *= 2;
+      cleanup_list[thread_index].pointers =
+        realloc(cleanup_list[thread_index].pointers,
+                sizeof(cleanup_list[0].pointers[0]) *
+                  cleanup_list[thread_index].capacity);
+    }
+    cleanup_list[thread_index].pointers[cleanup_list[thread_index].size++] =
+      mock->returns;
+  }
 }
 
 static void state_init(struct ctf__state *state) {
   state->msg = NULL;
 }
 
-static void mock_state_init(struct ctf__mock_state *state) {
-  memset(state->return_overrides, 0, sizeof(state->return_overrides));
-  memset(state->check, 0, sizeof(state->check));
+static void state_deinit(struct ctf__state *state) {
+  if(state->msg != NULL) free(state->msg);
 }
 
 static void thread_data_states_increment(struct ctf__thread_data *data) {
@@ -172,7 +282,11 @@ static void thread_data_init(struct ctf__thread_data *data) {
 }
 
 static void thread_data_deinit(struct ctf__thread_data *data) {
+  for(uintmax_t k = 0; k < data->states_capacity; k++) {
+    state_deinit(data->states + k);
+  }
   free(data->states);
+  free(data->mock_reset_stack);
 }
 
 static void pthread_key_destr(void *v) {
@@ -642,13 +756,8 @@ static void print_mem(struct ctf__state *state, const void *a,
 static void test_cleanup(void) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++) {
-    thread_data->mock_reset_stack[i]->call_count = 0;
-    thread_data->mock_reset_stack[i]->mock_f = NULL;
-    memset(thread_data->mock_reset_stack[i]->return_overrides, 0,
-           sizeof(thread_data->mock_reset_stack[i]->return_overrides));
-    thread_data->mock_reset_stack[i]->check_count = 0;
-  }
+  for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++)
+    thread_data->mock_reset_stack[i]->states->mock_f = NULL;
   thread_data->mock_reset_stack_size = 0;
 }
 
@@ -756,7 +865,7 @@ static void assert_copy(struct ctf__state *state, int line,
 
 static uintmax_t parallel_get_thread_index(void) {
   const pthread_t thread = pthread_self();
-  for(int i = 0; i < opt_threads; i++) {
+  for(int i = 0; i < ctf__opt_threads; i++) {
     if(pthread_equal(parallel_threads[i], thread)) {
       return i;
     }
@@ -772,7 +881,7 @@ static void *parallel_thread_loop(void *data) {
   while(1) {
     pthread_mutex_lock(&parallel_task_queue_mutex);
     if(parallel_task_queue[0].tests == NULL) {
-      if(parallel_threads_waiting == opt_threads - 1)
+      if(parallel_threads_waiting == ctf__opt_threads - 1)
         pthread_cond_signal(&parallel_threads_waiting_all);
       parallel_threads_waiting++;
       while(parallel_task_queue[0].tests == NULL && parallel_state) {
@@ -838,12 +947,6 @@ static void parallel_groups_run(int count, va_list args) {
   pthread_mutex_unlock(&parallel_task_queue_mutex);
 }
 
-static void mock_reset(struct ctf__mock_state *state) {
-  state->call_count = 0;
-  memset(state->return_overrides, 0, sizeof(state->return_overrides));
-  state->check_count = 0;                                              \
-}
-
 int main(int argc, char *argv[]) {
   int i;
   int handle_sigsegv = 1;
@@ -876,12 +979,12 @@ int main(int argc, char *argv[]) {
     } else if(!strcmp(argv[i] + 1, "j") || !strcmp(argv[i] + 1, "-jobs")) {
       i++;
       if(i >= argc) err();
-      sscanf(argv[i], "%u", &opt_threads);
-      if(opt_threads > CTF_CONST_MAX_THREADS)
-        opt_threads = CTF_CONST_MAX_THREADS;
-      if(opt_threads < 1) opt_threads = 1;
-    } else if(!strcmp(argv[i] + 1, "s") || !strcmp(argv[i] + 1, "-sigsegv")) {
+      sscanf(argv[i], "%u", &ctf__opt_threads);
+      if(ctf__opt_threads < 1) ctf__opt_threads = 1;
+    } else if(!strcmp(argv[i] + 1, "-sigsegv")) {
       handle_sigsegv = 0;
+    } else if(!strcmp(argv[i] + 1, "-cleanup")) {
+      opt_cleanup = 1;
     } else if(!strcmp(argv[i] + 1, "-")) {
       i++;
       break;
@@ -909,14 +1012,43 @@ int main(int argc, char *argv[]) {
   }
   pthread_key_create(&ctf__thread_index, pthread_key_destr);
   pthread_setspecific(ctf__thread_index, (void *)0);
-  for(int j = 0; j < opt_threads; j++) {
+  void *data =
+    malloc((sizeof(*parallel_threads) + sizeof(*print_buff) +
+            sizeof(*ctf__assert_jmp_buff) + sizeof(*ctf__thread_data)) *
+           ctf__opt_threads);
+  parallel_threads = data;
+  print_buff = data + sizeof(*parallel_threads) * ctf__opt_threads;
+  ctf__assert_jmp_buff =
+    data + (sizeof(*parallel_threads) + sizeof(*print_buff)) * ctf__opt_threads;
+  ctf__thread_data = data + (sizeof(*parallel_threads) + sizeof(*print_buff) +
+                             sizeof(*ctf__assert_jmp_buff)) *
+                              ctf__opt_threads;
+  for(int j = 0; j < ctf__opt_threads; j++) {
     thread_data_init(ctf__thread_data + j);
     print_buff[j].buff = malloc(DEFAULT_PRINT_BUFF_SIZE);
     print_buff[j].size = 0;
     print_buff[j].capacity = DEFAULT_PRINT_BUFF_SIZE;
   }
+  if(opt_cleanup) {
+    cleanup_list = malloc(sizeof(*cleanup_list) * ctf__opt_threads);
+    for(int j = 0; j < ctf__opt_threads; j++) {
+      cleanup_list[j].pointers = malloc(sizeof(*cleanup_list[0].pointers[0]) *
+                                        DEFAULT_CLEANUP_LIST_CAPACITY);
+      cleanup_list[j].size = 0;
+      cleanup_list[j].capacity = DEFAULT_CLEANUP_LIST_CAPACITY;
+    }
+  }
   ctf_main(argc - i, argv + i);
-  pthread_key_delete(ctf__thread_index);
+  if(opt_cleanup) {
+    for(int j = 0; j < ctf__opt_threads; j++) {
+      thread_data_deinit(ctf__thread_data + j);
+      free(print_buff[j].buff);
+      free(cleanup_list[j].pointers);
+    }
+    free(data);
+    free(cleanup_list);
+    pthread_key_delete(ctf__thread_index);
+  }
   return ctf_exit_code;
 }
 void ctf_sigsegv_handler(int unused) {
@@ -960,10 +1092,10 @@ void ctf_sigsegv_handler(int unused) {
 }
 
 void ctf_parallel_sync(void) {
-  if(opt_threads == 1) return;
+  if(ctf__opt_threads == 1) return;
   if(!parallel_state) return;
   pthread_mutex_lock(&parallel_task_queue_mutex);
-  while(parallel_threads_waiting != opt_threads ||
+  while(parallel_threads_waiting != ctf__opt_threads ||
         parallel_task_queue[0].tests != NULL) {
     pthread_cond_wait(&parallel_threads_waiting_all,
                       &parallel_task_queue_mutex);
@@ -972,19 +1104,19 @@ void ctf_parallel_sync(void) {
   pthread_mutex_unlock(&parallel_task_queue_mutex);
 }
 void ctf_parallel_start(void) {
-  if(opt_threads == 1) return;
+  if(ctf__opt_threads == 1) return;
   parallel_state = 1;
-  for(intptr_t i = 0; i < opt_threads; i++) {
+  for(intptr_t i = 0; i < ctf__opt_threads; i++) {
     pthread_create(parallel_threads + i, NULL, parallel_thread_loop, (void *)i);
   }
 }
 void ctf_parallel_stop(void) {
-  if(opt_threads == 1) return;
+  if(ctf__opt_threads == 1) return;
   parallel_state = 0;
   pthread_mutex_lock(&parallel_task_queue_mutex);
   pthread_cond_broadcast(&parallel_task_queue_non_empty);
   pthread_mutex_unlock(&parallel_task_queue_mutex);
-  for(int i = 0; i < opt_threads; i++) {
+  for(int i = 0; i < ctf__opt_threads; i++) {
     pthread_join(parallel_threads[i], NULL);
   }
 }
@@ -1043,39 +1175,57 @@ void ctf_assert_hide(uintmax_t count) {
 void ctf_unmock(void) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  prereq_assert(thread_data->mock_reset_stack_size != 0, "No mocks to unmock");
-  struct ctf__mock_state *state =
+  if(thread_data->mock_reset_stack_size == 0) return;
+  struct ctf__mock *mock =
     thread_data->mock_reset_stack[--thread_data->mock_reset_stack_size];
-  state->mock_f = NULL;
-  mock_reset(state);
+  if(mock->states == NULL) return;
+  mock->states[thread_index].mock_f = NULL;
 }
 void ctf__mock_group(struct ctf__mock_bind *bind) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__mock_state *state;
+  struct ctf__mock *mock;
   for(uintmax_t i = 0; i < CTF_CONST_MOCK_GROUP_SIZE && bind[i].f; i++) {
-    state = bind[i].mock->state + thread_index;
-    thread_data->mock_reset_stack[thread_data->mock_reset_stack_size++] = state;
-    state->mock_f = (void (*)(void))bind[i].f;
-    mock_reset(state);
-  }                                                                         \
+    mock = bind[i].mock;
+    if(ctf__opt_threads > 1) pthread_rwlock_rdlock(&mock_states_lock);
+    if(!mock->states_initialized) {
+      if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
+      mock_states_alloc(mock, thread_index);
+    } else {
+      if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
+      mock_state_reset(mock->states + thread_index);
+    }
+    thread_data->mock_reset_stack[thread_data->mock_reset_stack_size++] = mock;
+    mock->states[thread_index].mock_f = (void (*)(void))bind[i].f;
+  }
 }
-void ctf__mock_global(struct ctf__mock_state *state, void(*f)(void)) {
+void ctf__mock_global(struct ctf__mock *mock, void (*f)(void)) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  state += thread_index;
-  state->mock_f = f;
-  thread_data->mock_reset_stack[thread_data->mock_reset_stack_size++] = state;
-  mock_reset(state);                                                   \
+  if(ctf__opt_threads > 1) pthread_rwlock_rdlock(&mock_states_lock);
+  if(mock->states == NULL) {
+    if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
+    mock_states_alloc(mock, thread_index);
+  } else {
+    if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
+    mock_state_reset(mock->states + thread_index);
+  }
+  mock->states[thread_index].mock_f = f;
+  thread_data->mock_reset_stack[thread_data->mock_reset_stack_size++] = mock;
 }
 void ctf__unmock_group(struct ctf__mock_bind *bind) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__mock_state *state;
+  struct ctf__mock *mock;
   for(uintmax_t i = 0; i < CTF_CONST_MOCK_GROUP_SIZE && bind[i].f; i++) {
-    state = bind[i].mock->state + thread_index;
-    state->mock_f = (void (*)(void))NULL;
-    mock_reset(state);
+    mock = bind[i].mock;
+    if(mock->states == NULL) continue;
+    mock->states[thread_index].mock_f = NULL;
   }
+}
+uintmax_t ctf__mock_return_capacity(uintmax_t cap) {
+  uintmax_t mul = (cap + 1) / DEFAULT_MOCK_RETURN_CAPACITY + 1;
+  mul = mul + (mul % 2 != 0 && mul != 1);
+  return DEFAULT_MOCK_RETURN_CAPACITY * mul;
 }
 
 uintmax_t ctf__fail(const char *m, int line, const char *file, ...) {
@@ -1103,7 +1253,7 @@ uintmax_t ctf__pass(const char *m, int line, const char *file, ...) {
   return 1;
 }
 uintmax_t ctf__assert_msg(int status, const char *msg, int line,
-                            const char *file, ...) {
+                          const char *file, ...) {
   va_list args;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
@@ -1117,8 +1267,8 @@ uintmax_t ctf__assert_msg(int status, const char *msg, int line,
   va_end(args);
   return status;
 }
-static void mock_check_base(struct ctf__mock_state *state,
-                                  const char *v, int memory) {
+static void mock_check_base(struct ctf__mock_state *state, const char *v,
+                            int memory) {
   int removed = 0;
   for(uintmax_t i = 0; i < state->check_count; i++) {
     if(!(state->check[i].type & CTF__MOCK_TYPE_MEMORY) == memory) continue;
@@ -1138,7 +1288,7 @@ static void mock_check_base(struct ctf__mock_state *state,
       }
     }
   }
-  state->check_count -= removed;                                        \
+  state->check_count -= removed;
 }
 static void mock_base(struct ctf__mock_state *state, int call_count, int type,
                       int line, const char *file, const char *print_var,

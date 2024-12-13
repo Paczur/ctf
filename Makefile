@@ -73,7 +73,7 @@ dist/lib64/libctf.so: build/src/ctf/ctf.c
 $(TEST_RUN): bin/$(TEST_BIN)
 	mkdir -p $(@D)
 	$(info RUN  $<)
-	./$<
+	./$< --cleanup --sigsegv
 	touch $@
 
 bin/$(TEST_BIN): $(TEST_OBJECTS) build/src/ctf/ctf.o | build/test/$(TEST_BIN).lf
@@ -105,7 +105,12 @@ build/src/%.o: build/src/%.c build/src/%.h
 	$(info CC   $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-build/%: %
+build/src/ctf/ctf.h: src/ctf/ctf.h src/ctf/ctf_mocks.h
 	mkdir -p $(@D)
 	$(info GEN  $@)
 	m4 -Im4 -Isrc/ctf $< > $@
+
+build/%: %
+	mkdir -p $(@D)
+	$(info GEN  $@)
+	m4 -Im4 $< > $@

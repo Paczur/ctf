@@ -834,9 +834,11 @@ CTF_TEST(msg_limit) {
     "                ");
 }
 CTF_TEST(print_buff_limit) { ctf_pass("%1048576s", "long"); }
+CTF_TEST(not_mocked) { expect_int_eq(3, add(1, 2)); }
 CTF_GROUP(misc) = {
   msg_limit,
   print_buff_limit,
+  not_mocked,
 };
 
 CTF_TEST(char_expect_success) {
