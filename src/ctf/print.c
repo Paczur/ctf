@@ -561,18 +561,8 @@ void ctf_sigsegv_handler(int unused) {
 static void print_stats(struct ctf__stats *stats) {
   const char fail_color[] = "\x1b[31m";
   const char pass_color[] = "\x1b[32m";
-  const char upremsg[] =
-    "─────────────────Done───────────────────\n"
-    "  Groups  "
-    "  Tests   "
-    " Asserts  "
-    " Expects  \n";
-  const char premsg[] =
-    "-----------------Done-------------------\n"
-    "  Groups  "
-    "  Tests   "
-    " Asserts  "
-    " Expects  \n";
+  const char upremsg[] = "──Groups────Tests────Asserts───Expects──\n";
+  const char premsg[] = "--Groups----Tests----Asserts---Expects--\n";
 #pragma GCC diagnostic ignored "-Wunused-result"
   if(opt_unicode == OFF) {
     write(STDOUT_FILENO, premsg, sizeof(premsg));

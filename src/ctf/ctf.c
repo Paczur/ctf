@@ -85,7 +85,20 @@ struct ctf__thread_data *restrict ctf__thread_data;
 
 include(`print.c')
 
-void ctf__cleanup_append(void *ptr, intptr_t thread_index) {
+void *ctf__cleanup_realloc(void *ptr, uintmax_t size, uintptr_t thread_index) {
+  void *new = realloc(ptr, size);
+  if(new == ptr) return new;
+  for(uintmax_t i = 0; i < cleanup_list[thread_index].size; i++) {
+    if(cleanup_list[thread_index].pointers[i] == ptr) {
+      cleanup_list[thread_index].pointers[i] = new;
+      return new;
+    }
+  }
+  return new;
+}
+
+void *ctf__cleanup_malloc(uintmax_t size, uintptr_t thread_index) {
+  void *new = malloc(size);
   if(cleanup_list[thread_index].size + 1 >=
      cleanup_list[thread_index].capacity) {
     cleanup_list[thread_index].capacity *= 2;
@@ -94,7 +107,8 @@ void ctf__cleanup_append(void *ptr, intptr_t thread_index) {
               sizeof(cleanup_list[0].pointers[0]) *
                 cleanup_list[thread_index].capacity);
   }
-  cleanup_list[thread_index].pointers[cleanup_list[thread_index].size++] = ptr;
+  cleanup_list[thread_index].pointers[cleanup_list[thread_index].size++] = new;
+  return new;
 }
 
 static void stats_init(struct ctf__stats *stats) {
@@ -168,7 +182,7 @@ static void err(void) {
 }
 
 static void test_cleanup(void) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
+  uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++)
     thread_data->mock_reset_stack[i]->states->mock_f = NULL;
@@ -176,7 +190,7 @@ static void test_cleanup(void) {
 }
 
 static void group_run_helper(struct ctf__group group, struct buff *buff) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
+  uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   uintmax_t temp_size;
   uintmax_t test_name_len;
@@ -258,7 +272,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
 }
 
 static void group_run(struct ctf__group group) {
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
+  uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
   group_run_helper(group, print_buff + thread_index);
 #pragma GCC diagnostic ignored "-Wunused-result"
   write(STDOUT_FILENO, print_buff[thread_index].buff,
@@ -268,7 +282,7 @@ static void group_run(struct ctf__group group) {
 
 static void groups_run(uintmax_t count, va_list args) {
   struct ctf__group group;
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
+  uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
   for(uintmax_t i = 0; i < count; i++) {
     group = va_arg(args, struct ctf__group);
     group_run_helper(group, print_buff + thread_index);
@@ -298,7 +312,7 @@ static uintmax_t parallel_get_thread_index(void) {
 static void *parallel_thread_loop(void *data) {
   (void)data;
   struct ctf__group group;
-  intptr_t thread_index = (intptr_t)data;
+  uintptr_t thread_index = (uintptr_t)data;
   pthread_setspecific(ctf__thread_index, (void *)thread_index);
   while(1) {
     pthread_mutex_lock(&parallel_task_queue_mutex);
@@ -490,12 +504,15 @@ int main(int argc, char *argv[]) {
   if(ctf__opt_cleanup) {
     for(int j = 0; j < ctf__opt_threads; j++) {
       thread_data_deinit(ctf__thread_data + j);
-      free(print_buff[j].buff);
+      for(uintmax_t k = 0; k < cleanup_list[j].size; k++)
+        free(cleanup_list[j].pointers[k]);
       free(cleanup_list[j].pointers);
+      free(print_buff[j].buff);
     }
+    fflush(stdout);
+    pthread_key_delete(ctf__thread_index);
     free(data);
     free(cleanup_list);
-    pthread_key_delete(ctf__thread_index);
   }
   return ctf_exit_code;
 }

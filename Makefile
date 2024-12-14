@@ -26,7 +26,7 @@ release: CFLAGS += $(OPTIMIZE_FLAGS)
 release: dist doc
 
 debug: CFLAGS += $(DEBUG_FLAGS)
-debug: $(TEST_RUN) dist
+debug: dist $(TEST_RUN)
 
 check: $(TEST_RUN)
 
@@ -105,12 +105,12 @@ build/src/%.o: build/src/%.c build/src/%.h
 	$(info CC   $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-build/src/ctf/ctf.c: src/ctf/ctf.c $(wildcard src/ctf/*.c)
+build/src/ctf/ctf.c: src/ctf/ctf.c $(call rwildcard, src/ctf, *.c)
 	mkdir -p $(@D)
 	$(info GEN  $@)
 	m4 -Im4 -Isrc/ctf $< > $@
 
-build/src/ctf/ctf.h: src/ctf/ctf.h $(wildcard src/ctf/*.h)
+build/src/ctf/ctf.h: src/ctf/ctf.h $(call rwildcard, src/ctf, *.h)
 	mkdir -p $(@D)
 	$(info GEN  $@)
 	m4 -Im4 -Isrc/ctf $< > $@
