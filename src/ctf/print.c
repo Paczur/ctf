@@ -579,7 +579,6 @@ static void print_stats(struct ctf__stats *stats) {
   } else {
     write(STDOUT_FILENO, upremsg, sizeof(upremsg));
   }
-#pragma GCC diagnostic pop
   if(color) {
     if(stats->groups_failed == 0) {
       write(STDOUT_FILENO, pass_color, sizeof(pass_color));
@@ -623,4 +622,5 @@ static void print_stats(struct ctf__stats *stats) {
     fflush(stdout);
     write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
   }
+#pragma GCC diagnostic pop
 }
