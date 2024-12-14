@@ -8,9 +8,7 @@ void ctf_assert_barrier(void) {
   }
 }
 
-void ctf__assert_fold(uintmax_t count,
-                      const char *msg,
-                      int line,
+void ctf__assert_fold(uintmax_t count, const char *msg, int line,
                       const char *file) {
   ctf_assert_hide(count);
   ctf__pass(msg, line, file);
@@ -28,8 +26,7 @@ void ctf_assert_hide(uintmax_t count) {
     thread_data->states_size = 0;
   } else {
     for(uintmax_t i = thread_data->states_size - count;
-        i < thread_data->states_size;
-        i++) {
+        i < thread_data->states_size; i++) {
       if(thread_data->states[i].status) {
         longjmp(ctf__assert_jmp_buff[thread_index], 1);
       }
@@ -64,8 +61,8 @@ uintmax_t ctf__pass(const char *m, int line, const char *file, ...) {
   return 1;
 }
 
-uintmax_t ctf__assert_msg(
-  int status, const char *msg, int line, const char *file, ...) {
+uintmax_t ctf__assert_msg(int status, const char *msg, int line,
+                          const char *file, ...) {
   va_list args;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
@@ -74,8 +71,13 @@ uintmax_t ctf__assert_msg(
   assert_copy(thread_data->states + thread_data->states_size - 1, line, file);
   thread_data->states[thread_data->states_size - 1].msg_size = 0;
   va_start(args, file);
-  MSG_VSPRINTF(
-    thread_data->states[thread_data->states_size - 1].msg, msg, args);
+  if(status) {
+    thread_data->stats.asserts_passed++;
+  } else {
+    thread_data->stats.asserts_failed++;
+  }
+  MSG_VSPRINTF(thread_data->states[thread_data->states_size - 1].msg, msg,
+               args);
   va_end(args);
   return status;
 }
@@ -96,6 +98,11 @@ uintmax_t ctf__assert_msg(
    b);
    status = $6 $4 $7;
    thread_data->states[thread_data->states_size - 1].status = !status;
+   if(status) {
+   thread_data->stats.expects_passed++;
+   } else {
+   thread_data->stats.expects_failed++;
+   }
    return status;
    }')
    define(`EXPECT_MEMORY_HELPER',
@@ -113,6 +120,11 @@ uintmax_t ctf__assert_msg(
    step, sign, a_str, b_str, "$4", $5 ", ");        \
    status = thread_data->states[thread_data->states_size - 1].status $4 0;   \
    thread_data->states[thread_data->states_size - 1].status = !status;       \
+   if(status) {
+   thread_data->stats.expects_passed++;
+   } else {
+   thread_data->stats.expects_failed++;
+   }
    return status;                                                            \
    }')
    define(`EXPECT_ARRAY_HELPER',
@@ -136,6 +148,11 @@ uintmax_t ctf__assert_msg(
    (thread_data->states[thread_data->states_size - 1].status $4 0);    \
    }                                                                       \
    thread_data->states[thread_data->states_size - 1].status = !status;     \
+   if(status) {
+   thread_data->stats.expects_passed++;
+   } else {
+   thread_data->stats.expects_failed++;
+   }
    return status;                                                          \
    }')
    define(`ASSERT_HELPER',
@@ -154,6 +171,11 @@ uintmax_t ctf__assert_msg(
    status = $6 $4 $7;
 thread_data->states[thread_data->states_size - 1].status = !status;
 if(!status) longjmp(ctf__assert_jmp_buff[thread_index], 1);                           \
+   if(status) {
+   thread_data->stats.asserts_passed++;
+   } else {
+   thread_data->stats.asserts_failed++;
+   }
     return status;
 }')
 define(`ASSERT_MEMORY_HELPER',
@@ -172,6 +194,11 @@ define(`ASSERT_MEMORY_HELPER',
        status = thread_data->states[thread_data->states_size - 1].status $4 0;   \
        thread_data->states[thread_data->states_size - 1].status = !status;       \
        if(!status) longjmp(ctf__assert_jmp_buff[thread_index], 1);                           \
+       if(status) {
+       thread_data->stats.asserts_passed++;
+       } else {
+       thread_data->stats.asserts_failed++;
+       }
        return status;                                                            \
        }')
 define(`ASSERT_ARRAY_HELPER',
@@ -195,8 +222,13 @@ define(`ASSERT_ARRAY_HELPER',
        (thread_data->states[thread_data->states_size - 1].status $4 0);    \
        }                                                                       \
        thread_data->states[thread_data->states_size - 1].status = !status;     \
-         if(!status) longjmp(ctf__assert_jmp_buff[thread_index], 1);                           \
-           return status;                                                          \
+       if(!status) longjmp(ctf__assert_jmp_buff[thread_index], 1);                           \
+       if(status) {
+       thread_data->stats.asserts_passed++;
+       } else {
+       thread_data->stats.asserts_failed++;
+       }
+       return status;                                                          \
        }')
 */
 /* DEFINES

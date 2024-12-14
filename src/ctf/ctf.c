@@ -10,19 +10,20 @@
 include(`base.m4')
 
 #define IS_TTY !isatty(STDOUT_FILENO)
-#define HELP_MSG                                                             \
-  "Run tests embedded in this executable.\n"                                 \
-  "\n"                                                                       \
-  "Options:\n"                                                               \
-  "-h, --help     Show this message\n"                                       \
-  "-u, --unicode  (off|generic|branded*) display of unicode symbols\n"       \
-  "-c, --color    (off|on|auto*) color coding for failed and passed tests\n" \
-  "-d, --detail   (off|on|auto*) detailed info about failed tests\n"         \
-  "-p, --passed   (off|on|auto*) printing of passed groups\n"                \
-  "-j, --jobs     Number of parallel threads to run (default 1)\n"           \
-  "--sigsegv      Don't register SIGSEGV handler\n"                          \
-  "--cleanup      Free memory allocations\n"                                 \
-  "--,            Stop parsing arguments\n"
+#define HELP_MSG                                                               \
+  "Run tests embedded in this executable.\n"                                   \
+  "\n"                                                                         \
+  "Options:\n"                                                                 \
+  "-h, --help       Show this message\n"                                       \
+  "-u, --unicode    (off|generic|branded*) display of unicode symbols\n"       \
+  "-c, --color      (off|on|auto*) color coding for failed and passed tests\n" \
+  "-d, --detail     (off|on|auto*) detailed info about failed tests\n"         \
+  "-p, --passed     (off|on|auto*) printing of passed groups\n"                \
+  "-s, --statistics Disables printing of statistics at the end\n"              \
+  "-j, --jobs       Number of parallel threads to run (default 1)\n"           \
+  "--sigsegv        Don't register SIGSEGV handler\n"                          \
+  "--cleanup        Free memory allocations\n"                                 \
+  "--,              Stop parsing arguments\n"
 #define OFF 0
 #define ON 1
 #define AUTO 2
@@ -59,6 +60,7 @@ static int opt_detail = AUTO;
 static int opt_passed = AUTO;
 int ctf__opt_cleanup = 0;
 int ctf__opt_threads = 1;
+static int opt_statistics = 1;
 static int tty_present = 0;
 
 static pthread_t *restrict parallel_threads;
@@ -95,6 +97,17 @@ void ctf__cleanup_append(void *ptr, intptr_t thread_index) {
   cleanup_list[thread_index].pointers[cleanup_list[thread_index].size++] = ptr;
 }
 
+static void stats_init(struct ctf__stats *stats) {
+  stats->groups_passed = 0;
+  stats->groups_failed = 0;
+  stats->tests_passed = 0;
+  stats->tests_failed = 0;
+  stats->asserts_passed = 0;
+  stats->asserts_failed = 0;
+  stats->expects_passed = 0;
+  stats->expects_failed = 0;
+}
+
 static void state_init(struct ctf__state *state) {
   state->msg = NULL;
 }
@@ -125,6 +138,7 @@ static void thread_data_init(struct ctf__thread_data *data) {
     malloc(data->mock_reset_stack_capacity * sizeof(*data->mock_reset_stack));
   for(uintmax_t k = 0; k < data->states_capacity; k++)
     state_init(data->states + k);
+  if(opt_statistics) stats_init(&data->stats);
 }
 
 static void thread_data_deinit(struct ctf__thread_data *data) {
@@ -200,6 +214,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
     }
     buff->size -= temp_size;
     if(!test_status) {
+      if(opt_statistics) thread_data->stats.tests_failed++;
       temp_size = print_test_fail(NULL, group.tests[i].name, test_name_len);
       for(uintmax_t j = 0; j < thread_data->states_size; j++) {
         if(thread_data->states[j].status == 0) {
@@ -220,6 +235,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
         }
       }
     } else {
+      if(opt_statistics) thread_data->stats.tests_passed++;
       temp_size = print_test_pass(NULL, group.tests[i].name, test_name_len);
       if(buff->size + temp_size >= buff->capacity)
         buff_resize(buff, buff->size + temp_size);
@@ -230,9 +246,11 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
   temp_size = buff->size;
   buff->size = 0;
   if(group_status) {
+    if(opt_statistics) thread_data->stats.groups_passed++;
     print_group_pass(buff, group.name, group_name_len);
     if(opt_passed == ON) buff->size = temp_size;
   } else {
+    if(opt_statistics) thread_data->stats.groups_failed++;
     print_group_fail(buff, group.name, group_name_len);
     buff->size = temp_size;
     ctf_exit_code = 1;
@@ -387,6 +405,9 @@ int main(int argc, char *argv[]) {
       if(i >= argc) err();
       sscanf(argv[i], "%u", &ctf__opt_threads);
       if(ctf__opt_threads < 1) ctf__opt_threads = 1;
+    } else if(!strcmp(argv[i] + 1, "s") ||
+              !strcmp(argv[i] + 1, "-statistics")) {
+      opt_statistics = 0;
     } else if(!strcmp(argv[i] + 1, "-sigsegv")) {
       handle_sigsegv = 0;
     } else if(!strcmp(argv[i] + 1, "-cleanup")) {
@@ -445,6 +466,27 @@ int main(int argc, char *argv[]) {
     }
   }
   ctf_main(argc - i, argv + i);
+  if(opt_statistics) {
+    for(int j = 1; j < ctf__opt_threads; j++) {
+      ctf__thread_data[0].stats.groups_passed +=
+        ctf__thread_data[j].stats.groups_passed;
+      ctf__thread_data[0].stats.groups_failed +=
+        ctf__thread_data[j].stats.groups_failed;
+      ctf__thread_data[0].stats.tests_passed +=
+        ctf__thread_data[j].stats.tests_passed;
+      ctf__thread_data[0].stats.tests_failed +=
+        ctf__thread_data[j].stats.tests_failed;
+      ctf__thread_data[0].stats.asserts_passed +=
+        ctf__thread_data[j].stats.asserts_passed;
+      ctf__thread_data[0].stats.asserts_failed +=
+        ctf__thread_data[j].stats.asserts_failed;
+      ctf__thread_data[0].stats.expects_passed +=
+        ctf__thread_data[j].stats.expects_passed;
+      ctf__thread_data[0].stats.expects_failed +=
+        ctf__thread_data[j].stats.expects_failed;
+    }
+    print_stats(&ctf__thread_data[0].stats);
+  }
   if(ctf__opt_cleanup) {
     for(int j = 0; j < ctf__opt_threads; j++) {
       thread_data_deinit(ctf__thread_data + j);
@@ -456,46 +498,6 @@ int main(int argc, char *argv[]) {
     pthread_key_delete(ctf__thread_index);
   }
   return ctf_exit_code;
-}
-
-void ctf_sigsegv_handler(int unused) {
-  (void)unused;
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  const char err_color[] = "\x1b[33m";
-  const char premsg[] =
-    "----------------------------------------\n"
-    "                SIGSEGV\n"
-    "----------------------------------------\n"
-    "             BUFFER STATE\n"
-    "----------------------------------------\n";
-  const char postmsg[] =
-    "----------------------------------------\n"
-    "             BUFFER STATE\n"
-    "----------------------------------------\n";
-#pragma GCC diagnostic ignored "-Wunused-result"
-  if(color) {
-    write(STDOUT_FILENO, err_color, sizeof(err_color));
-  }
-  write(STDOUT_FILENO, premsg, sizeof(premsg));
-  if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
-  write(STDOUT_FILENO, print_buff[thread_index].buff,
-        print_buff[thread_index].size);
-  for(uintmax_t i = 0; i < thread_data->states_size; i++) {
-    if(thread_data->states[i].status == 0) {
-      print_test_pass_info(print_buff + thread_index, thread_data->states + i);
-    } else if(thread_data->states[i].status == 1) {
-      print_test_fail_info(print_buff + thread_index, thread_data->states + i);
-    } else if(thread_data->states[i].status == 2) {
-      print_test_unknown_info(print_buff + thread_index,
-                              thread_data->states + i);
-    }
-  }
-  if(color) write(STDOUT_FILENO, err_color, sizeof(err_color));
-  write(STDOUT_FILENO, postmsg, sizeof(postmsg));
-  if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
-#pragma GCC diagnostic pop
-  fflush(stdout);
 }
 
 void ctf_parallel_sync(void) {

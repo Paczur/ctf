@@ -227,8 +227,7 @@ static uintmax_t print_unknown_indicator(struct buff *buff) {
   return 0;
 }
 
-static uintmax_t print_group_pass(struct buff *buff,
-                                  const char *name,
+static uintmax_t print_group_pass(struct buff *buff, const char *name,
                                   uintmax_t name_len) {
   uintmax_t full_size = 0;
   if(buff == NULL) {
@@ -247,8 +246,7 @@ static uintmax_t print_group_pass(struct buff *buff,
   return 0;
 }
 
-static uintmax_t print_group_fail(struct buff *buff,
-                                  const char *name,
+static uintmax_t print_group_fail(struct buff *buff, const char *name,
                                   uintmax_t name_len) {
   uintmax_t full_size = 0;
   if(buff == NULL) {
@@ -263,8 +261,7 @@ static uintmax_t print_group_fail(struct buff *buff,
   return 0;
 }
 
-static uintmax_t print_group_unknown(struct buff *buff,
-                                     const char *name,
+static uintmax_t print_group_unknown(struct buff *buff, const char *name,
                                      uintmax_t name_len) {
   uintmax_t full_size = 0;
   if(buff == NULL) {
@@ -278,8 +275,7 @@ static uintmax_t print_group_unknown(struct buff *buff,
   return 0;
 }
 
-static uintmax_t print_test_pass(struct buff *buff,
-                                 const char *name,
+static uintmax_t print_test_pass(struct buff *buff, const char *name,
                                  uintmax_t name_len) {
   uintmax_t full_size = 0;
   if(buff == NULL) {
@@ -296,8 +292,7 @@ static uintmax_t print_test_pass(struct buff *buff,
   return 0;
 }
 
-static uintmax_t print_test_fail(struct buff *buff,
-                                 const char *name,
+static uintmax_t print_test_fail(struct buff *buff, const char *name,
                                  uintmax_t name_len) {
   uintmax_t full_size = 0;
   if(buff == NULL) {
@@ -314,8 +309,7 @@ static uintmax_t print_test_fail(struct buff *buff,
   return 0;
 }
 
-static uintmax_t print_test_unknown(struct buff *buff,
-                                    const char *name,
+static uintmax_t print_test_unknown(struct buff *buff, const char *name,
                                     uintmax_t name_len) {
   uintmax_t full_size = 0;
   if(buff == NULL) {
@@ -338,11 +332,9 @@ static uintmax_t print_test_pass_info(struct buff *buff,
   uintmax_t full_size = 0;
   if(buff == NULL) {
     if(detail) {
-      full_size += snprintf(NULL,
-                            0,
-                            "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
-                            state->file,
-                            state->line);
+      full_size +=
+        snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
+                 state->file, state->line);
     }
     full_size += print_pass_indicator(NULL);
     full_size += 2;  // ' ' '\n' chars
@@ -350,11 +342,8 @@ static uintmax_t print_test_pass_info(struct buff *buff,
     return full_size;
   }
   if(detail) {
-    spaces += snprintf(NULL,
-                       0,
-                       "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
-                       state->file,
-                       state->line);
+    spaces += snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
+                       state->file, state->line);
   }
   memset(buff->buff + buff->size, ' ', spaces);
   buff->size += spaces;
@@ -369,11 +358,9 @@ static uintmax_t print_test_fail_info(struct buff *buff,
   if(buff == NULL) {
     full_size += 8;  // indent
     if(detail) {
-      full_size += snprintf(NULL,
-                            0,
-                            "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                            state->file,
-                            state->line);
+      full_size +=
+        snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
+                 state->file, state->line);
       if(color) {
         full_size += sizeof("\x1b[31mE\x1b[0m");
       } else {
@@ -395,8 +382,7 @@ static uintmax_t print_test_fail_info(struct buff *buff,
   if(detail) {
     buff->size += sprintf(buff->buff + buff->size,
                           "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                          state->file,
-                          state->line);
+                          state->file, state->line);
     if(color) {
       strcpy(buff->buff + buff->size, "\x1b[31mE\x1b[0m");
       buff->size += sizeof("\x1b[31mE\x1b[0m") - 1;
@@ -418,11 +404,9 @@ static uintmax_t print_test_unknown_info(struct buff *buff,
   if(buff == NULL) {
     full_size += 8;  // indent
     if(detail) {
-      full_size += snprintf(NULL,
-                            0,
-                            "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                            state->file,
-                            state->line);
+      full_size +=
+        snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
+                 state->file, state->line);
       if(color) {
         full_size += sizeof("\x1b[33mW\x1b[0m");
         ;
@@ -444,8 +428,7 @@ static uintmax_t print_test_unknown_info(struct buff *buff,
   if(detail) {
     buff->size += sprintf(buff->buff + buff->size,
                           "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                          state->file,
-                          state->line);
+                          state->file, state->line);
     if(color) {
       strcpy(buff->buff + buff->size, "\x1b[33mW\x1b[0m");
       buff->size += sizeof("\x1b[33mW\x1b[0m") - 1;
@@ -461,11 +444,8 @@ static uintmax_t print_test_unknown_info(struct buff *buff,
   return 0;
 }
 
-static void print_arr(struct ctf__state *state,
-                      const void *data,
-                      uintmax_t size,
-                      uintmax_t step,
-                      int sign,
+static void print_arr(struct ctf__state *state, const void *data,
+                      uintmax_t size, uintmax_t step, int sign,
                       const char *format) {
   struct {
     union {
@@ -521,16 +501,9 @@ static void print_arr(struct ctf__state *state,
   state->msg_size -= 2;
 }
 
-static void print_mem(struct ctf__state *state,
-                      const void *a,
-                      const void *b,
-                      uintmax_t la,
-                      uintmax_t lb,
-                      uintmax_t step,
-                      int sign,
-                      const char *a_str,
-                      const char *b_str,
-                      const char *op_str,
+static void print_mem(struct ctf__state *state, const void *a, const void *b,
+                      uintmax_t la, uintmax_t lb, uintmax_t step, int sign,
+                      const char *a_str, const char *b_str, const char *op_str,
                       const char *format) {
   int status = memcmp(a, b, MIN(la, lb) * step);
   MSG_SPRINTF(state->msg, "%s %s %s ({", a_str, op_str, b_str);
@@ -539,4 +512,115 @@ static void print_mem(struct ctf__state *state,
   print_arr(state, b, lb, step, sign, format);
   MSG_SPRINTF_APPEND(state->msg, "})");
   state->status = status;
+}
+
+void ctf_sigsegv_handler(int unused) {
+  (void)unused;
+  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
+  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
+  const char err_color[] = "\x1b[33m";
+  const char upremsg[] =
+    "────────────────SIGSEGV─────────────────\n"
+    "─────────────BUFFER─STATE───────────────\n";
+  const char upostmsg[] = "─────────────BUFFER─STATE───────────────\n";
+  const char premsg[] =
+    "----------------SIGSEGV-----------------\n"
+    "-------------BUFFER-STATE---------------\n";
+  const char postmsg[] = "-------------BUFFER-STATE---------------\n";
+#pragma GCC diagnostic ignored "-Wunused-result"
+  if(color) write(STDOUT_FILENO, err_color, sizeof(err_color));
+  if(opt_unicode == OFF) {
+    write(STDOUT_FILENO, premsg, sizeof(premsg));
+  } else {
+    write(STDOUT_FILENO, upremsg, sizeof(upremsg));
+  }
+  if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
+  write(STDOUT_FILENO, print_buff[thread_index].buff,
+        print_buff[thread_index].size);
+  for(uintmax_t i = 0; i < thread_data->states_size; i++) {
+    if(thread_data->states[i].status == 0) {
+      print_test_pass_info(print_buff + thread_index, thread_data->states + i);
+    } else if(thread_data->states[i].status == 1) {
+      print_test_fail_info(print_buff + thread_index, thread_data->states + i);
+    } else if(thread_data->states[i].status == 2) {
+      print_test_unknown_info(print_buff + thread_index,
+                              thread_data->states + i);
+    }
+  }
+  if(color) write(STDOUT_FILENO, err_color, sizeof(err_color));
+  if(opt_unicode == OFF) {
+    write(STDOUT_FILENO, postmsg, sizeof(postmsg));
+  } else {
+    write(STDOUT_FILENO, upostmsg, sizeof(upostmsg));
+  }
+  if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
+#pragma GCC diagnostic pop
+  fflush(stdout);
+}
+
+static void print_stats(struct ctf__stats *stats) {
+  const char fail_color[] = "\x1b[31m";
+  const char pass_color[] = "\x1b[32m";
+  const char upremsg[] =
+    "─────────────────Done───────────────────\n"
+    "  Groups  "
+    "  Tests   "
+    " Asserts  "
+    " Expects  \n";
+  const char premsg[] =
+    "-----------------Done-------------------\n"
+    "  Groups  "
+    "  Tests   "
+    " Asserts  "
+    " Expects  \n";
+#pragma GCC diagnostic ignored "-Wunused-result"
+  if(opt_unicode == OFF) {
+    write(STDOUT_FILENO, premsg, sizeof(premsg));
+  } else {
+    write(STDOUT_FILENO, upremsg, sizeof(upremsg));
+  }
+#pragma GCC diagnostic pop
+  if(color) {
+    if(stats->groups_failed == 0) {
+      write(STDOUT_FILENO, pass_color, sizeof(pass_color));
+    } else {
+      write(STDOUT_FILENO, fail_color, sizeof(fail_color));
+    }
+  }
+  printf("%4lu/%-4lu ", stats->groups_passed,
+         stats->groups_passed + stats->groups_failed);
+  if(color) {
+    fflush(stdout);
+    if(stats->tests_failed == 0) {
+      write(STDOUT_FILENO, pass_color, sizeof(pass_color));
+    } else {
+      write(STDOUT_FILENO, fail_color, sizeof(fail_color));
+    }
+  }
+  printf("%4lu/%-4lu ", stats->tests_passed,
+         stats->tests_passed + stats->tests_failed);
+  if(color) {
+    fflush(stdout);
+    if(stats->asserts_failed == 0) {
+      write(STDOUT_FILENO, pass_color, sizeof(pass_color));
+    } else {
+      write(STDOUT_FILENO, fail_color, sizeof(fail_color));
+    }
+  }
+  printf("%4lu/%-4lu ", stats->asserts_passed,
+         stats->asserts_passed + stats->asserts_failed);
+  if(color) {
+    fflush(stdout);
+    if(stats->expects_failed == 0) {
+      write(STDOUT_FILENO, pass_color, sizeof(pass_color));
+    } else {
+      write(STDOUT_FILENO, fail_color, sizeof(fail_color));
+    }
+  }
+  printf("%4lu/%-4lu \n", stats->expects_passed,
+         stats->expects_passed + stats->expects_failed);
+  if(color) {
+    fflush(stdout);
+    write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
+  }
 }

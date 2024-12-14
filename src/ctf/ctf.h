@@ -45,6 +45,16 @@ struct ctf__group {
   void (*test_teardown)(void);
   const char *name;
 };
+struct ctf__stats {
+  uintmax_t groups_passed;
+  uintmax_t groups_failed;
+  uintmax_t tests_passed;
+  uintmax_t tests_failed;
+  uintmax_t asserts_passed;
+  uintmax_t asserts_failed;
+  uintmax_t expects_passed;
+  uintmax_t expects_failed;
+};
 struct ctf__thread_data {
   struct ctf__state *states;
   uintmax_t states_size;
@@ -52,6 +62,7 @@ struct ctf__thread_data {
   struct ctf__mock **mock_reset_stack;
   uintmax_t mock_reset_stack_size;
   uintmax_t mock_reset_stack_capacity;
+  struct ctf__stats stats;
 };
 
 extern struct ctf__thread_data *restrict ctf__thread_data;
