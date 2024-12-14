@@ -242,8 +242,10 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
 static void group_run(struct ctf__group group) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   group_run_helper(group, print_buff + thread_index);
+#pragma GCC diagnostic ignored "-Wunused-result"
   write(STDOUT_FILENO, print_buff[thread_index].buff,
         print_buff[thread_index].size);
+#pragma GCC diagnostic pop
 }
 
 static void groups_run(uintmax_t count, va_list args) {
@@ -252,8 +254,10 @@ static void groups_run(uintmax_t count, va_list args) {
   for(uintmax_t i = 0; i < count; i++) {
     group = va_arg(args, struct ctf__group);
     group_run_helper(group, print_buff + thread_index);
+#pragma GCC diagnostic ignored "-Wunused-result"
     write(STDOUT_FILENO, print_buff[thread_index].buff,
           print_buff[thread_index].size);
+#pragma GCC diagnostic pop
   }
 }
 
@@ -303,8 +307,10 @@ static void *parallel_thread_loop(void *data) {
     pthread_mutex_unlock(&parallel_task_queue_mutex);
     group_run_helper(group, print_buff + thread_index);
     pthread_mutex_lock(&parallel_print_mutex);
+#pragma GCC diagnostic ignored "-Wunused-result"
     write(STDOUT_FILENO, print_buff[thread_index].buff,
           print_buff[thread_index].size);
+#pragma GCC diagnostic pop
     print_buff[thread_index].size = 0;
     pthread_mutex_unlock(&parallel_print_mutex);
   }
