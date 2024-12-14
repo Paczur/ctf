@@ -15,7 +15,7 @@ static void mock_state_init(struct ctf__mock_state *state) {
   state->return_overrides_capacity = 0;
 }
 
-static void mock_state_reset(struct ctf__mock_state *state) {
+void ctf__mock_reset(struct ctf__mock_state *state) {
   state->call_count = 0;
   state->checks_count = 0;
   memset(state->return_overrides, -1,
@@ -35,14 +35,14 @@ static void mock_states_alloc(struct ctf__mock *mock, int thread_index) {
       if(pthread_rwlock_trywrlock(&mock_states_lock) == 0) {
         if(mock->states_initialized) {
           pthread_rwlock_unlock(&mock_states_lock);
-          mock_state_reset(mock->states + thread_index);
+          ctf__mock_reset(mock->states + thread_index);
           return;
         } else {
           goto init;
         }
       }
     }
-    mock_state_reset(mock->states + thread_index);
+    ctf__mock_reset(mock->states + thread_index);
     return;
   }
 init:
@@ -101,7 +101,7 @@ void ctf__mock_group(struct ctf__mock_bind *bind) {
       mock_states_alloc(mock, thread_index);
     } else {
       if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
-      mock_state_reset(mock->states + thread_index);
+      ctf__mock_reset(mock->states + thread_index);
     }
     if(thread_data->mock_reset_stack_size + 1 >=
        thread_data->mock_reset_stack_capacity) {
@@ -125,7 +125,7 @@ void ctf__mock_global(struct ctf__mock *mock, void (*f)(void)) {
     mock_states_alloc(mock, thread_index);
   } else {
     if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
-    mock_state_reset(mock->states + thread_index);
+    ctf__mock_reset(mock->states + thread_index);
   }
   mock->states[thread_index].mock_f = f;
   if(thread_data->mock_reset_stack_size + 1 >=
