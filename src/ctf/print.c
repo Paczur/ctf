@@ -67,6 +67,10 @@ static void buff_resize(struct buff *buff, uintmax_t cap) {
   buff->buff = realloc(buff->buff, buff->capacity);
 }
 
+static void buff_reserve(struct buff *buff, uintmax_t size) {
+  if(buff->size + size >= buff->capacity) buff_resize(buff, buff->size + size);
+}
+
 static uintmax_t print_pass_indicator(struct buff *buff) {
   uintmax_t full_size = 0;
   static const char print_pass_color[] = "\x1b[32m";
@@ -231,14 +235,14 @@ static uintmax_t print_group_pass(struct buff *buff, const char *name,
                                   uintmax_t name_len) {
   uintmax_t full_size = 0;
   if(buff == NULL) {
-    if(opt_passed != OFF) {
+    if(opt_verbosity != 0) {
       full_size += print_pass_indicator(NULL);
       full_size += 2;  // ' ' '\n' chars
       full_size += name_len;
     }
     return full_size;
   }
-  if(opt_passed != OFF) {
+  if(opt_verbosity != 0) {
     print_pass_indicator(buff);
     buff->size += sprintf(buff->buff + buff->size, " %s", name);
     buff->buff[buff->size++] = '\n';

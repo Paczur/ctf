@@ -55,7 +55,7 @@ init:
   }
 }
 
-void ctf__mock_returns_alloc(struct ctf__mock *mock, uintptr_t thread_index) {
+static void mock_returns_alloc(struct ctf__mock *mock, uintptr_t thread_index) {
   if(ctf__opt_threads > 1) {
     while(!mock->returns_initialized) {
       if(pthread_rwlock_trywrlock(&ctf__mock_returns_lock) == 0) {
@@ -77,6 +77,47 @@ init:
   if(ctf__opt_threads > 1) {
     pthread_rwlock_unlock(&ctf__mock_returns_lock);
   }
+}
+
+void ctf__mock_returns_ensure_allocated(struct ctf__mock *mock,
+                                        uintptr_t thread_index) {
+  if(ctf__opt_threads > 1) pthread_rwlock_rdlock(&ctf__mock_returns_lock);
+  if(!mock->returns_initialized) {
+    if(ctf__opt_threads > 1) pthread_rwlock_unlock(&ctf__mock_returns_lock);
+    mock_returns_alloc(mock, thread_index);
+  } else if(ctf__opt_threads > 1) {
+    pthread_rwlock_unlock(&ctf__mock_returns_lock);
+  }
+}
+
+void ctf__mock_will_return_nth(struct ctf__mock *mock, uintmax_t n,
+                               struct ctf__mock_return *returns,
+                               uintmax_t return_size, uintptr_t thread_index) {
+  struct ctf__mock_state *const state = mock->states + thread_index;
+  const uintmax_t cap =
+    ctf__mock_return_capacity(state->return_overrides_size + 1);
+  returns->size = state->return_overrides_size;
+  if(cap > state->return_overrides_capacity) {
+    if(state->return_overrides == NULL) {
+      state->return_overrides =
+        CTF__MALLOC(cap * sizeof(state->return_overrides[0]), thread_index);
+    } else {
+      state->return_overrides =
+        CTF__REALLOC(state->return_overrides,
+                     cap * sizeof(state->return_overrides[0]), thread_index);
+    }
+    state->return_overrides_capacity = cap;
+  }
+  if(cap >= returns->capacity) {
+    if(returns->values == NULL) {
+      returns->values = CTF__MALLOC(cap * return_size, thread_index);
+    } else {
+      returns->values =
+        CTF__REALLOC(returns->values, cap * return_size, thread_index);
+    }
+    returns->capacity = cap;
+  }
+  state->return_overrides[state->return_overrides_size++] = n;
 }
 
 void ctf_unmock(void) {

@@ -94,8 +94,8 @@ uintmax_t ctf__assert_msg(int status, const char *msg, int line,
    thread_data->states[thread_data->states_size-1].status = 2;
    assert_copy(thread_data->states + thread_data->states_size - 1, line,
    file);
-   MSG_SPRINTF(thread_data->states[thread_data->states_size -1].msg, "%s $4 %s ( "$5" $4 "$5" )", a_str, b_str, a,
-   b);
+   MSG_SPRINTF(thread_data->states[thread_data->states_size -1].msg,
+   "%s $4 %s ( "$5" $4 "$5" )", a_str, b_str, a, b);
    status = $6 $4 $7;
    thread_data->states[thread_data->states_size - 1].status = !status;
    if(status) {

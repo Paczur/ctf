@@ -177,11 +177,6 @@ extern int ctf__opt_cleanup;
     ctf__group_test_teardown_def_##name;                   \
   static void ctf__group_test_teardown_def_##name(void)
 
-#define CTF__MALLOC(size, thread_index) \
-  ((ctf__opt_cleanup) ? ctf__cleanup_malloc(size, thread_index) : malloc(size))
-#define CTF__REALLOC(ptr, size, thread_index)                         \
-  ((ctf__opt_cleanup) ? ctf__cleanup_realloc(ptr, size, thread_index) \
-                      : realloc(ptr, size))
 void *ctf__cleanup_realloc(void *ptr, uintmax_t size, uintptr_t thread_index);
 void *ctf__cleanup_malloc(uintmax_t size, uintptr_t thread_index);
 void ctf__groups_run(int count, ...);

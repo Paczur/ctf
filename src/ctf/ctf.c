@@ -18,7 +18,7 @@ include(`base.m4')
   "-u, --unicode    (off|generic|branded*) display of unicode symbols\n"       \
   "-c, --color      (off|on|auto*) color coding for failed and passed tests\n" \
   "-d, --detail     (off|on|auto*) detailed info about failed tests\n"         \
-  "-p, --passed     (off|on|auto*) printing of passed groups\n"                \
+  "-v, --verbosity  0-3 verbosity of printing (default 1)\n"                   \
   "-s, --statistics Disables printing of statistics at the end\n"              \
   "-j, --jobs       Number of parallel threads to run (default 1)\n"           \
   "--sigsegv        Don't register SIGSEGV handler\n"                          \
@@ -54,10 +54,22 @@ include(`base.m4')
 #define STRINGIFY2(x) #x
 #define STRINGIFY(x) STRINGIFY2(x)
 
+#define CTF__MALLOC(size, thread_index) \
+  ((ctf__opt_cleanup) ? ctf__cleanup_malloc(size, thread_index) : malloc(size))
+#define CTF__REALLOC(ptr, size, thread_index)                         \
+  ((ctf__opt_cleanup) ? ctf__cleanup_realloc(ptr, size, thread_index) \
+                      : realloc(ptr, size))
+
 static int opt_unicode = BRANDED;
 static int opt_color = AUTO;
 static int opt_detail = AUTO;
-static int opt_passed = AUTO;
+/*
+ * 0 - only failed groups
+ * 1 - passed groups only name
+ * 2 - passed groups tests only name
+ * 3 - everything
+ */
+static int opt_verbosity = 1;
 int ctf__opt_cleanup = 0;
 int ctf__opt_threads = 1;
 static int opt_statistics = 1;
@@ -219,6 +231,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
     group.test_teardown();
     test_cleanup();
     test_status = 1;
+    buff->size -= temp_size;
     for(uintmax_t j = 0; j < thread_data->states_size; j++) {
       if(thread_data->states[j].status == 1) {
         test_status = 0;
@@ -226,9 +239,14 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
         break;
       }
     }
-    buff->size -= temp_size;
+
     if(!test_status) {
       if(opt_statistics) thread_data->stats.tests_failed++;
+    } else {
+      if(opt_statistics) thread_data->stats.tests_passed++;
+    }
+
+    if(!test_status) {
       temp_size = print_test_fail(NULL, group.tests[i].name, test_name_len);
       for(uintmax_t j = 0; j < thread_data->states_size; j++) {
         if(thread_data->states[j].status == 0) {
@@ -237,8 +255,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
           temp_size += print_test_fail_info(NULL, thread_data->states + j);
         }
       }
-      if(buff->size + temp_size >= buff->capacity)
-        buff_resize(buff, buff->size + temp_size);
+      buff_reserve(buff, temp_size);
 
       print_test_fail(buff, group.tests[i].name, test_name_len);
       for(uintmax_t j = 0; j < thread_data->states_size; j++) {
@@ -249,11 +266,17 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
         }
       }
     } else {
-      if(opt_statistics) thread_data->stats.tests_passed++;
       temp_size = print_test_pass(NULL, group.tests[i].name, test_name_len);
-      if(buff->size + temp_size >= buff->capacity)
-        buff_resize(buff, buff->size + temp_size);
+      if(opt_verbosity >= 3)
+        for(uintmax_t j = 0; j < thread_data->states_size; j++) {
+          temp_size += print_test_pass_info(NULL, thread_data->states + j);
+        }
+      buff_reserve(buff, temp_size);
       print_test_pass(buff, group.tests[i].name, test_name_len);
+      if(opt_verbosity >= 3) {
+        for(uintmax_t j = 0; j < thread_data->states_size; j++)
+          print_test_pass_info(buff, thread_data->states + j);
+      }
     }
   }
   group.teardown();
@@ -262,7 +285,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
   if(group_status) {
     if(opt_statistics) thread_data->stats.groups_passed++;
     print_group_pass(buff, group.name, group_name_len);
-    if(opt_passed == ON) buff->size = temp_size;
+    if(opt_verbosity >= 2) buff->size = temp_size;
   } else {
     if(opt_statistics) thread_data->stats.groups_failed++;
     print_group_fail(buff, group.name, group_name_len);
@@ -410,10 +433,11 @@ int main(int argc, char *argv[]) {
       i++;
       if(i >= argc) err();
       opt_detail = get_value(argv[i]);
-    } else if(!strcmp(argv[i] + 1, "p") || !strcmp(argv[i] + 1, "-passed")) {
+    } else if(!strcmp(argv[i] + 1, "v") || !strcmp(argv[i] + 1, "-verbosity")) {
       i++;
       if(i >= argc) err();
-      opt_passed = get_value(argv[i]);
+      sscanf(argv[i], "%u", &opt_verbosity);
+      if(opt_verbosity > 3) opt_verbosity = 3;
     } else if(!strcmp(argv[i] + 1, "j") || !strcmp(argv[i] + 1, "-jobs")) {
       i++;
       if(i >= argc) err();

@@ -5,24 +5,30 @@
 #define CTF__MOCK_TYPE_ASSERT 1
 #define CTF__MOCK_TYPE_MEMORY 2
 
+#define CTF__MOCK_SELECTED                                    \
+  ((struct ctf__mock *)(((void *)ctf__mock_return_selected) - \
+                        offsetof(struct ctf__mock, returns)))
+#define CTF__MOCK_STRUCT_SELECTED \
+  ((CTF__MOCK_SELECTED)->states + ctf__local_thread_index)
+
 #define CTF__MOCK_EXPECT_MEMORY(t, call_count, comp, type, name, var, val, l) \
-  ctf__mock_memory(ctf__mock_struct_selected, call_count,                     \
+  ctf__mock_memory(CTF__MOCK_STRUCT_SELECTED, call_count,                     \
                    type | CTF__MOCK_TYPE_MEMORY, __LINE__, __FILE__, #val,    \
                    (void *)ctf__expect_memory_##t##_##comp, var, val, l)
 #define CTF__MOCK_ASSERT_MEMORY(t, call_count, comp, type, name, var, val, l) \
-  ctf__mock_memory(ctf__mock_struct_selected, call_count,                     \
+  ctf__mock_memory(CTF__MOCK_STRUCT_SELECTED, call_count,                     \
                    type | CTF__MOCK_TYPE_ASSERT | CTF__MOCK_TYPE_MEMORY,      \
                    __LINE__, __FILE__, #val,                                  \
                    (void *)ctf__expect_memory_##t##_##comp, var, val, l)
 #define CTF__MOCK_EXPECT(t, call_count, comp, type, name, var, val)    \
-  ctf__mock_##t(ctf__mock_struct_selected, call_count, type, __LINE__, \
+  ctf__mock_##t(CTF__MOCK_STRUCT_SELECTED, call_count, type, __LINE__, \
                 __FILE__, #val, (void *)ctf__expect_##t##_##comp, var, val)
 #define CTF__MOCK_ASSERT(t, call_count, comp, type, name, var, val)       \
   do {                                                                    \
     preqreq_assert(                                                       \
       ctf__mock_struct_##name[ctf__parallel_thread_index].mock_f != NULL, \
       "Mock expect/assert used without mocking beforehand");              \
-    ctf__mock_##t(ctf__mock_struct_selected, call_count,                  \
+    ctf__mock_##t(CTF__MOCK_STRUCT_SELECTED, call_count,                  \
                   type | CTF__MOCK_TYPE_ASSERT, __LINE__, __FILE__, #val, \
                   (void *)ctf__expect_##t##_##comp, var, val);            \
   } while(0)
@@ -221,7 +227,11 @@ void ctf__unmock_group(struct ctf__mock_bind *bind);
 void ctf__mock_memory(struct ctf__mock_state *state, uintmax_t call_count,
                       int type, int, const char *, const char *, void *f,
                       const char *var, const void *val, uintmax_t l);
-void ctf__mock_returns_alloc(struct ctf__mock *mock, uintptr_t thread_index);
+void ctf__mock_returns_ensure_allocated(struct ctf__mock *mock,
+                                        uintptr_t thread_index);
+void ctf__mock_will_return_nth(struct ctf__mock *mock, uintmax_t n,
+                               struct ctf__mock_return *returns,
+                               uintmax_t return_size, uintptr_t thread_index);
 uintmax_t ctf__mock_return_capacity(uintmax_t cap);
 
 #define ctf_mock_group(name) ctf__mock_group(ctf__mock_group_st_##name)
@@ -236,11 +246,7 @@ uintmax_t ctf__mock_return_capacity(uintmax_t cap);
     for(typeof(ctf__mock_return_##fn) ctf__mock_return_selected =    \
           ctf__mock_return_##fn;                                     \
         !ctf__local_end_flag || ctf__mock_return_selected != NULL;   \
-        ctf__mock_return_selected = NULL)                            \
-      for(struct ctf__mock_state *ctf__mock_struct_selected =        \
-            ctf__mock_struct_##fn.states + ctf__local_thread_index;  \
-          !ctf__local_end_flag || ctf__mock_struct_selected != NULL; \
-          ctf__local_end_flag = 1, ctf__mock_struct_selected = NULL)
+        ctf__mock_return_selected = NULL, ctf__local_end_flag = 1)
 #define ctf_mock_reset(fn)                       \
   ctf__mock_reset(ctf__mock_struct_##fn.states + \
                   (uintptr_t)pthread_getspecific(ctf__thread_index))
@@ -253,77 +259,24 @@ uintmax_t ctf__mock_return_capacity(uintmax_t cap);
     for(typeof(ctf__mock_return_##fn) ctf__mock_return_selected =    \
           ctf__mock_return_##fn;                                     \
         !ctf__local_end_flag || ctf__mock_return_selected != NULL;   \
-        ctf__mock_return_selected = NULL)                            \
-      for(struct ctf__mock_state *ctf__mock_struct_selected =        \
-            ctf__mock_struct_##fn.states + ctf__local_thread_index;  \
-          !ctf__local_end_flag || ctf__mock_struct_selected != NULL; \
-          ctf__local_end_flag = 1, ctf__mock_struct_selected = NULL)
+        ctf__mock_return_selected = NULL, ctf__local_end_flag = 1)
 void ctf_unmock(void);
 #define ctf_unmock_group(name) ctf__unmock_group(ctf__mock_group_st_##name)
-#define ctf_mock_call_count ctf__mock_struct_selected->call_count
+#define ctf_mock_call_count CTF__MOCK_STRUCT_SELECTED->call_count
 #define ctf_mock_will_return(val) ctf_mock_will_return_nth(1, val)
-#define ctf_mock_will_return_nth(n, val)                                       \
-  do {                                                                         \
-    if(ctf__opt_threads > 1) {                                                 \
-      pthread_rwlock_rdlock(&ctf__mock_returns_lock);                          \
-      if(!((struct ctf__mock *)((void *)ctf__mock_return_selected -            \
-                                offsetof(struct ctf__mock, returns)))          \
-            ->returns_initialized) {                                           \
-        pthread_rwlock_unlock(&ctf__mock_returns_lock);                        \
-        ctf__mock_returns_alloc((void *)ctf__mock_return_selected -            \
-                                  offsetof(struct ctf__mock, returns),         \
-                                ctf__local_thread_index);                      \
-      } else {                                                                 \
-        pthread_rwlock_unlock(&ctf__mock_returns_lock);                        \
-      }                                                                        \
-    } else if(!((struct ctf__mock *)((void *)ctf__mock_return_selected -       \
-                                     offsetof(struct ctf__mock, returns)))     \
-                 ->returns_initialized) {                                      \
-      ctf__mock_returns_alloc((void *)ctf__mock_return_selected -              \
-                                offsetof(struct ctf__mock, returns),           \
-                              ctf__local_thread_index);                        \
-    }                                                                          \
-    (*ctf__mock_return_selected)[ctf__local_thread_index].size =               \
-      ctf__mock_struct_selected->return_overrides_size;                        \
-    const uintmax_t cap = ctf__mock_return_capacity(                           \
-      ctf__mock_struct_selected->return_overrides_size + 1);                   \
-    if(cap > ctf__mock_struct_selected->return_overrides_capacity) {           \
-      if(ctf__mock_struct_selected->return_overrides == NULL) {                \
-        ctf__mock_struct_selected->return_overrides = CTF__MALLOC(             \
-          cap * sizeof(ctf__mock_struct_selected->return_overrides[0]),        \
-          ctf__local_thread_index);                                            \
-      } else {                                                                 \
-        ctf__mock_struct_selected->return_overrides = CTF__REALLOC(            \
-          ctf__mock_struct_selected->return_overrides,                         \
-          cap * sizeof(ctf__mock_struct_selected->return_overrides[0]),        \
-          ctf__local_thread_index);                                            \
-      }                                                                        \
-      ctf__mock_struct_selected->return_overrides_capacity = cap;              \
-    }                                                                          \
-    if(cap > (*ctf__mock_return_selected)[ctf__local_thread_index].capacity) { \
-      if((*ctf__mock_return_selected)[ctf__local_thread_index].values ==       \
-         NULL) {                                                               \
-        (*ctf__mock_return_selected)[ctf__local_thread_index].values =         \
-          CTF__MALLOC(                                                         \
-            cap * sizeof((*ctf__mock_return_selected)[ctf__local_thread_index] \
-                           .values[0]),                                        \
-            ctf__local_thread_index);                                          \
-      } else {                                                                 \
-        (*ctf__mock_return_selected)[ctf__local_thread_index].values =         \
-          CTF__REALLOC(                                                        \
-            (*ctf__mock_return_selected)[ctf__local_thread_index].values,      \
-            cap * sizeof((*ctf__mock_return_selected)[ctf__local_thread_index] \
-                           .values[0]),                                        \
-            ctf__local_thread_index);                                          \
-      }                                                                        \
-      (*ctf__mock_return_selected)[ctf__local_thread_index].capacity = cap;    \
-    }                                                                          \
-    (*ctf__mock_return_selected)[ctf__local_thread_index]                      \
-      .values[(*ctf__mock_return_selected)[ctf__local_thread_index].size++] =  \
-      val;                                                                     \
-    ctf__mock_struct_selected                                                  \
-      ->return_overrides[ctf__mock_struct_selected->return_overrides_size++] = \
-      n;                                                                       \
+#define ctf_mock_will_return_nth(n, val)                                      \
+  do {                                                                        \
+    ctf__mock_returns_ensure_allocated(CTF__MOCK_SELECTED,                    \
+                                       ctf__local_thread_index);              \
+    ctf__mock_will_return_nth(                                                \
+      CTF__MOCK_SELECTED, n,                                                  \
+      (struct ctf__mock_return *)((*ctf__mock_return_selected) +              \
+                                  ctf__local_thread_index),                   \
+      sizeof((*ctf__mock_return_selected)[0].values[0]),                      \
+      ctf__local_thread_index);                                               \
+    (*ctf__mock_return_selected)[ctf__local_thread_index]                     \
+      .values[(*ctf__mock_return_selected)[ctf__local_thread_index].size++] = \
+      val;                                                                    \
   } while(0)
 #define ctf_mock_real(name) __real_##name
 #define ctf_mock_check(name)                      \
