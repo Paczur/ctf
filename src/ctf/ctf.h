@@ -83,7 +83,7 @@ extern int ctf__opt_cleanup;
 #define CTF_TEST_STATIC(test_name)                             \
   static void ctf__test_fn_##test_name(void);                  \
   static const char ctf__test_name_##test_name[] = #test_name; \
-  const struct ctf__test test_name = {                         \
+  static const struct ctf__test test_name = {                  \
     .name = ctf__test_name_##test_name,                        \
     .f = ctf__test_fn_##test_name,                             \
   };                                                           \
