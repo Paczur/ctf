@@ -1045,10 +1045,10 @@ CTF_TEST(str_expect_success) {
   expect_str_gte(s4, s1);
 }
 CTF_TEST(str_expect_failure) {
-  const char s1[] = "a";
-  const char s2[] = "b";
-  const char s3[] = "ab";
-  const char s4[] = "ba";
+  const char s1[] = "a\na";
+  const char s2[] = "b\nb";
+  const char s3[] = "ab\rab";
+  const char s4[] = "ba\rba";
   expect_str_eq(s1, s2);
   expect_str_eq(s1, s3);
   expect_str_eq(s2, s4);

@@ -1,52 +1,6 @@
 #define DEFAULT_PRINT_BUFF_SIZE 1024
 #define MIN_DIGITS_FOR_LINE 4
 
-#define MSG_SPRINTF_APPEND(msg, ...)                                        \
-  do {                                                                      \
-    const uintmax_t printf_size = snprintf(NULL, 0, __VA_ARGS__) + 1;       \
-    uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1;           \
-    mul += (mul % 2 != 0 && mul != 1);                                      \
-    if(msg == NULL) {                                                       \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;                    \
-      msg = malloc(msg##_capacity);                                         \
-    } else if(printf_size >= msg##_capacity) {                              \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;                    \
-      msg = realloc(msg, msg##_capacity);                                   \
-    }                                                                       \
-    msg##_size +=                                                           \
-      snprintf(msg + msg##_size, msg##_capacity - msg##_size, __VA_ARGS__); \
-  } while(0)
-#define MSG_SPRINTF(msg, ...)                                         \
-  do {                                                                \
-    const uintmax_t printf_size = snprintf(NULL, 0, __VA_ARGS__) + 1; \
-    uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1;     \
-    mul += (mul % 2 != 0 && mul != 1);                                \
-    if(msg == NULL) {                                                 \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;              \
-      msg = malloc(msg##_capacity);                                   \
-    } else if(printf_size >= msg##_capacity) {                        \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;              \
-      msg = realloc(msg, msg##_capacity);                             \
-    }                                                                 \
-    msg##_size = snprintf(msg, msg##_capacity, __VA_ARGS__);          \
-  } while(0)
-#define MSG_VSPRINTF(msg, f, v)                                   \
-  do {                                                            \
-    va_list vc;                                                   \
-    va_copy(vc, v);                                               \
-    const uintmax_t printf_size = vsnprintf(NULL, 0, f, v) + 1;   \
-    uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1; \
-    mul += (mul % 2 != 0 && mul != 1);                            \
-    if(msg == NULL) {                                             \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;          \
-      msg = malloc(msg##_capacity);                               \
-    } else if(printf_size >= msg##_capacity) {                    \
-      msg##_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;          \
-      msg = realloc(msg, msg##_capacity);                         \
-    }                                                             \
-    msg##_size = vsnprintf(msg, msg##_capacity, f, vc);           \
-  } while(0)
-
 struct buff {
   char *buff;
   uintmax_t size;
@@ -446,76 +400,6 @@ static uintmax_t print_test_unknown_info(struct buff *buff,
     buff->buff[buff->size] = 0;
   }
   return 0;
-}
-
-static void print_arr(struct ctf__state *state, const void *data,
-                      uintmax_t size, uintmax_t step, int sign,
-                      const char *format) {
-  struct {
-    union {
-      const int8_t *i8;
-      const int16_t *i16;
-      const int32_t *i32;
-      const int64_t *i64;
-      const uint8_t *u8;
-      const uint16_t *u16;
-      const uint32_t *u32;
-      const uint64_t *u64;
-    };
-  } iterator;
-  iterator.u8 = data;
-  switch(step) {
-  case 1:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i8[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u8[i]);
-    }
-    break;
-  case 2:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i16[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u16[i]);
-    }
-    break;
-  case 4:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i32[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u32[i]);
-    }
-    break;
-  case 8:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i64[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u64[i]);
-    }
-    break;
-  }
-  state->msg_size -= 2;
-}
-
-static void print_mem(struct ctf__state *state, const void *a, const void *b,
-                      uintmax_t la, uintmax_t lb, uintmax_t step, int sign,
-                      const char *a_str, const char *b_str, const char *op_str,
-                      const char *format) {
-  int status = memcmp(a, b, MIN(la, lb) * step);
-  MSG_SPRINTF(state->msg, "%s %s %s ({", a_str, op_str, b_str);
-  print_arr(state, a, la, step, sign, format);
-  MSG_SPRINTF_APPEND(state->msg, "} %s {", op_str);
-  print_arr(state, b, lb, step, sign, format);
-  MSG_SPRINTF_APPEND(state->msg, "})");
-  state->status = status;
 }
 
 void ctf_sigsegv_handler(int unused) {

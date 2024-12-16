@@ -23,6 +23,10 @@ include(`base.m4')
 
 #define CTF_CONST_GROUP_SIZE 128
 #define CTF_CONST_SIGNAL_STACK_SIZE 1024
+#define CTF__ASSERT_PRINT_TYPE_int 0
+#define CTF__ASSERT_PRINT_TYPE_uint 1
+#define CTF__ASSERT_PRINT_TYPE_ptr 2
+#define CTF__ASSERT_PRINT_TYPE_char 3
 
 struct ctf__state {
   int status;
@@ -233,15 +237,15 @@ void ctf_assert_hide(uintmax_t count);
 /*
 define(`EA_TEMPLATE', `#define $4$3_$1_$2(a, b) ctf__$3_$1_$2(a, b, #a, #b, __LINE__, __FILE__)')dnl
 define(`EA_MEMORY_TEMPLATE',
-`format(`#define $4$3_memory_$1_$2(a, b, length) ctf__$3_memory_$1_$2((const void *)a, (const void *)b, length,  sizeof(*(a)), %d, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+`format(`#define $4$3_memory_$1_$2(a, b, length) ctf__$3_memory_$2((const void *)a, (const void *)b, length,  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
 define(`EA_ARRAY_TEMPLATE',
-`format(`#define $4$3_array_$1_$2(a, b) ctf__$3_array_$1_$2((const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+`format(`#define $4$3_array_$1_$2(a, b) ctf__$3_array_$2((const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
 define(`EA_FUNCTION',
 `format(`int ctf__$3_$1_$2(%s, %s, const char *, const char *, int, const char *);',TYPE(`$1'),TYPE(`$1'))')dnl
 define(`EA_MEMORY_PRIMITIVE_FUNCTION',
-`int ctf__$3_memory_$1_$2(const void *, const void *, uintmax_t, uintmax_t, int, const char *, const char *, int, const char *);')dnl
+`int ctf__$3_memory_$2(const void *, const void *, uintmax_t, uintmax_t, int, int, const char *, const char *, int, const char *);')dnl
 define(`EA_ARRAY_PRIMITIVE_FUNCTION',
-`int $4_$3_array_$1_$2(const void *, const void *, uintmax_t, uintmax_t, uintmax_t, int, const char *, const char *, int, const char*);')dnl
+`int ctf__$3_array_$2(const void *, const void *, uintmax_t, uintmax_t, uintmax_t, int, int, const char *, const char *, int, const char*);')dnl
 define(`ASSERT_WRAP',
 `indir(`$1', `$2', `$3', `assert', `$4')
 indir(`$1', `$2', `$3', `expect', `$4')

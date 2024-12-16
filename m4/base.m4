@@ -15,6 +15,7 @@ define(`COMB', `foreach(`x', `$2', `indir(`$1', x)
 ')')
 define(`COMB2', `foreach(`x', `$2', `foreach(`y', `$3', `indir(`$1', x, y)
 ')')')
+define(`UP', `translit(`$*', `a-z', `A-Z')')
 define(`COMB3', `foreach(`x', `$2', `foreach(`y', `$3',
 `foreach(`z', `$4', `indir(`$1', x, y, z)
 ')')')')
@@ -29,5 +30,8 @@ define(`CMP_SYMBOL', `ifelse(`$1',eq,==,`$1',neq,!=,`$1',gt,>,`$1',lt,<,`$1',gte
 define(`FORMAT', `ifelse(`$1',char,`"'RQ()`%c'RQ()`"',`$1',int,"%jd",`$1',uint,"%ju",`$1',ptr,"%p",`$1',str,"\"%s\"")')
 define(`TYPE', `ifelse(`$1',char,char,`$1',int,intmax_t,`$1',uint,uintmax_t,`$1',ptr,const void *,`$1',str,const char *)')
 define(`SHORT', `ifelse(`$1',char,c,`$1',int,i,`$1',uint,u,`$1',ptr,p,`$1',str,p)')
+define(`RUN3', `format(`%s(%s, %s, %s, %s, %s, %s)', `$1', `$2', `UP(`$2')', `$3', `UP(`$3')', `$4', `UP(`$4')')')
+define(`RUN2', `format(`%s(%s, %s, %s, %s)', `$1', `$2', `UP(`$2')', `$3', `UP(`$3')')')
+define(`RUN1', `format(`%s(%s, %s)', `$1', `$2', `UP(`$2')')')
 
 divert(0)dnl

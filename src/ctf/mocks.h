@@ -14,12 +14,14 @@
 #define CTF__MOCK_EXPECT_MEMORY(t, call_count, comp, type, name, var, val, l) \
   ctf__mock_memory(CTF__MOCK_STRUCT_SELECTED, call_count,                     \
                    type | CTF__MOCK_TYPE_MEMORY, __LINE__, __FILE__, #val,    \
-                   (void *)ctf__expect_memory_##t##_##comp, var, val, l)
+                   (void *)ctf__expect_memory_##comp, var, val, l,            \
+                   CTF__ASSERT_PRINT_TYPE_##t)
 #define CTF__MOCK_ASSERT_MEMORY(t, call_count, comp, type, name, var, val, l) \
   ctf__mock_memory(CTF__MOCK_STRUCT_SELECTED, call_count,                     \
                    type | CTF__MOCK_TYPE_ASSERT | CTF__MOCK_TYPE_MEMORY,      \
                    __LINE__, __FILE__, #val,                                  \
-                   (void *)ctf__expect_memory_##t##_##comp, var, val, l)
+                   (void *)ctf__expect_memory_##comp, var, val, l,            \
+                   CTF__ASSERT_PRINT_TYPE_##t)
 #define CTF__MOCK_EXPECT(t, call_count, comp, type, name, var, val)    \
   ctf__mock_##t(CTF__MOCK_STRUCT_SELECTED, call_count, type, __LINE__, \
                 __FILE__, #val, (void *)ctf__expect_##t##_##comp, var, val)
@@ -44,10 +46,11 @@ struct ctf__check {
     int (*c)(char, char, const char *, const char *, int, const char *);
     int (*s)(const char *, const char *, const char *, const char *, int,
              const char *);
-    int (*m)(const void *, const void *, uintmax_t, uintmax_t, int,
+    int (*m)(const void *, const void *, uintmax_t, uintmax_t, int, int,
              const char *, const char *, int, const char *);
   } f;
   int type;
+  int mem_type;
   uintmax_t length;
   int line;
   uintmax_t call_count;
@@ -226,7 +229,10 @@ void ctf__mock_group(struct ctf__mock_bind *bind);
 void ctf__unmock_group(struct ctf__mock_bind *bind);
 void ctf__mock_memory(struct ctf__mock_state *state, uintmax_t call_count,
                       int type, int, const char *, const char *, void *f,
-                      const char *var, const void *val, uintmax_t l);
+                      const char *var, const void *val, uintmax_t l,
+                      int mem_type);
+void ctf__mock_check_memory(struct ctf__mock_state *state, const void *v,
+                            const char *v_print, uintmax_t step, int sign);
 void ctf__mock_returns_ensure_allocated(struct ctf__mock *mock,
                                         uintptr_t thread_index);
 void ctf__mock_will_return_nth(struct ctf__mock *mock, uintmax_t n,
@@ -324,7 +330,6 @@ EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_TEMPLATE')
 EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_MEMORY_TEMPLATE')
 EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_ARRAY_TEMPLATE')
 COMB(`MOCK_CHECK_FUNCTION', `(PRIMITIVE_TYPES, str)')
-COMB(`MOCK_CHECK_MEMORY_FUNCTION', `(PRIMITIVE_TYPES, str)')
 COMB(`MOCK_CHECK', `(PRIMITIVE_TYPES)')
 MOCK_CHECK_STRING
 COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
@@ -340,7 +345,7 @@ ctf__mock_check_str(ctf__mock_check_state, v, #v)')
 define(`MOCK_CHECK_MEMORY_ALIAS',
 `format(`#define mock_check_memory_$1(v) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
-ctf__mock_check_memory_$1(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
+ctf__mock_check_memory(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
   ,ifelse(`$1',`int',1,0))')
 */
 EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_TEMPLATE')
