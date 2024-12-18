@@ -1183,9 +1183,9 @@ CTF_TEST(array_char_assert) {
 }
 CTF_TEST(array_int_expect_success) {
   const int a1[] = {-2};
-  const int a2[] = {-1};
-  const int a3[] = {-2, -1};
-  const int a4[] = {-1, -2};
+  const int a2[] = {0};
+  const int a3[] = {-2, 0};
+  const int a4[] = {0, -2};
   expect_array_int_eq(a1, a1);
   expect_array_int_neq(a1, a2);
   expect_array_int_neq(a1, a3);
@@ -1463,7 +1463,7 @@ CTF_TEST(memory_char_assert) {
 }
 CTF_TEST(memory_int_expect_success) {
   const int a1[] = {-2};
-  const int a2[] = {-1};
+  const int a2[] = {0};
   expect_memory_int_eq(a1, a1, 1);
   expect_memory_int_neq(a1, a2, 1);
   expect_memory_int_lt(a1, a2, 1);

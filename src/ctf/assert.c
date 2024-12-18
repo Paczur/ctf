@@ -372,11 +372,111 @@ static void print_arr(struct ctf__state *state, const void *data,
   state->msg_size -= 2;
 }
 
+static int order_arr(const void *a, const void *b, uintmax_t la, uintmax_t lb,
+                     uintmax_t step, int sign) {
+  struct iterator {
+    union {
+      const int8_t *i8;
+      const int16_t *i16;
+      const int32_t *i32;
+      const int64_t *i64;
+      const uint8_t *u8;
+      const uint16_t *u16;
+      const uint32_t *u32;
+      const uint64_t *u64;
+    };
+  };
+  struct iterator ia = *(struct iterator *)&a;
+  struct iterator ib = *(struct iterator *)&b;
+  uintmax_t min = MIN(la, lb);
+  switch(step) {
+  case 1:
+    if(sign) {
+      for(uintmax_t i = 0; i < min; i++) {
+        if(ia.i8[i] < ib.i8[i]) {
+          return -1;
+        } else if(ia.i8[i] > ib.i8[i]) {
+          return 1;
+        }
+      }
+    } else {
+      for(uintmax_t i = 0; i < min; i++) {
+        if(ia.u8[i] < ib.u8[i]) {
+          return -1;
+        } else if(ia.u8[i] > ib.u8[i]) {
+          return 1;
+        }
+      }
+    }
+    break;
+  case 2:
+    if(sign) {
+      for(uintmax_t i = 0; i < min; i++) {
+        if(ia.i16[i] < ib.i16[i]) {
+          return -1;
+        } else if(ia.i16[i] > ib.i16[i]) {
+          return 1;
+        }
+      }
+    } else {
+      for(uintmax_t i = 0; i < min; i++) {
+        if(ia.u16[i] < ib.u16[i]) {
+          return -1;
+        } else if(ia.u16[i] > ib.u16[i]) {
+          return 1;
+        }
+      }
+    }
+    break;
+  case 4:
+    if(sign) {
+      for(uintmax_t i = 0; i < min; i++) {
+        if(ia.i32[i] < ib.i32[i]) {
+          return -1;
+        } else if(ia.i32[i] > ib.i32[i]) {
+          return 1;
+        }
+      }
+    } else {
+      for(uintmax_t i = 0; i < min; i++) {
+        if(ia.u32[i] < ib.u32[i]) {
+          return -1;
+        } else if(ia.u32[i] > ib.u32[i]) {
+          return 1;
+        }
+      }
+    }
+    break;
+  case 8:
+    if(sign) {
+      for(uintmax_t i = 0; i < min; i++) {
+        if(ia.i64[i] < ib.i64[i]) {
+          return -1;
+        } else if(ia.i64[i] > ib.i64[i]) {
+          return 1;
+        }
+      }
+    } else {
+      for(uintmax_t i = 0; i < min; i++) {
+        if(ia.u64[i] < ib.u64[i]) {
+          return -1;
+        } else if(ia.u64[i] > ib.u64[i]) {
+          return 1;
+        }
+      }
+    }
+    break;
+  }
+  if(la < lb) return -1;
+  if(la > lb) return 1;
+  return 0;
+}
+
 static void print_mem(struct ctf__state *state, const void *a, const void *b,
                       uintmax_t la, uintmax_t lb, uintmax_t step, int sign,
                       const char *a_str, const char *b_str, const char *op_str,
                       int type) {
-  int status = memcmp(a, b, MIN(la, lb) * step);
+  int status = order_arr(a, b, la, lb, step, sign);
   MSG_SPRINTF(state->msg, "%s %s %s ({", a_str, op_str, b_str);
   print_arr(state, a, la, step, sign, type);
   MSG_SPRINTF_APPEND(state->msg, "} %s {", op_str);
