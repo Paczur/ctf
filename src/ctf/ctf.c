@@ -33,9 +33,9 @@ include(`base.m4')
 #define TASK_QUEUE_MAX 64
 
 #define DEFAULT_STATE_MSG_CAPACITY 128
-#define DEFAULT_THREAD_DATA_STATES_CAPACITY 16
+#define DEFAULT_THREAD_DATA_TEST_ELEMENTS_CAPACITY 8
 #define DEFAULT_THREAD_DATA_MOCK_RESET_STACK_CAPACITY 8
-#define DEFAULT_CLEANUP_LIST_CAPACITY 32
+#define DEFAULT_CLEANUP_LIST_CAPACITY 64
 
 #define ISSPACE(c) (((c) >= '\t' && (c) <= '\r') || (c) == ' ')
 #define SKIP_SPACE(c)      \
@@ -95,6 +95,7 @@ pthread_key_t ctf__thread_index;
 int ctf_exit_code = 0;
 struct ctf__thread_data *restrict ctf__thread_data;
 
+include(`test_element.c')
 include(`print.c')
 
 void *ctf__cleanup_realloc(void *ptr, uintmax_t size, uintptr_t thread_index) {
@@ -134,44 +135,42 @@ static void stats_init(struct ctf__stats *stats) {
   stats->expects_failed = 0;
 }
 
-static void state_init(struct ctf__state *state) {
-  state->msg = NULL;
+static void test_element_init(struct ctf__test_element *el) {
+  el->el.subtest = NULL;
 }
 
-static void state_deinit(struct ctf__state *state) {
-  if(state->msg != NULL) free(state->msg);
-}
-
-static void thread_data_states_increment(struct ctf__thread_data *data) {
-  data->states_size++;
-  if(data->states_size >= data->states_capacity) {
-    const uintmax_t newcap = data->states_capacity * 2;
-    data->states = realloc(data->states, newcap * sizeof(*data->states));
-    for(uintmax_t i = data->states_capacity; i < newcap; i++)
-      state_init(data->states + i);
-    data->states_capacity = newcap;
+static void thread_data_test_elements_inc(struct ctf__thread_data *data) {
+  data->test_elements_size++;
+  if(data->test_elements_size >= data->test_elements_capacity) {
+    const uintmax_t newcap = data->test_elements_capacity * 2;
+    data->test_elements =
+      realloc(data->test_elements, newcap * sizeof(*data->test_elements));
+    for(uintmax_t i = data->test_elements_capacity; i < newcap; i++) {
+      test_element_init(data->test_elements + i);
+    }
+    data->test_elements_capacity = newcap;
   }
 }
 
 static void thread_data_init(struct ctf__thread_data *data) {
-  data->states_size = 0;
+  data->test_elements_size = 0;
   data->mock_reset_stack_size = 0;
-  data->states_capacity = DEFAULT_THREAD_DATA_STATES_CAPACITY;
+  data->test_elements_capacity = DEFAULT_THREAD_DATA_TEST_ELEMENTS_CAPACITY;
   data->mock_reset_stack_capacity =
     DEFAULT_THREAD_DATA_MOCK_RESET_STACK_CAPACITY;
-  data->states = malloc(data->states_capacity * sizeof(*data->states));
+  data->test_elements =
+    malloc(data->test_elements_capacity * sizeof(*data->test_elements));
   data->mock_reset_stack =
     malloc(data->mock_reset_stack_capacity * sizeof(*data->mock_reset_stack));
-  for(uintmax_t k = 0; k < data->states_capacity; k++)
-    state_init(data->states + k);
+  for(uintmax_t k = 0; k < data->test_elements_capacity; k++)
+    test_element_init(data->test_elements + k);
   if(opt_statistics) stats_init(&data->stats);
 }
 
 static void thread_data_deinit(struct ctf__thread_data *data) {
-  for(uintmax_t k = 0; k < data->states_capacity; k++) {
-    state_deinit(data->states + k);
-  }
-  free(data->states);
+  test_elements_cleanup(data);
+  test_elements_deinit();
+  free(data->test_elements);
   free(data->mock_reset_stack);
 }
 
@@ -207,91 +206,54 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
   uintmax_t temp_size;
   uintmax_t test_name_len;
   const uintmax_t group_name_len = strlen(group.name);
-  int test_status;
-  volatile int group_status = 1;
+  int status;
+  volatile int group_status = 0;
   buff->size = 0;
 
-  temp_size = print_group_unknown(NULL, group.name, group_name_len);
-  if(buff->size + temp_size >= buff->capacity)
-    buff_resize(buff, buff->size + temp_size);
-  print_group_unknown(buff, group.name, group_name_len);
+  buff_reserve(buff, print_name_status(NULL, group.name, group_name_len, 2, 0));
+  print_name_status(buff, group.name, group_name_len, 2, 0);
 
   group.setup();
   for(int i = 0; i < CTF_CONST_GROUP_SIZE && group.tests[i].f; i++) {
     test_name_len = strlen(group.tests[i].name);
-    thread_data->states_size = 0;
 
-    temp_size = print_test_unknown(NULL, group.tests[i].name, test_name_len);
-    if(buff->size + temp_size >= buff->capacity)
-      buff_resize(buff, buff->size + temp_size);
-    print_test_unknown(buff, group.tests[i].name, test_name_len);
+    temp_size =
+      print_name_status(NULL, group.tests[i].name, test_name_len, 2, 1);
+    buff_reserve(buff, temp_size);
+    print_name_status(buff, group.tests[i].name, test_name_len, 2, 1);
 
     group.test_setup();
     if(!setjmp(ctf__assert_jmp_buff[thread_index])) group.tests[i].f();
     group.test_teardown();
     test_cleanup();
-    test_status = 1;
     buff->size -= temp_size;
-    for(uintmax_t j = 0; j < thread_data->states_size; j++) {
-      if(thread_data->states[j].status == 1) {
-        test_status = 0;
-        group_status = 0;
-        break;
-      }
-    }
+    status = test_status(thread_data);
 
-    if(!test_status) {
+    if(status) {
+      group_status = 1;
       if(opt_statistics) thread_data->stats.tests_failed++;
     } else {
       if(opt_statistics) thread_data->stats.tests_passed++;
     }
 
-    if(!test_status) {
-      temp_size = print_test_fail(NULL, group.tests[i].name, test_name_len);
-      for(uintmax_t j = 0; j < thread_data->states_size; j++) {
-        if(thread_data->states[j].status == 0) {
-          temp_size += print_test_pass_info(NULL, thread_data->states + j);
-        } else if(thread_data->states[j].status == 1) {
-          temp_size += print_test_fail_info(NULL, thread_data->states + j);
-        }
-      }
-      buff_reserve(buff, temp_size);
-
-      print_test_fail(buff, group.tests[i].name, test_name_len);
-      for(uintmax_t j = 0; j < thread_data->states_size; j++) {
-        if(thread_data->states[j].status == 0) {
-          print_test_pass_info(buff, thread_data->states + j);
-        } else if(thread_data->states[j].status == 1) {
-          print_test_fail_info(buff, thread_data->states + j);
-        }
-      }
-    } else {
-      temp_size = print_test_pass(NULL, group.tests[i].name, test_name_len);
-      if(opt_verbosity >= 3)
-        for(uintmax_t j = 0; j < thread_data->states_size; j++) {
-          temp_size += print_test_pass_info(NULL, thread_data->states + j);
-        }
-      buff_reserve(buff, temp_size);
-      print_test_pass(buff, group.tests[i].name, test_name_len);
-      if(opt_verbosity >= 3) {
-        for(uintmax_t j = 0; j < thread_data->states_size; j++)
-          print_test_pass_info(buff, thread_data->states + j);
-      }
-    }
+    buff_reserve(buff,
+                 print_test(NULL, group.tests + i, test_name_len, thread_data));
+    print_test(buff, group.tests + i, test_name_len, thread_data);
+    test_elements_cleanup(thread_data);
   }
   group.teardown();
   temp_size = buff->size;
   buff->size = 0;
-  if(group_status) {
-    if(opt_statistics) thread_data->stats.groups_passed++;
-    print_group_pass(buff, group.name, group_name_len);
-    if(opt_verbosity >= 2) buff->size = temp_size;
-  } else {
-    if(opt_statistics) thread_data->stats.groups_failed++;
-    print_group_fail(buff, group.name, group_name_len);
-    buff->size = temp_size;
-    ctf_exit_code = 1;
+  print_name_status(buff, group.name, group_name_len, group_status, 0);
+  buff->size = temp_size;
+  if(opt_statistics) {
+    if(group_status) {
+      thread_data->stats.groups_failed++;
+    } else {
+      thread_data->stats.groups_passed++;
+    }
   }
+  if(group_status) ctf_exit_code = 1;
 }
 
 static void group_run(struct ctf__group group) {
@@ -437,7 +399,6 @@ int main(int argc, char *argv[]) {
       i++;
       if(i >= argc) err();
       sscanf(argv[i], "%u", &opt_verbosity);
-      if(opt_verbosity > 3) opt_verbosity = 3;
     } else if(!strcmp(argv[i] + 1, "j") || !strcmp(argv[i] + 1, "-jobs")) {
       i++;
       if(i >= argc) err();
@@ -503,6 +464,7 @@ int main(int argc, char *argv[]) {
       cleanup_list[j].capacity = DEFAULT_CLEANUP_LIST_CAPACITY;
     }
   }
+  test_elements_init();
   ctf_main(argc - i, argv + i);
   if(opt_statistics) {
     for(int j = 1; j < ctf__opt_threads; j++) {

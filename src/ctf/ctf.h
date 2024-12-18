@@ -36,6 +36,25 @@ struct ctf__state {
   uintmax_t msg_size;
   uintmax_t msg_capacity;
 };
+struct ctf__states {
+  struct ctf__state *states;
+  uintmax_t size;
+  uintmax_t capacity;
+};
+struct ctf__test_element {
+  int issubtest;
+  union {
+    struct ctf__subtest *subtest;
+    struct ctf__states *states;
+  } el;
+};
+struct ctf__subtest {
+  struct ctf__test_element *elements;
+  uintmax_t size;
+  uintmax_t capacity;
+  const char *name;
+  int status;
+};
 struct ctf__test {
   void (*const f)(void);
   const char *name;
@@ -60,9 +79,9 @@ struct ctf__stats {
   uintmax_t expects_failed;
 };
 struct ctf__thread_data {
-  struct ctf__state *states;
-  uintmax_t states_size;
-  uintmax_t states_capacity;
+  struct ctf__test_element *test_elements;
+  uintmax_t test_elements_size;
+  uintmax_t test_elements_capacity;
   struct ctf__mock **mock_reset_stack;
   uintmax_t mock_reset_stack_size;
   uintmax_t mock_reset_stack_capacity;
