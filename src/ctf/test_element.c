@@ -104,7 +104,10 @@ static int test_status(struct ctf__thread_data *thread_data) {
   return test_status;
 }
 
-static void state_init(struct ctf__state *state) { state->msg = NULL; }
+static void state_init(struct ctf__state *state) {
+  state->msg = NULL;
+  state->msg_capacity = 0;
+}
 
 static void state_deinit(struct ctf__state *state) {
   if(state->msg != NULL) free(state->msg);
@@ -120,10 +123,12 @@ static void states_init(struct ctf__states *states) {
 }
 
 static void states_deinit(struct ctf__states *states) {
-  for(uintmax_t i = 0; i < states->size; i++) {
+  for(uintmax_t i = 0; i < states->capacity; i++)
     state_deinit(states->states + i);
+  if(states->states != NULL) {
+    free(states->states);
   }
-  if(states->states != NULL) free(states->states);
+  free(states);
 }
 
 static void states_clear(struct ctf__states *states) { states->size = 0; }

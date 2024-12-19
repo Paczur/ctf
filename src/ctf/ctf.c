@@ -63,12 +63,6 @@ include(`base.m4')
 static int opt_unicode = BRANDED;
 static int opt_color = AUTO;
 static int opt_detail = AUTO;
-/*
- * 0 - only failed groups
- * 1 - passed groups only name
- * 2 - passed groups tests only name
- * 3 - everything
- */
 static int opt_verbosity = 1;
 int ctf__opt_cleanup = 0;
 int ctf__opt_threads = 1;
@@ -137,19 +131,6 @@ static void stats_init(struct ctf__stats *stats) {
 
 static void test_element_init(struct ctf__test_element *el) {
   el->el.subtest = NULL;
-}
-
-static void thread_data_test_elements_inc(struct ctf__thread_data *data) {
-  data->test_elements_size++;
-  if(data->test_elements_size >= data->test_elements_capacity) {
-    const uintmax_t newcap = data->test_elements_capacity * 2;
-    data->test_elements =
-      realloc(data->test_elements, newcap * sizeof(*data->test_elements));
-    for(uintmax_t i = data->test_elements_capacity; i < newcap; i++) {
-      test_element_init(data->test_elements + i);
-    }
-    data->test_elements_capacity = newcap;
-  }
 }
 
 static void thread_data_init(struct ctf__thread_data *data) {

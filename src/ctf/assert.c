@@ -1,6 +1,7 @@
 #define MSG_SPRINTF_APPEND(msg, ...)                                        \
   do {                                                                      \
-    const uintmax_t printf_size = snprintf(NULL, 0, __VA_ARGS__) + 1;       \
+    const uintmax_t printf_size =                                           \
+      msg##_size + snprintf(NULL, 0, __VA_ARGS__) + 1;                      \
     uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1;           \
     mul += (mul % 2 != 0 && mul != 1);                                      \
     if(msg == NULL) {                                                       \
@@ -187,7 +188,7 @@
 static void msg_reserve(struct ctf__state *state, uintmax_t size) {
   uintmax_t mul = state->msg_size + size / DEFAULT_STATE_MSG_CAPACITY + 1;
   mul += (mul % 2 != 0 && mul != 1);
-  if(state->msg == NULL) {
+  if(state->msg == NULL && state->msg_capacity == 0) {
     state->msg_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;
     state->msg = malloc(state->msg_capacity);
   } else if(state->msg_size + size >= state->msg_capacity) {
@@ -292,7 +293,7 @@ static void escaped_string(struct ctf__state *state, const char *str,
       }
     }
   }
-  msg_reserve(state, str_len - last + 4);
+  msg_reserve(state, str_len - last);
   memcpy(state->msg + state->msg_size, str + last, str_len - last);
   state->msg_size += str_len - last;
 }
