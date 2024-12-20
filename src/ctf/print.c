@@ -138,22 +138,31 @@ static uintmax_t print_name_status(struct buff *buff, const char *name,
   uintmax_t full_size = 0;
   if(buff == NULL) {
     full_size += level * INDENT_PER_LEVEL;
-    if(status != 0 || (int)level < opt_verbosity) {
-      full_size += print_indicator(NULL, status);
-      full_size += 2;  // ' ' '\n' chars
-      full_size += name_len;
-    }
+    full_size += print_indicator(NULL, status);
+    full_size += 2;  // ' ' '\n' chars
+    full_size += name_len;
     return full_size;
   }
-  if(status != 0 || (int)level < opt_verbosity) {
-    memset(buff->buff + buff->size, ' ', level * INDENT_PER_LEVEL);
-    buff->size += level * INDENT_PER_LEVEL;
-    print_indicator(buff, status);
-    buff->buff[buff->size++] = ' ';
-    memcpy(buff->buff + buff->size, name, name_len);
-    buff->size += name_len;
-    buff->buff[buff->size++] = '\n';
+  memset(buff->buff + buff->size, ' ', level * INDENT_PER_LEVEL);
+  buff->size += level * INDENT_PER_LEVEL;
+  print_indicator(buff, status);
+  buff->buff[buff->size++] = ' ';
+
+  {
+    uintmax_t last_index = 0;
+    for(uintmax_t i = 0; i < name_len; i++) {
+      if(name[i] == '_') {
+        memcpy(buff->buff + buff->size, name + last_index, i - last_index);
+        buff->size += i - last_index;
+        buff->buff[buff->size++] = ' ';
+        last_index = i + 1;
+      }
+    }
+    memcpy(buff->buff + buff->size, name + last_index, name_len - last_index);
+    buff->size += name_len - last_index;
   }
+
+  buff->buff[buff->size++] = '\n';
   return 0;
 }
 
@@ -217,10 +226,9 @@ static uintmax_t print_state(struct buff *buff, const struct ctf__state *state,
 static uintmax_t print_states(struct buff *buff,
                               const struct ctf__states *states, int level) {
   uintmax_t full_size = 0;
-  if(level < opt_verbosity || states_status(states)) {
-    for(uintmax_t i = 0; i < states->size; i++)
-      full_size += print_state(buff, states->states + i, level);
-  }
+  if(level >= opt_verbosity && !states_status(states)) return full_size;
+  for(uintmax_t i = 0; i < states->size; i++)
+    full_size += print_state(buff, states->states + i, level);
   return full_size;
 }
 
@@ -229,23 +237,37 @@ static uintmax_t print_subtest(struct buff *buff,
   uintmax_t full_size = 0;
   uintmax_t level = 2;
   uintmax_t t;
-  do {
-    for(uintmax_t i = 0; i < subtest->size; i++) {
+  const int status = subtest->status;
+  if(!status && opt_verbosity < 3) return full_size;
+
+  full_size += print_name_status(buff, subtest->name, strlen(subtest->name),
+                                 subtest->status, 2);
+  while(1) {
+    for(uintmax_t i = subtest->size - 1; i > 0; i--) {
       if(subtest->elements[i].issubtest) {
         subtest_stack_push(subtest->elements[i].el.subtest);
         level_stack_push(level + 1);
       } else {
-        full_size += print_states(buff, subtest->elements[i].el.states, level);
+        full_size +=
+          print_states(buff, subtest->elements[i].el.states, level + 1);
       }
     }
+    if(subtest->elements[0].issubtest) {
+      subtest_stack_push(subtest->elements[0].el.subtest);
+      level_stack_push(level + 1);
+    } else {
+      full_size +=
+        print_states(buff, subtest->elements[0].el.states, level + 1);
+    }
+
     subtest = subtest_stack_pop();
+    if(subtest == NULL) break;
     t = level_stack_pop();
-    if(t > level) {
+    if(status)
       full_size += print_name_status(buff, subtest->name, strlen(subtest->name),
                                      subtest->status, t);
-    }
     level = t;
-  } while(subtest != NULL);
+  }
   return full_size;
 }
 
@@ -257,16 +279,15 @@ static uintmax_t print_test(struct buff *buff, const struct ctf__test *test,
   struct ctf__test_element *el;
 
   status = test_status(thread_data);
+  if(!status && opt_verbosity < 2) return full_size;
 
-  if(status || opt_verbosity >= 2) {
-    full_size += print_name_status(buff, test->name, test_name_len, status, 1);
-    for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
-      el = thread_data->test_elements + i;
-      if(el->issubtest) {
-        full_size += print_subtest(buff, el->el.subtest);
-      } else {
-        full_size += print_states(buff, el->el.states, 2);
-      }
+  full_size += print_name_status(buff, test->name, test_name_len, status, 1);
+  for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
+    el = thread_data->test_elements + i;
+    if(el->issubtest) {
+      full_size += print_subtest(buff, el->el.subtest);
+    } else {
+      full_size += print_states(buff, el->el.states, 2);
     }
   }
   return full_size;

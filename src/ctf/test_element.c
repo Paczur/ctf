@@ -56,6 +56,7 @@ static void level_stack_push(uintmax_t level) {
 }
 
 static uintmax_t level_stack_pop(void) {
+  if(level_stack_size == 0) return 0;
   return level_stack[--level_stack_size];
 }
 
@@ -68,21 +69,31 @@ static int states_status(const struct ctf__states *states) {
 }
 
 static int subtest_status_fill(struct ctf__subtest *subtest) {
-  subtest->status = 0;
-  do {
-    for(uintmax_t i = 0; i < subtest->size; i++) {
-      if(subtest->elements[i].issubtest) {
-        if(subtest->elements[i].el.subtest->status == 2) {
-          subtest_stack_push(subtest->elements[i].el.subtest);
-        } else if(subtest->elements[i].el.subtest->status == 1) {
-          subtest->status = 1;
+  struct ctf__subtest *sub = subtest;
+  struct ctf__subtest *rev_sub;
+  sub->status = 0;
+  while(1) {
+    for(uintmax_t i = 0; i < sub->size; i++) {
+      if(sub->elements[i].issubtest) {
+        if(sub->elements[i].el.subtest->status == 2) {
+          subtest_stack_push(sub->elements[i].el.subtest);
+        } else if(sub->elements[i].el.subtest->status == 1) {
+          sub->status = 1;
         }
-      } else {
-        if(!states_status(subtest->elements[i].el.states)) subtest->status = 1;
+        continue;
+      }
+      if(!states_status(sub->elements[i].el.states)) continue;
+      sub->status = 1;
+      rev_sub = sub->parent;
+      while(rev_sub != NULL && rev_sub->status != 1) {
+        rev_sub->status = 1;
+        rev_sub = rev_sub->parent;
       }
     }
-    subtest = subtest_stack_pop();
-  } while(subtest != NULL);
+    sub = subtest_stack_pop();
+    if(sub == NULL) break;
+    sub->status = 0;
+  }
   return subtest->status;
 }
 
@@ -111,6 +122,7 @@ static void state_init(struct ctf__state *state) {
 
 static void state_deinit(struct ctf__state *state) {
   if(state->msg != NULL) free(state->msg);
+  state->msg = NULL;
 }
 
 static void states_init(struct ctf__states *states) {
@@ -125,6 +137,7 @@ static void states_init(struct ctf__states *states) {
 static void states_deinit(struct ctf__states *states) {
   for(uintmax_t i = 0; i < states->capacity; i++)
     state_deinit(states->states + i);
+  states->capacity = 0;
   if(states->states != NULL) {
     free(states->states);
   }
@@ -132,6 +145,37 @@ static void states_deinit(struct ctf__states *states) {
 }
 
 static void states_clear(struct ctf__states *states) { states->size = 0; }
+
+static struct ctf__states *states_new(void) {
+  struct ctf__states *states;
+  if(states_allocated_size > 0) {
+    states = states_allocated[--states_allocated_size];
+    states_clear(states);
+  } else {
+    states = malloc(sizeof(*states));
+    states_init(states);
+  }
+  return states;
+}
+
+static void states_increment(struct ctf__states *states) {
+  states->size++;
+  if(states->size >= states->capacity) {
+    states->capacity *= 2;
+    states->states =
+      realloc(states->states, sizeof(states->states[0]) * states->capacity);
+  }
+}
+
+static void states_delete(struct ctf__states *states) {
+  states_allocated_size++;
+  if(states_allocated_size >= states_allocated_capacity) {
+    states_allocated_capacity *= 2;
+    states_allocated = realloc(
+      states_allocated, sizeof(*states_allocated) * states_allocated_capacity);
+  }
+  states_allocated[states_allocated_size - 1] = states;
+}
 
 static void subtest_init(struct ctf__subtest *subtest) {
   subtest->name = NULL;
@@ -147,46 +191,27 @@ static void subtest_deinit(struct ctf__subtest *subtest) {
     for(uintmax_t i = 0; i < subtest->size; i++) {
       if(subtest->elements[i].issubtest) {
         subtest_stack_push(subtest->elements[i].el.subtest);
-      } else {
-        states_deinit(subtest->elements[i].el.states);
       }
     }
     if(subtest->elements != NULL) free(subtest->elements);
+    free(subtest);
     subtest = subtest_stack_pop();
   } while(subtest != NULL);
 }
 
-static void subtest_clear(struct ctf__subtest *subtest) { subtest->size = 0; }
-
-static struct ctf__states *states_new(void) {
-  struct ctf__states *states;
-  if(states_allocated_size > 0) {
-    states = states_allocated[--states_allocated_size];
-    states_clear(states);
-  } else {
-    states = malloc(sizeof(*states));
-    states_init(states);
-  }
-  return states;
-}
-
-static void states_delete(struct ctf__states *states) {
-  states_allocated_size++;
-  if(states_allocated_size >= states_allocated_capacity) {
-    states_allocated_capacity *= 2;
-    states_allocated = realloc(
-      states_allocated, sizeof(*states_allocated) * states_allocated_capacity);
-  }
-  states_allocated[states_allocated_size - 1] = states;
+static void subtest_clear(struct ctf__subtest *subtest) {
+  subtest->status = 2;
+  subtest->size = 0;
 }
 
 static struct ctf__subtest *subtest_new(void) {
   struct ctf__subtest *subtest;
   if(subtests_allocated_size > 0) {
     subtest = subtests_allocated[--subtests_allocated_size];
+    subtest_clear(subtest);
     return subtest;
   }
-  subtest = malloc(sizeof(*subtests_allocated));
+  subtest = malloc(sizeof(*subtest));
   subtest_init(subtest);
   return subtest;
 }
@@ -212,41 +237,23 @@ static void subtest_delete(struct ctf__subtest *subtest) {
   } while(subtest != NULL);
 }
 
-static struct ctf__state *state_next(struct ctf__thread_data *thread_data) {
-  struct ctf__test_element *el =
-    thread_data->test_elements + thread_data->test_elements_size - 1;
-  if(thread_data->test_elements_size == 0) {
-    thread_data->test_elements_size++;
-    el = thread_data->test_elements;
-    el->issubtest = 0;
-    el->el.states = states_new();
-    el->el.states->size++;
-    return el->el.states->states;
+static void subtest_increment(struct ctf__subtest *subtest) {
+  subtest->size++;
+  if(subtest->size >= subtest->capacity) {
+    subtest->capacity *= 2;
+    subtest->elements = realloc(subtest->elements,
+                                sizeof(*subtest->elements) * subtest->capacity);
   }
-  while(el->issubtest && el->el.subtest->size > 0)
-    el = el->el.subtest->elements + el->el.subtest->size - 1;
-  if(el->issubtest) {
-    el = el->el.subtest->elements;
-    el->issubtest = 0;
-    el->el.states = states_new();
-  }
-  el->el.states->size++;
-  if(el->el.states->size >= el->el.states->capacity) {
-    el->el.states->capacity *= 2;
-    el->el.states->states =
-      realloc(el->el.states->states,
-              el->el.states->capacity * sizeof(el->el.states->states[0]));
-  }
-  return el->el.states->states + el->el.states->size - 1;
 }
 
-static struct ctf__states *states_last(struct ctf__thread_data *thread_data) {
-  struct ctf__test_element *el =
-    thread_data->test_elements + thread_data->test_elements_size - 1;
-  while(el->issubtest && el->el.subtest->size > 0)
-    el = el->el.subtest->elements + el->el.subtest->size - 1;
-  if(el->issubtest) return NULL;
-  return el->el.states;
+static void test_elements_increment(struct ctf__thread_data *thread_data) {
+  thread_data->test_elements_size++;
+  if(thread_data->test_elements_size >= thread_data->test_elements_capacity) {
+    thread_data->test_elements_capacity *= 2;
+    thread_data->test_elements = realloc(thread_data->test_elements,
+                                         sizeof(*thread_data->test_elements) *
+                                           thread_data->test_elements_capacity);
+  }
 }
 
 static void test_elements_cleanup(struct ctf__thread_data *thread_data) {
@@ -290,4 +297,69 @@ static void test_elements_deinit(void) {
   free(subtests_allocated);
   free(subtest_stack);
   free(level_stack);
+}
+
+void ctf__subtest_enter(struct ctf__thread_data *thread_data,
+                        const char *name) {
+  struct ctf__subtest *const subtest = thread_data->subtest_current;
+  struct ctf__subtest *subtest_t = subtest_new();
+  subtest_t->name = name;
+  thread_data->subtest_current = subtest_t;
+
+  if(subtest == NULL) {
+    test_elements_increment(thread_data);
+    subtest_t->parent = NULL;
+    thread_data->test_elements[thread_data->test_elements_size - 1].issubtest =
+      1;
+    thread_data->test_elements[thread_data->test_elements_size - 1].el.subtest =
+      subtest_t;
+    return;
+  }
+
+  subtest_increment(subtest);
+  subtest_t->parent = subtest;
+  subtest->elements[subtest->size - 1].issubtest = 1;
+  subtest->elements[subtest->size - 1].el.subtest = subtest_t;
+}
+
+void ctf__subtest_leave(struct ctf__thread_data *thread_data) {
+  thread_data->subtest_current = thread_data->subtest_current->parent;
+}
+
+static struct ctf__states *states_last(struct ctf__thread_data *thread_data) {
+  struct ctf__subtest *subtest = thread_data->subtest_current;
+  if(subtest == NULL) {
+    if(thread_data->test_elements_size == 0 ||
+       thread_data->test_elements[thread_data->test_elements_size - 1]
+         .issubtest)
+      return NULL;
+    return thread_data->test_elements[thread_data->test_elements_size - 1]
+      .el.states;
+  }
+  if(subtest->size == 0 || subtest->elements[subtest->size - 1].issubtest)
+    return NULL;
+  return subtest->elements[subtest->size - 1].el.states;
+}
+
+static struct ctf__state *state_next(struct ctf__thread_data *thread_data) {
+  struct ctf__subtest *const subtest = thread_data->subtest_current;
+  struct ctf__states *states = states_last(thread_data);
+  if(states == NULL) {
+    if(subtest == NULL) {
+      test_elements_increment(thread_data);
+      thread_data->test_elements[thread_data->test_elements_size - 1]
+        .issubtest = 0;
+      thread_data->test_elements[thread_data->test_elements_size - 1]
+        .el.states = states_new();
+      states = thread_data->test_elements[thread_data->test_elements_size - 1]
+                 .el.states;
+    } else {
+      subtest_increment(subtest);
+      subtest->elements[subtest->size - 1].issubtest = 0;
+      subtest->elements[subtest->size - 1].el.states = states_new();
+      states = subtest->elements[subtest->size - 1].el.states;
+    }
+  }
+  states_increment(states);
+  return &states->states[states->size - 1];
 }

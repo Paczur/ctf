@@ -387,6 +387,7 @@ void ctf_assert_hide(uintmax_t count) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   struct ctf__states *states = states_last(thread_data);
+  if(states == NULL) return;
   if(states->size <= count) {
     for(uintmax_t i = 0; i < states->size; i++) {
       if(states->states[i].status) {

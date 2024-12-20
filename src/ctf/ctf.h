@@ -42,7 +42,7 @@ struct ctf__states {
   uintmax_t capacity;
 };
 struct ctf__test_element {
-  int issubtest;
+  int8_t issubtest;
   union {
     struct ctf__subtest *subtest;
     struct ctf__states *states;
@@ -53,6 +53,7 @@ struct ctf__subtest {
   uintmax_t size;
   uintmax_t capacity;
   const char *name;
+  struct ctf__subtest *parent;
   int status;
 };
 struct ctf__test {
@@ -82,6 +83,7 @@ struct ctf__thread_data {
   struct ctf__test_element *test_elements;
   uintmax_t test_elements_size;
   uintmax_t test_elements_capacity;
+  struct ctf__subtest *subtest_current;
   struct ctf__mock **mock_reset_stack;
   uintmax_t mock_reset_stack_size;
   uintmax_t mock_reset_stack_capacity;
@@ -208,6 +210,8 @@ void ctf__assert_fold(uintmax_t count, const char *msg, int line,
 uintmax_t ctf__pass(const char *, int, const char *,...);
 uintmax_t ctf__fail(const char *, int, const char *,...);
 uintmax_t ctf__assert_msg(int, const char *, int, const char *,...);
+void ctf__subtest_enter(struct ctf__thread_data *thread_data, const char *name);
+void ctf__subtest_leave(struct ctf__thread_data *thread_data);
 
 void ctf_main(int argc, char *argv[]);
 void ctf_group_run(struct ctf__group group);
@@ -232,6 +236,16 @@ void ctf_parallel_sync(void);
 
 void ctf_assert_barrier(void);
 void ctf_assert_hide(uintmax_t count);
+#define ctf_subtest(name)                                                \
+  for(uintptr_t ctf__subtest_thread_index =                              \
+                  (uintptr_t)pthread_getspecific(ctf__thread_index),     \
+                ctf__local_end_flag = 0;                                 \
+      !ctf__local_end_flag;)                                             \
+    for(ctf__subtest_enter(ctf__thread_data + ctf__subtest_thread_index, \
+                           #name);                                       \
+        !ctf__local_end_flag;                                            \
+        ctf__local_end_flag = 1,                                         \
+        ctf__subtest_leave(ctf__thread_data + ctf__subtest_thread_index))
 #define ctf_assert_fold(count, msg) \
   ctf__assert_fold(count, msg, __LINE__, __FILE__)
 #define ctf_pass(m, ...) ctf__pass(m, __LINE__, __FILE__, ##__VA_ARGS__)
@@ -284,7 +298,7 @@ define(`ALIAS', `#define $1 ctf_$1
 ')dnl
 */
 COMB(`ALIAS',
-     `(assert_barrier(), assert_fold(count, msg),
+     `(assert_barrier(), assert_fold(count, msg), subtest(name),
        assert_true(a), assert_false(a), expect_true(a), expect_false(a),
        assert_null(a), assert_non_null(a), expect_null(a), expect_non_null(a))')
 EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `EA_TEMPLATE')

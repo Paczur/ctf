@@ -57,11 +57,11 @@ CTF_MOCK_GROUP(add_sub) = {
 
 CTF_TEST(mock_grouped) {
   mock_group(add_sub);
-  mock_select(add) {
+  subtest(first_mock_in_group) mock_select(add) {
     expect_int_eq(0, add(1, 2));
     expect_int_eq(1, mock_call_count);
   }
-  mock_select(sub) {
+  subtest(second_mock_in_group) mock_select(sub) {
     expect_int_eq(1, sub(1, 2));
     expect_int_eq(1, mock_call_count);
   }
@@ -1584,15 +1584,33 @@ CTF_TEST(pass_and_fail) {
   ctf_fail("fail");
 }
 
+CTF_TEST(subtests) {
+  subtest(sub_fail) ctf_fail("fail");
+  subtest(sub_pass) ctf_pass("pass");
+  subtest(sub_with_nesting) {
+    subtest(nested_pass) ctf_pass("pass");
+    subtest(nested_fail) ctf_fail("fail");
+  }
+}
+
 CTF_GROUP(failure) = {
-  char_expect_failure,       int_expect_failure,
-  bool_expect_failure,       uint_expect_failure,
-  ptr_expect_failure,        null_expect_failure,
-  str_expect_failure,        array_char_expect_failure,
-  array_int_expect_failure,  array_uint_expect_failure,
-  array_ptr_expect_failure,  memory_char_expect_failure,
-  memory_int_expect_failure, memory_uint_expect_failure,
-  memory_ptr_expect_failure, pass_and_fail,
+  char_expect_failure,
+  int_expect_failure,
+  bool_expect_failure,
+  uint_expect_failure,
+  ptr_expect_failure,
+  null_expect_failure,
+  str_expect_failure,
+  array_char_expect_failure,
+  array_int_expect_failure,
+  array_uint_expect_failure,
+  array_ptr_expect_failure,
+  memory_char_expect_failure,
+  memory_int_expect_failure,
+  memory_uint_expect_failure,
+  memory_ptr_expect_failure,
+  pass_and_fail,
+  subtests,
 };
 CTF_GROUP(mocked_add_failure) = {
   mock_char_expect_failure,

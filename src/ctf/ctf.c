@@ -135,6 +135,7 @@ static void test_element_init(struct ctf__test_element *el) {
 
 static void thread_data_init(struct ctf__thread_data *data) {
   data->test_elements_size = 0;
+  data->subtest_current = NULL;
   data->mock_reset_stack_size = 0;
   data->test_elements_capacity = DEFAULT_THREAD_DATA_TEST_ELEMENTS_CAPACITY;
   data->mock_reset_stack_capacity =
@@ -150,7 +151,6 @@ static void thread_data_init(struct ctf__thread_data *data) {
 
 static void thread_data_deinit(struct ctf__thread_data *data) {
   test_elements_cleanup(data);
-  test_elements_deinit();
   free(data->test_elements);
   free(data->mock_reset_stack);
 }
@@ -476,7 +476,7 @@ int main(int argc, char *argv[]) {
       free(cleanup_list[j].pointers);
       free(print_buff[j].buff);
     }
-    fflush(stdout);
+    test_elements_deinit();
     pthread_key_delete(ctf__thread_index);
     free(data);
     free(cleanup_list);
