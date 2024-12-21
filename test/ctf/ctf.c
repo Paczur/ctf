@@ -1591,6 +1591,7 @@ CTF_TEST(subtests) {
     subtest(nested_pass) ctf_pass("pass");
     subtest(nested_fail) ctf_fail("fail");
   }
+  subtest(sub_pass_with_nesting) { subtest(nested_pass) ctf_pass("pass"); }
 }
 
 CTF_GROUP(failure) = {
