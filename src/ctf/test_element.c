@@ -187,16 +187,8 @@ static void subtest_init(struct ctf__subtest *subtest) {
 }
 
 static void subtest_deinit(struct ctf__subtest *subtest) {
-  do {
-    for(uintmax_t i = 0; i < subtest->size; i++) {
-      if(subtest->elements[i].issubtest) {
-        subtest_stack_push(subtest->elements[i].el.subtest);
-      }
-    }
-    if(subtest->elements != NULL) free(subtest->elements);
-    free(subtest);
-    subtest = subtest_stack_pop();
-  } while(subtest != NULL);
+  if(subtest->elements != NULL) free(subtest->elements);
+  free(subtest);
 }
 
 static void subtest_clear(struct ctf__subtest *subtest) {
