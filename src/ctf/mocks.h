@@ -243,29 +243,29 @@ uintmax_t ctf__mock_return_capacity(uintmax_t cap);
 #define ctf_mock_group(name) ctf__mock_group(ctf__mock_group_st_##name)
 #define ctf_mock_global(fn, mock) \
   ctf__mock_global(&ctf__mock_struct_##fn, (void (*)(void))mock)
-#define ctf_mock(fn, mock)                                           \
-  ctf_mock_global(fn, mock);                                         \
-  for(uintptr_t ctf__local_thread_index =                            \
-                  (uintptr_t)pthread_getspecific(ctf__thread_index), \
-                ctf__local_end_flag = 0;                             \
-      !ctf__local_end_flag; ctf__local_end_flag = 1, ctf_unmock())   \
-    for(typeof(ctf__mock_return_##fn) ctf__mock_return_selected =    \
-          ctf__mock_return_##fn;                                     \
-        !ctf__local_end_flag || ctf__mock_return_selected != NULL;   \
-        ctf__mock_return_selected = NULL, ctf__local_end_flag = 1)
+#define ctf_mock(fn, mock)                                             \
+  for(uintptr_t ctf__local_thread_index =                              \
+                  (uintptr_t)pthread_getspecific(ctf__thread_index),   \
+                ctf__local_end_flag = 0;                               \
+      !ctf__local_end_flag; ctf__local_end_flag = 1)                   \
+    for(ctf_mock_global(fn, mock); !ctf__local_end_flag; ctf_unmock()) \
+      for(typeof(ctf__mock_return_##fn) ctf__mock_return_selected =    \
+            ctf__mock_return_##fn;                                     \
+          !ctf__local_end_flag || ctf__mock_return_selected != NULL;   \
+          ctf__mock_return_selected = NULL, ctf__local_end_flag = 1)
 #define ctf_mock_reset(fn)                       \
   ctf__mock_reset(ctf__mock_struct_##fn.states + \
                   (uintptr_t)pthread_getspecific(ctf__thread_index))
 #define ctf_mock_select(fn)                                          \
-  ctf_mock_reset(fn);                                                \
   for(uintptr_t ctf__local_thread_index =                            \
                   (uintptr_t)pthread_getspecific(ctf__thread_index), \
                 ctf__local_end_flag = 0;                             \
       !ctf__local_end_flag; ctf__local_end_flag = 1)                 \
-    for(typeof(ctf__mock_return_##fn) ctf__mock_return_selected =    \
-          ctf__mock_return_##fn;                                     \
-        !ctf__local_end_flag || ctf__mock_return_selected != NULL;   \
-        ctf__mock_return_selected = NULL, ctf__local_end_flag = 1)
+    for(ctf_mock_reset(fn); !ctf__local_end_flag;)                   \
+      for(typeof(ctf__mock_return_##fn) ctf__mock_return_selected =  \
+            ctf__mock_return_##fn;                                   \
+          !ctf__local_end_flag || ctf__mock_return_selected != NULL; \
+          ctf__mock_return_selected = NULL, ctf__local_end_flag = 1)
 void ctf_unmock(void);
 #define ctf_unmock_group(name) ctf__unmock_group(ctf__mock_group_st_##name)
 #define ctf_mock_call_count CTF__MOCK_STRUCT_SELECTED->call_count

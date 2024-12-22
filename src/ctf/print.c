@@ -1,5 +1,6 @@
 #define DEFAULT_PRINT_BUFF_SIZE 1024
 #define MIN_DIGITS_FOR_LINE 4
+#define INDENT_PER_LEVEL 4
 
 struct buff {
   char *buff;
@@ -25,119 +26,25 @@ static void buff_reserve(struct buff *buff, uintmax_t size) {
   if(buff->size + size >= buff->capacity) buff_resize(buff, buff->size + size);
 }
 
-static uintmax_t print_pass_indicator(struct buff *buff) {
-  uintmax_t full_size = 0;
-  static const char print_pass_color[] = "\x1b[32m";
-  static const char print_pass_branded[] = "✓";
-  static const char print_pass_generic[] = "✓";
-  static const char print_pass_off[] = "P";
-  if(buff == NULL) {
-    full_size++;  // '[' char
-    if(color) {
-      full_size += sizeof(print_pass_color) - 1;
-      full_size += sizeof(print_color_reset) - 1;
-    }
-    switch(opt_unicode) {
-    case OFF:
-      full_size += sizeof(print_pass_off) - 1;
-      break;
-    case GENERIC:
-      full_size += sizeof(print_pass_generic) - 1;
-      break;
-    case BRANDED:
-      full_size += sizeof(print_pass_branded) - 1;
-      break;
-    }
-    full_size++;  // ']' char
-    return full_size;
-  }
-  buff->buff[buff->size++] = '[';
-  if(color) {
-    strcpy(buff->buff + buff->size, print_pass_color);
-    buff->size += sizeof(print_pass_color) - 1;
-  }
-  switch(opt_unicode) {
-  case OFF:
-    strcpy(buff->buff + buff->size, print_pass_off);
-    buff->size += sizeof(print_pass_off) - 1;
-    break;
-  case GENERIC:
-    strcpy(buff->buff + buff->size, print_pass_generic);
-    buff->size += sizeof(print_pass_generic) - 1;
-    break;
-  case BRANDED:
-    strcpy(buff->buff + buff->size, print_pass_branded);
-    buff->size += sizeof(print_pass_branded) - 1;
-    break;
-  }
-  if(color) {
-    strcpy(buff->buff + buff->size, print_color_reset);
-    buff->size += sizeof(print_color_reset) - 1;
-  }
-  buff->buff[buff->size++] = ']';
-  return 0;
-}
-
-static uintmax_t print_fail_indicator(struct buff *buff) {
-  uintmax_t full_size = 0;
-  static const char print_fail_color[] = "\x1b[31m";
-  static const char print_fail_branded[] = "⚑";
-  static const char print_fail_generic[] = "✗";
-  static const char print_fail_off[] = "F";
-  if(buff == NULL) {
-    full_size++;  // '[' char
-    if(color) {
-      full_size += sizeof(print_fail_color) - 1;
-      full_size += sizeof(print_color_reset) - 1;
-    }
-    switch(opt_unicode) {
-    case OFF:
-      full_size += sizeof(print_fail_off) - 1;
-      break;
-    case GENERIC:
-      full_size += sizeof(print_fail_generic) - 1;
-      break;
-    case BRANDED:
-      full_size += sizeof(print_fail_branded) - 1;
-      break;
-    }
-    full_size++;  // ']' char
-    return full_size;
-  }
-  buff->buff[buff->size++] = '[';
-  if(color) {
-    strcpy(buff->buff + buff->size, print_fail_color);
-    buff->size += sizeof(print_fail_color) - 1;
-  }
-  switch(opt_unicode) {
-  case OFF:
-    strcpy(buff->buff + buff->size, print_fail_off);
-    buff->size += sizeof(print_fail_off) - 1;
-    break;
-  case GENERIC:
-    strcpy(buff->buff + buff->size, print_fail_generic);
-    buff->size += sizeof(print_fail_generic) - 1;
-    break;
-  case BRANDED:
-    strcpy(buff->buff + buff->size, print_fail_branded);
-    buff->size += sizeof(print_fail_branded) - 1;
-    break;
-  }
-  if(color) {
-    strcpy(buff->buff + buff->size, print_color_reset);
-    buff->size += sizeof(print_color_reset) - 1;
-  }
-  buff->buff[buff->size++] = ']';
-  return 0;
-}
-
-static uintmax_t print_unknown_indicator(struct buff *buff) {
-  uintmax_t full_size = 0;
+static uintmax_t print_indicator(struct buff *buff, int status) {
   static const char print_unknown_color[] = "\x1b[33m";
   // Padding required in order to replace it with fail indicators easily
   static const char print_unknown_branded[] = "\x1a\x1a?";
   static const char print_unknown_generic[] = "\x1a\x1a?";
   static const char print_unknown_off[] = "?";
+
+  static const char print_fail_color[] = "\x1b[31m";
+  static const char print_fail_branded[] = "⚑";
+  static const char print_fail_generic[] = "✗";
+  static const char print_fail_off[] = "F";
+
+  static const char print_pass_color[] = "\x1b[32m";
+  static const char print_pass_branded[] = "✓";
+  static const char print_pass_generic[] = "✓";
+  static const char print_pass_off[] = "P";
+
+  uintmax_t full_size = 0;
+
   if(buff == NULL) {
     full_size++;  // '[' char
     if(color) {
@@ -159,23 +66,63 @@ static uintmax_t print_unknown_indicator(struct buff *buff) {
     return full_size;
   }
   buff->buff[buff->size++] = '[';
-  if(color) {
-    strcpy(buff->buff + buff->size, print_unknown_color);
-    buff->size += sizeof(print_unknown_color) - 1;
-  }
-  switch(opt_unicode) {
-  case OFF:
-    strcpy(buff->buff + buff->size, print_unknown_off);
-    buff->size += sizeof(print_unknown_off) - 1;
-    break;
-  case GENERIC:
-    strcpy(buff->buff + buff->size, print_unknown_generic);
-    buff->size += sizeof(print_unknown_generic) - 1;
-    break;
-  case BRANDED:
-    strcpy(buff->buff + buff->size, print_unknown_branded);
-    buff->size += sizeof(print_unknown_branded) - 1;
-    break;
+  if(status == 0) {
+    if(color) {
+      strcpy(buff->buff + buff->size, print_pass_color);
+      buff->size += sizeof(print_pass_color) - 1;
+    }
+    switch(opt_unicode) {
+    case OFF:
+      strcpy(buff->buff + buff->size, print_pass_off);
+      buff->size += sizeof(print_pass_off) - 1;
+      break;
+    case GENERIC:
+      strcpy(buff->buff + buff->size, print_pass_generic);
+      buff->size += sizeof(print_pass_generic) - 1;
+      break;
+    case BRANDED:
+      strcpy(buff->buff + buff->size, print_pass_branded);
+      buff->size += sizeof(print_pass_branded) - 1;
+      break;
+    }
+  } else if(status == 1) {
+    if(color) {
+      strcpy(buff->buff + buff->size, print_fail_color);
+      buff->size += sizeof(print_fail_color) - 1;
+    }
+    switch(opt_unicode) {
+    case OFF:
+      strcpy(buff->buff + buff->size, print_fail_off);
+      buff->size += sizeof(print_fail_off) - 1;
+      break;
+    case GENERIC:
+      strcpy(buff->buff + buff->size, print_fail_generic);
+      buff->size += sizeof(print_fail_generic) - 1;
+      break;
+    case BRANDED:
+      strcpy(buff->buff + buff->size, print_fail_branded);
+      buff->size += sizeof(print_fail_branded) - 1;
+      break;
+    }
+  } else {
+    if(color) {
+      strcpy(buff->buff + buff->size, print_unknown_color);
+      buff->size += sizeof(print_unknown_color) - 1;
+    }
+    switch(opt_unicode) {
+    case OFF:
+      strcpy(buff->buff + buff->size, print_unknown_off);
+      buff->size += sizeof(print_unknown_off) - 1;
+      break;
+    case GENERIC:
+      strcpy(buff->buff + buff->size, print_unknown_generic);
+      buff->size += sizeof(print_unknown_generic) - 1;
+      break;
+    case BRANDED:
+      strcpy(buff->buff + buff->size, print_unknown_branded);
+      buff->size += sizeof(print_unknown_branded) - 1;
+      break;
+    }
   }
   if(color) {
     strcpy(buff->buff + buff->size, print_color_reset);
@@ -185,221 +132,167 @@ static uintmax_t print_unknown_indicator(struct buff *buff) {
   return 0;
 }
 
-static uintmax_t print_group_pass(struct buff *buff, const char *name,
-                                  uintmax_t name_len) {
+static uintmax_t print_name_status(struct buff *buff, const char *name,
+                                   uintmax_t name_len, int status,
+                                   uintmax_t level) {
   uintmax_t full_size = 0;
   if(buff == NULL) {
-    if(opt_verbosity != 0) {
-      full_size += print_pass_indicator(NULL);
-      full_size += 2;  // ' ' '\n' chars
-      full_size += name_len;
-    }
-    return full_size;
-  }
-  if(opt_verbosity != 0) {
-    print_pass_indicator(buff);
-    buff->size += sprintf(buff->buff + buff->size, " %s", name);
-    buff->buff[buff->size++] = '\n';
-  }
-  return 0;
-}
-
-static uintmax_t print_group_fail(struct buff *buff, const char *name,
-                                  uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += print_fail_indicator(NULL);
+    full_size += level * INDENT_PER_LEVEL;
+    full_size += print_indicator(NULL, status);
     full_size += 2;  // ' ' '\n' chars
     full_size += name_len;
     return full_size;
   }
-  print_fail_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s", name);
+  memset(buff->buff + buff->size, ' ', level * INDENT_PER_LEVEL);
+  buff->size += level * INDENT_PER_LEVEL;
+  print_indicator(buff, status);
+  buff->buff[buff->size++] = ' ';
+
+  {
+    uintmax_t last_index = 0;
+    for(uintmax_t i = 0; i < name_len; i++) {
+      if(name[i] == '_') {
+        memcpy(buff->buff + buff->size, name + last_index, i - last_index);
+        buff->size += i - last_index;
+        buff->buff[buff->size++] = ' ';
+        last_index = i + 1;
+      }
+    }
+    memcpy(buff->buff + buff->size, name + last_index, name_len - last_index);
+    buff->size += name_len - last_index;
+  }
+
   buff->buff[buff->size++] = '\n';
   return 0;
 }
 
-static uintmax_t print_group_unknown(struct buff *buff, const char *name,
-                                     uintmax_t name_len) {
+static uintmax_t print_state(struct buff *buff, const struct ctf__state *state,
+                             uintmax_t level) {
+  uintmax_t spaces = level * INDENT_PER_LEVEL;
   uintmax_t full_size = 0;
   if(buff == NULL) {
-    full_size += print_unknown_indicator(NULL);
-    full_size += 2;  // ' ' '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  print_unknown_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", name);
-  return 0;
-}
-
-static uintmax_t print_test_pass(struct buff *buff, const char *name,
-                                 uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 4;  // indent
-    full_size += print_pass_indicator(NULL);
-    full_size += 2;  // ' ' and '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 4);
-  buff->size += 4;
-  print_pass_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", name);
-  return 0;
-}
-
-static uintmax_t print_test_fail(struct buff *buff, const char *name,
-                                 uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 4;  // indent
-    full_size += print_fail_indicator(NULL);
-    full_size += 2;  // ' ' and '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 4);
-  buff->size += 4;
-  print_fail_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", name);
-  return 0;
-}
-
-static uintmax_t print_test_unknown(struct buff *buff, const char *name,
-                                    uintmax_t name_len) {
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 4;  // indent
-    full_size += print_unknown_indicator(buff);
-    full_size += 2;  // ' ' '\n' chars
-    full_size += name_len;
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 4);
-  buff->size += 4;
-  print_unknown_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", name);
-  return 0;
-}
-
-static uintmax_t print_test_pass_info(struct buff *buff,
-                                      const struct ctf__state *state) {
-  uintmax_t spaces = 8;
-  uintmax_t full_size = 0;
-  if(buff == NULL) {
+    full_size += spaces;
     if(detail) {
       full_size +=
         snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
                  state->file, state->line);
+      if(color) {
+        full_size += sizeof("\x1b[31mE\x1b[0m") - 1;
+      } else {
+        full_size++;  // 'E'
+      }
+      full_size++;  // ']'
+    } else {
+      full_size += print_indicator(NULL, state->status);
     }
-    full_size += print_pass_indicator(NULL);
     full_size += 2;  // ' ' '\n' chars
     full_size += state->msg_size;
     return full_size;
   }
-  if(detail) {
-    spaces += snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
-                       state->file, state->line);
+  if(state->status == 0) {
+    if(detail) {
+      spaces += snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
+                         state->file, state->line);
+      spaces += 2;  // 'E' ']'
+    }
+    memset(buff->buff + buff->size, ' ', spaces);
+    buff->size += spaces;
+    print_indicator(buff, state->status);
+  } else {
+    memset(buff->buff + buff->size, ' ', spaces);
+    buff->size += spaces;
+    if(detail) {
+      buff->size += sprintf(buff->buff + buff->size,
+                            "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
+                            state->file, state->line);
+      if(color) {
+        strcpy(buff->buff + buff->size, "\x1b[31mE\x1b[0m");
+        buff->size += sizeof("\x1b[31mE\x1b[0m") - 1;
+      } else {
+        buff->buff[buff->size++] = 'E';
+      }
+      buff->buff[buff->size++] = ']';
+    } else {
+      print_indicator(buff, state->status);
+    }
   }
-  memset(buff->buff + buff->size, ' ', spaces);
-  buff->size += spaces;
-  print_pass_indicator(buff);
-  buff->size += sprintf(buff->buff + buff->size, " %s\n", state->msg);
+  buff->buff[buff->size++] = ' ';
+  memcpy(buff->buff + buff->size, state->msg, state->msg_size);
+  buff->size += state->msg_size;
+  buff->buff[buff->size++] = '\n';
   return 0;
 }
 
-static uintmax_t print_test_fail_info(struct buff *buff,
-                                      const struct ctf__state *state) {
+static uintmax_t print_states(struct buff *buff,
+                              const struct ctf__states *states, int level,
+                              int parent_status) {
   uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 8;  // indent
-    if(detail) {
-      full_size +=
-        snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                 state->file, state->line);
-      if(color) {
-        full_size += sizeof("\x1b[31mE\x1b[0m");
-      } else {
-        full_size++;  // 'E' char
-      }
-
-      full_size += 2;  // "] " string
-      full_size += state->msg_size;
-      full_size += 1;  // '\n' char
-    } else {
-      full_size += print_fail_indicator(NULL);
-      full_size += 2;  // ' ' '\n' chars
-      full_size += state->msg_size;
-    }
+  if(!parent_status && level > opt_verbosity && !states_status(states))
     return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 8);
-  buff->size += 8;
-  if(detail) {
-    buff->size += sprintf(buff->buff + buff->size,
-                          "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                          state->file, state->line);
-    if(color) {
-      strcpy(buff->buff + buff->size, "\x1b[31mE\x1b[0m");
-      buff->size += sizeof("\x1b[31mE\x1b[0m") - 1;
-    } else {
-      buff->buff[buff->size++] = 'E';
-    }
-    buff->size += sprintf(buff->buff + buff->size, "] %s\n", state->msg);
-  } else {
-    print_fail_indicator(buff);
-    buff->size += sprintf(buff->buff + buff->size, " %s\n", state->msg);
-    buff->buff[buff->size] = 0;
-  }
-  return 0;
+  for(uintmax_t i = 0; i < states->size; i++)
+    full_size += print_state(buff, states->states + i, level);
+  return full_size;
 }
 
-static uintmax_t print_test_unknown_info(struct buff *buff,
-                                         struct ctf__state *state) {
+static uintmax_t print_subtest(struct buff *buff, struct ctf__subtest *subtest,
+                               int test_status) {
   uintmax_t full_size = 0;
-  if(buff == NULL) {
-    full_size += 8;  // indent
-    if(detail) {
-      full_size +=
-        snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                 state->file, state->line);
-      if(color) {
-        full_size += sizeof("\x1b[33mW\x1b[0m");
-        ;
+  uintmax_t level = 2;
+  uintmax_t t;
+  const int status = subtest->status;
+  if(!test_status && !status && opt_verbosity < 3) return full_size;
+
+  full_size += print_name_status(buff, subtest->name, strlen(subtest->name),
+                                 subtest->status, 2);
+  while(1) {
+    for(uintmax_t i = subtest->size - 1; i > 0; i--) {
+      if(subtest->elements[i].issubtest) {
+        subtest_stack_push(subtest->elements[i].el.subtest);
+        level_stack_push(level + 1);
       } else {
-        full_size++;  // 'W' char
+        full_size += print_states(buff, subtest->elements[i].el.states,
+                                  level + 1, subtest->status);
       }
-      full_size += 2;  // "] " chars
-      full_size += state->msg_size;
-      full_size += 1;  // '\n' char
-    } else {
-      full_size += print_unknown_indicator(NULL);
-      full_size += 2;  // ' ' '\n' chars
-      full_size += state->msg_size;
     }
-    return full_size;
-  }
-  memset(buff->buff + buff->size, ' ', 8);
-  buff->size += 8;
-  if(detail) {
-    buff->size += sprintf(buff->buff + buff->size,
-                          "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
-                          state->file, state->line);
-    if(color) {
-      strcpy(buff->buff + buff->size, "\x1b[33mW\x1b[0m");
-      buff->size += sizeof("\x1b[33mW\x1b[0m") - 1;
+    if(subtest->elements[0].issubtest) {
+      subtest_stack_push(subtest->elements[0].el.subtest);
+      level_stack_push(level + 1);
     } else {
-      buff->buff[buff->size++] = 'W';
+      full_size += print_states(buff, subtest->elements[0].el.states, level + 1,
+                                subtest->status);
     }
-    buff->size += sprintf(buff->buff + buff->size, "] %s\n", state->msg);
-  } else {
-    print_unknown_indicator(buff);
-    buff->size += sprintf(buff->buff + buff->size, " %s\n", state->msg);
-    buff->buff[buff->size] = 0;
+
+    subtest = subtest_stack_pop();
+    if(subtest == NULL) break;
+    t = level_stack_pop();
+    if(status)
+      full_size += print_name_status(buff, subtest->name, strlen(subtest->name),
+                                     subtest->status, t);
+    level = t;
   }
-  return 0;
+  return full_size;
+}
+
+static uintmax_t print_test(struct buff *buff, const struct ctf__test *test,
+                            uintmax_t test_name_len,
+                            struct ctf__thread_data *thread_data) {
+  uintmax_t full_size = 0;
+  int status;
+  struct ctf__test_element *el;
+
+  status = test_status(thread_data);
+  if(!status && opt_verbosity < 2) return full_size;
+
+  full_size += print_name_status(buff, test->name, test_name_len, status, 1);
+  for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
+    el = thread_data->test_elements + i;
+    if(el->issubtest) {
+      full_size += print_subtest(buff, el->el.subtest, status);
+    } else {
+      full_size += print_states(buff, el->el.states, 2, status);
+    }
+  }
+  return full_size;
 }
 
 void ctf_sigsegv_handler(int unused) {
@@ -425,14 +318,13 @@ void ctf_sigsegv_handler(int unused) {
   if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
   write(STDOUT_FILENO, print_buff[thread_index].buff,
         print_buff[thread_index].size);
-  for(uintmax_t i = 0; i < thread_data->states_size; i++) {
-    if(thread_data->states[i].status == 0) {
-      print_test_pass_info(print_buff + thread_index, thread_data->states + i);
-    } else if(thread_data->states[i].status == 1) {
-      print_test_fail_info(print_buff + thread_index, thread_data->states + i);
-    } else if(thread_data->states[i].status == 2) {
-      print_test_unknown_info(print_buff + thread_index,
-                              thread_data->states + i);
+  for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
+    if(thread_data->test_elements[i].issubtest) {
+      print_subtest(print_buff + thread_index,
+                    thread_data->test_elements[i].el.subtest, 2);
+    } else {
+      print_states(print_buff + thread_index,
+                   thread_data->test_elements[i].el.states, 1, 2);
     }
   }
   if(color) write(STDOUT_FILENO, err_color, sizeof(err_color));

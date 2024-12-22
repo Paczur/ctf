@@ -1,6 +1,7 @@
 #define MSG_SPRINTF_APPEND(msg, ...)                                        \
   do {                                                                      \
-    const uintmax_t printf_size = snprintf(NULL, 0, __VA_ARGS__) + 1;       \
+    const uintmax_t printf_size =                                           \
+      msg##_size + snprintf(NULL, 0, __VA_ARGS__) + 1;                      \
     uintmax_t mul = printf_size / DEFAULT_STATE_MSG_CAPACITY + 1;           \
     mul += (mul % 2 != 0 && mul != 1);                                      \
     if(msg == NULL) {                                                       \
@@ -119,15 +120,12 @@
     int status;                                                               \
     intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index); \
     struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;   \
-    thread_data_states_increment(thread_data);                                \
-    thread_data->states[thread_data->states_size - 1].status = 2;             \
-    assert_copy(thread_data->states + thread_data->states_size - 1, line,     \
-                file);                                                        \
-    CTF__ASSERT_PRINT_##TYPE(                                                 \
-      CMP, thread_data->states + thread_data->states_size - 1, a, b, a_str,   \
-      b_str);                                                                 \
+    struct ctf__state *state = state_next(thread_data);                       \
+    state->status = 2;                                                        \
+    assert_copy(state, line, file);                                           \
+    CTF__ASSERT_PRINT_##TYPE(CMP, state, a, b, a_str, b_str);                 \
     status = CTF__ASSERT_FCMP_##TYPE(a, CTF__ASSERT_CMP_##CMP, b);            \
-    thread_data->states[thread_data->states_size - 1].status = !status;       \
+    state->status = !status;                                                  \
     if(status) {                                                              \
       thread_data->stats.expects_passed++;                                    \
     } else {                                                                  \
@@ -144,16 +142,13 @@
     int status;                                                                \
     intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);  \
     struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;    \
-    thread_data_states_increment(thread_data);                                 \
-    thread_data->states[thread_data->states_size - 1].status = 2;              \
-    assert_copy(thread_data->states + thread_data->states_size - 1, line,      \
-                file);                                                         \
-    print_mem(thread_data->states + thread_data->states_size - 1, a, b, l, l,  \
-              step, sign, a_str, b_str, CTF__STRINGIFY(CTF__ASSERT_CMP_##CMP), \
-              type);                                                           \
-    status = thread_data->states[thread_data->states_size - 1]                 \
-               .status CTF__ASSERT_CMP_##CMP 0;                                \
-    thread_data->states[thread_data->states_size - 1].status = !status;        \
+    struct ctf__state *state = state_next(thread_data);                        \
+    state->status = 2;                                                         \
+    assert_copy(state, line, file);                                            \
+    print_mem(state, a, b, l, l, step, sign, a_str, b_str,                     \
+              CTF__STRINGIFY(CTF__ASSERT_CMP_##CMP), type);                    \
+    status = state->status CTF__ASSERT_CMP_##CMP 0;                            \
+    state->status = !status;                                                   \
     if(status) {                                                               \
       thread_data->stats.expects_passed++;                                     \
     } else {                                                                   \
@@ -170,20 +165,17 @@
     int status;                                                               \
     intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index); \
     struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;   \
-    thread_data_states_increment(thread_data);                                \
-    thread_data->states[thread_data->states_size - 1].status = 2;             \
-    assert_copy(thread_data->states + thread_data->states_size - 1, line,     \
-                file);                                                        \
-    print_mem(thread_data->states + thread_data->states_size - 1, a, b, la,   \
-              lb, step, sign, a_str, b_str,                                   \
+    struct ctf__state *state = state_next(thread_data);                       \
+    state->status = 2;                                                        \
+    assert_copy(state, line, file);                                           \
+    print_mem(state, a, b, la, lb, step, sign, a_str, b_str,                  \
               CTF__STRINGIFY(CTF__ASSERT_CMP_##CMP), type);                   \
-    if(thread_data->states[thread_data->states_size - 1].status == 0) {       \
+    if(state->status == 0) {                                                  \
       status = (la CTF__ASSERT_CMP_##CMP lb);                                 \
     } else {                                                                  \
-      status = (thread_data->states[thread_data->states_size - 1]             \
-                  .status CTF__ASSERT_CMP_##CMP 0);                           \
+      status = (state->status CTF__ASSERT_CMP_##CMP 0);                       \
     }                                                                         \
-    thread_data->states[thread_data->states_size - 1].status = !status;       \
+    state->status = !status;                                                  \
     if(status) {                                                              \
       thread_data->stats.expects_passed++;                                    \
     } else {                                                                  \
@@ -196,7 +188,7 @@
 static void msg_reserve(struct ctf__state *state, uintmax_t size) {
   uintmax_t mul = state->msg_size + size / DEFAULT_STATE_MSG_CAPACITY + 1;
   mul += (mul % 2 != 0 && mul != 1);
-  if(state->msg == NULL) {
+  if(state->msg == NULL && state->msg_capacity == 0) {
     state->msg_capacity = DEFAULT_STATE_MSG_CAPACITY * mul;
     state->msg = malloc(state->msg_capacity);
   } else if(state->msg_size + size >= state->msg_capacity) {
@@ -301,7 +293,7 @@ static void escaped_string(struct ctf__state *state, const char *str,
       }
     }
   }
-  msg_reserve(state, str_len - last + 4);
+  msg_reserve(state, str_len - last);
   memcpy(state->msg + state->msg_size, str + last, str_len - last);
   state->msg_size += str_len - last;
 }
@@ -494,21 +486,22 @@ void ctf__assert_fold(uintmax_t count, const char *msg, int line,
 void ctf_assert_hide(uintmax_t count) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  if(thread_data->states_size <= count) {
-    for(uintmax_t i = 0; i < thread_data->states_size; i++) {
-      if(thread_data->states[i].status) {
+  struct ctf__states *states = states_last(thread_data);
+  if(states == NULL) return;
+  if(states->size <= count) {
+    for(uintmax_t i = 0; i < states->size; i++) {
+      if(states->states[i].status) {
         longjmp(ctf__assert_jmp_buff[thread_index], 1);
       }
     }
-    thread_data->states_size = 0;
+    states_delete(states);
   } else {
-    for(uintmax_t i = thread_data->states_size - count;
-        i < thread_data->states_size; i++) {
-      if(thread_data->states[i].status) {
+    for(uintmax_t i = states->size - count; i < states->size; i++) {
+      if(states->states[i].status) {
         longjmp(ctf__assert_jmp_buff[thread_index], 1);
       }
     }
-    thread_data->states_size -= count;
+    states->size -= count;
   }
 }
 
@@ -516,11 +509,11 @@ uintmax_t ctf__fail(const char *m, int line, const char *file, ...) {
   va_list v;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  thread_data_states_increment(thread_data);
-  thread_data->states[thread_data->states_size - 1].status = 1;
-  assert_copy(thread_data->states + thread_data->states_size - 1, line, file);
+  struct ctf__state *state = state_next(thread_data);
+  state->status = 1;
+  assert_copy(state, line, file);
   va_start(v, file);
-  MSG_VSPRINTF(thread_data->states[thread_data->states_size - 1].msg, m, v);
+  MSG_VSPRINTF(state->msg, m, v);
   va_end(v);
   return 0;
 }
@@ -529,11 +522,11 @@ uintmax_t ctf__pass(const char *m, int line, const char *file, ...) {
   va_list v;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  thread_data_states_increment(thread_data);
-  thread_data->states[thread_data->states_size - 1].status = 0;
-  assert_copy(thread_data->states + thread_data->states_size - 1, line, file);
+  struct ctf__state *state = state_next(thread_data);
+  state->status = 0;
+  assert_copy(state, line, file);
   va_start(v, file);
-  MSG_VSPRINTF(thread_data->states[thread_data->states_size - 1].msg, m, v);
+  MSG_VSPRINTF(state->msg, m, v);
   va_end(v);
   return 1;
 }
@@ -543,18 +536,17 @@ uintmax_t ctf__assert_msg(int status, const char *msg, int line,
   va_list args;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  thread_data_states_increment(thread_data);
-  thread_data->states[thread_data->states_size - 1].status = status;
-  assert_copy(thread_data->states + thread_data->states_size - 1, line, file);
-  thread_data->states[thread_data->states_size - 1].msg_size = 0;
+  struct ctf__state *state = state_next(thread_data);
+  state->status = status;
+  assert_copy(state, line, file);
+  state->msg_size = 0;
   va_start(args, file);
   if(status) {
     thread_data->stats.asserts_passed++;
   } else {
     thread_data->stats.asserts_failed++;
   }
-  MSG_VSPRINTF(thread_data->states[thread_data->states_size - 1].msg, msg,
-               args);
+  MSG_VSPRINTF(state->msg, msg, args);
   va_end(args);
   return status;
 }
