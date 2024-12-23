@@ -114,24 +114,25 @@ struct ctf__mock_bind {
     }                                                                          \
     return _mock_f args;                                                       \
   }
-#define CTF_MOCK_VOID_RET(name, typed, args)                        \
-  struct ctf__mock ctf__mock_struct_##name;                         \
-  struct ctf__mock_struct_##name {                                  \
-    void *values;                                                   \
-    uintmax_t size;                                                 \
-    uintmax_t capacity;                                             \
-  } **ctf__mock_return_##name;                                      \
-  void __real_##name typed;                                         \
-  void __wrap_##name typed {                                        \
-    uintptr_t thread_index =                                        \
-      (uintptr_t)pthread_getspecific(ctf__thread_index);            \
-    struct ctf__mock_state *_data = ctf__mock_struct_##name.states; \
-    void(*_mock_f) typed;                                           \
-    if(_data == NULL || _data[thread_index].mock_f == NULL)         \
-      return __real_##name args;                                    \
-    _mock_f = (void(*) typed)_data[thread_index].mock_f;            \
-    _data[thread_index].call_count++;                               \
-    _mock_f args;                                                   \
+#define CTF_MOCK_VOID_RET(name, typed, args)                               \
+  struct ctf__mock ctf__mock_struct_##name;                                \
+  struct ctf__mock_struct_##name {                                         \
+    void *values;                                                          \
+    uintmax_t size;                                                        \
+    uintmax_t capacity;                                                    \
+  } **ctf__mock_return_##name =                                            \
+    (struct ctf__mock_struct_##name **)&(ctf__mock_struct_##name.returns); \
+  void __real_##name typed;                                                \
+  void __wrap_##name typed {                                               \
+    uintptr_t thread_index =                                               \
+      (uintptr_t)pthread_getspecific(ctf__thread_index);                   \
+    struct ctf__mock_state *_data = ctf__mock_struct_##name.states;        \
+    void(*_mock_f) typed;                                                  \
+    if(_data == NULL || _data[thread_index].mock_f == NULL)                \
+      return __real_##name args;                                           \
+    _mock_f = (void(*) typed)_data[thread_index].mock_f;                   \
+    _data[thread_index].call_count++;                                      \
+    _mock_f args;                                                          \
   }
 #define CTF_MOCK_STATIC(ret_type, name, typed, args)                           \
   struct ctf__mock ctf__mock_struct_##name;                                    \
@@ -171,24 +172,25 @@ struct ctf__mock_bind {
     }                                                                          \
     return _mock_f args;                                                       \
   }
-#define CTF_MOCK_VOID_RET_STATIC(name, typed, args)                 \
-  static struct ctf__mock ctf__mock_struct_##name;                  \
-  static struct ctf__mock_struct_##name {                           \
-    void *values;                                                   \
-    uintmax_t size;                                                 \
-    uintmax_t capacity;                                             \
-  } **ctf__mock_return_##name;                                      \
-  static void __real_##name typed;                                  \
-  static void __wrap_##name typed {                                 \
-    uintptr_t thread_index =                                        \
-      (uintptr_t)pthread_getspecific(ctf__thread_index);            \
-    struct ctf__mock_state *_data = ctf__mock_struct_##name.states; \
-    void(*_mock_f) typed;                                           \
-    if(_data == NULL || _data[thread_index].mock_f == NULL)         \
-      return __real_##name args;                                    \
-    _mock_f = (void(*) typed)_data[thread_index].mock_f;            \
-    _data[thread_index].call_count++;                               \
-    _mock_f args;                                                   \
+#define CTF_MOCK_VOID_RET_STATIC(name, typed, args)                        \
+  static struct ctf__mock ctf__mock_struct_##name;                         \
+  static struct ctf__mock_struct_##name {                                  \
+    void *values;                                                          \
+    uintmax_t size;                                                        \
+    uintmax_t capacity;                                                    \
+  } **ctf__mock_return_##name =                                            \
+    (struct ctf__mock_struct_##name **)&(ctf__mock_struct_##name.returns); \
+  static void __real_##name typed;                                         \
+  static void __wrap_##name typed {                                        \
+    uintptr_t thread_index =                                               \
+      (uintptr_t)pthread_getspecific(ctf__thread_index);                   \
+    struct ctf__mock_state *_data = ctf__mock_struct_##name.states;        \
+    void(*_mock_f) typed;                                                  \
+    if(_data == NULL || _data[thread_index].mock_f == NULL)                \
+      return __real_##name args;                                           \
+    _mock_f = (void(*) typed)_data[thread_index].mock_f;                   \
+    _data[thread_index].call_count++;                                      \
+    _mock_f args;                                                          \
   }
 #define CTF_MOCK_EXTERN(ret_type, name, typed)                     \
   extern struct ctf__mock ctf__mock_struct_##name;                 \

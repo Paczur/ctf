@@ -591,6 +591,11 @@ static void print_mem(struct ctf__state *state, const void *a, const void *b,
   state->status = status;
 }
 
+static void assert_copy(struct ctf__state *state, int line, const char *file) {
+  state->line = line;
+  state->file = file;
+}
+
 void ctf__assert_fold(uintmax_t count, const char *msg, int line,
                       const char *file) {
   ctf_assert_hide(count);
@@ -616,6 +621,17 @@ void ctf_assert_hide(uintmax_t count) {
       }
     }
     states->size -= count;
+  }
+}
+
+void ctf_assert_barrier(void) {
+  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
+  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
+  struct ctf__states *states = states_last(thread_data);
+  for(uintmax_t i = 0; i < states->size; i++) {
+    if(states->states[i].status) {
+      longjmp(ctf__assert_jmp_buff[thread_index], 1);
+    }
   }
 }
 

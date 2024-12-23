@@ -22,11 +22,11 @@ static int add(int a, int b) {
     return a+b;
 }
 
-CTF_TEST(add_signed) {
-  assert_int_eq(3, 1+2);
+CTF_TEST(add_test) {
+  assert(3, ==, 1+2);
 }
 
-CTF_GROUP(add, add_signed)
+CTF_GROUP(add, add_test)
 
 int main(void) {
     ctf_group_run(&add);
@@ -36,7 +36,9 @@ int main(void) {
 
 ### Installation
 #### Requirements
-- C11 (<threads.h> support)
+- C99 (optional C11 macros)
+- pthreads
+- typeof support
 #### Instructions
 ```
 make && sudo make install

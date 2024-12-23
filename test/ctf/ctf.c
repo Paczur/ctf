@@ -58,10 +58,14 @@ CTF_MOCK_GROUP(add_sub) = {
 CTF_TEST(mock_grouped) {
   mock_group(add_sub);
   subtest(first_mock_in_group) mock_select(add) {
+    mock_expect(a, ==, 1);
+    mock_expect(b, ==, 2);
     expect(0, ==, add(1, 2));
     expect(1, ==, mock_call_count);
   }
   subtest(second_mock_in_group) mock_select(sub) {
+    mock_expect(a, ==, 1);
+    mock_expect(b, ==, 2);
     expect(1, ==, sub(1, 2));
     expect(1, ==, mock_call_count);
   }

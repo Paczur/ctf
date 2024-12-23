@@ -259,12 +259,6 @@ static void groups_run(uintmax_t count, va_list args) {
   }
 }
 
-static void assert_copy(struct ctf__state *state, int line,
-                        const char *file) {
-  state->line = line;
-  state->file = file;
-}
-
 static uintmax_t parallel_get_thread_index(void) {
   const pthread_t thread = pthread_self();
   for(int i = 0; i < ctf__opt_threads; i++) {

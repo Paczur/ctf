@@ -244,21 +244,23 @@ static uintmax_t print_subtest(struct buff *buff, struct ctf__subtest *subtest,
   full_size += print_name_status(buff, subtest->name, strlen(subtest->name),
                                  subtest->status, 2);
   while(1) {
-    for(uintmax_t i = subtest->size - 1; i > 0; i--) {
-      if(subtest->elements[i].issubtest) {
-        subtest_stack_push(subtest->elements[i].el.subtest);
+    if(subtest->size > 0) {
+      for(uintmax_t i = subtest->size - 1; i > 0; i--) {
+        if(subtest->elements[i].issubtest) {
+          subtest_stack_push(subtest->elements[i].el.subtest);
+          level_stack_push(level + 1);
+        } else {
+          full_size += print_states(buff, subtest->elements[i].el.states,
+                                    level + 1, subtest->status);
+        }
+      }
+      if(subtest->elements[0].issubtest) {
+        subtest_stack_push(subtest->elements[0].el.subtest);
         level_stack_push(level + 1);
       } else {
-        full_size += print_states(buff, subtest->elements[i].el.states,
+        full_size += print_states(buff, subtest->elements[0].el.states,
                                   level + 1, subtest->status);
       }
-    }
-    if(subtest->elements[0].issubtest) {
-      subtest_stack_push(subtest->elements[0].el.subtest);
-      level_stack_push(level + 1);
-    } else {
-      full_size += print_states(buff, subtest->elements[0].el.states, level + 1,
-                                subtest->status);
     }
 
     subtest = subtest_stack_pop();
@@ -326,6 +328,7 @@ void ctf_sigsegv_handler(int unused) {
                    thread_data->test_elements[i].el.states, 1, 2);
     }
   }
+  fflush(stdout);
   if(color) write(STDOUT_FILENO, err_color, sizeof(err_color));
   if(opt_unicode == OFF) {
     write(STDOUT_FILENO, postmsg, sizeof(postmsg));
@@ -334,7 +337,6 @@ void ctf_sigsegv_handler(int unused) {
   }
   if(color) write(STDOUT_FILENO, print_color_reset, sizeof(print_color_reset));
 #pragma GCC diagnostic pop
-  fflush(stdout);
 }
 
 static void print_stats(struct ctf__stats *stats) {
