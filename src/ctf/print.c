@@ -182,9 +182,8 @@ static uintmax_t print_state(struct buff *buff, const struct ctf__state *state,
         full_size++;  // 'E'
       }
       full_size++;  // ']'
-    } else {
-      full_size += print_indicator(NULL, state->status);
     }
+    full_size += print_indicator(NULL, state->status);
     full_size += 2;  // ' ' '\n' chars
     full_size += state->msg_size;
     return full_size;

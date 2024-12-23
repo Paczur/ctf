@@ -2,38 +2,20 @@
 
 #include <stdlib.h>
 
+#define CTF__MOCK_TYPE_EXPECT 0
 #define CTF__MOCK_TYPE_ASSERT 1
-#define CTF__MOCK_TYPE_MEMORY 2
+#define CTF__MOCK_TYPE_MEM 2
+#define CTF__ASSERT_TYPE_INT intmax_t
+#define CTF__ASSERT_TYPE_UINT uintmax_t
+#define CTF__ASSERT_TYPE_CHAR char
+#define CTF__ASSERT_TYPE_PTR const void *
+#define CTF__ASSERT_TYPE_STR const char *
 
 #define CTF__MOCK_SELECTED                                    \
   ((struct ctf__mock *)(((void *)ctf__mock_return_selected) - \
                         offsetof(struct ctf__mock, returns)))
 #define CTF__MOCK_STRUCT_SELECTED \
   ((CTF__MOCK_SELECTED)->states + ctf__local_thread_index)
-
-#define CTF__MOCK_EXPECT_MEMORY(t, call_count, comp, type, name, var, val, l) \
-  ctf__mock_memory(CTF__MOCK_STRUCT_SELECTED, call_count,                     \
-                   type | CTF__MOCK_TYPE_MEMORY, __LINE__, __FILE__, #val,    \
-                   (void *)ctf__expect_memory_##comp, var, val, l,            \
-                   CTF__ASSERT_PRINT_TYPE_##t)
-#define CTF__MOCK_ASSERT_MEMORY(t, call_count, comp, type, name, var, val, l) \
-  ctf__mock_memory(CTF__MOCK_STRUCT_SELECTED, call_count,                     \
-                   type | CTF__MOCK_TYPE_ASSERT | CTF__MOCK_TYPE_MEMORY,      \
-                   __LINE__, __FILE__, #val,                                  \
-                   (void *)ctf__expect_memory_##comp, var, val, l,            \
-                   CTF__ASSERT_PRINT_TYPE_##t)
-#define CTF__MOCK_EXPECT(t, call_count, comp, type, name, var, val)    \
-  ctf__mock_##t(CTF__MOCK_STRUCT_SELECTED, call_count, type, __LINE__, \
-                __FILE__, #val, (void *)ctf__expect_##t##_##comp, var, val)
-#define CTF__MOCK_ASSERT(t, call_count, comp, type, name, var, val)       \
-  do {                                                                    \
-    preqreq_assert(                                                       \
-      ctf__mock_struct_##name[ctf__parallel_thread_index].mock_f != NULL, \
-      "Mock expect/assert used without mocking beforehand");              \
-    ctf__mock_##t(CTF__MOCK_STRUCT_SELECTED, call_count,                  \
-                  type | CTF__MOCK_TYPE_ASSERT, __LINE__, __FILE__, #val, \
-                  (void *)ctf__expect_##t##_##comp, var, val);            \
-  } while(0)
 
 struct ctf__check {
   const char *var;
@@ -61,6 +43,7 @@ struct ctf__check {
     intmax_t i;
     char c;
     const void *p;
+    const char *s;
   } val;
 };
 struct ctf__mock_state {
@@ -227,17 +210,16 @@ void ctf__mock_reset(struct ctf__mock_state *state);
 void ctf__mock_global(struct ctf__mock *mock, void (*f)(void));
 void ctf__mock_group(struct ctf__mock_bind *bind);
 void ctf__unmock_group(struct ctf__mock_bind *bind);
-void ctf__mock_memory(struct ctf__mock_state *state, uintmax_t call_count,
-                      int type, int, const char *, const char *, void *f,
-                      const char *var, const void *val, uintmax_t l,
-                      int mem_type);
-void ctf__mock_check_memory(struct ctf__mock_state *state, const void *v,
-                            const char *v_print, uintmax_t step, int sign);
+void ctf__mock_mem(struct ctf__mock_state *state, uintmax_t call_count,
+                   int type, int, const char *, const char *, void *f,
+                   const char *var, const void *val, uintmax_t l, int mem_type);
+void ctf__mock_check_mem(struct ctf__mock_state *state, const void *v,
+                         const char *v_print, uintmax_t step, int sign);
 void ctf__mock_returns_ensure_allocated(struct ctf__mock *mock,
                                         uintptr_t thread_index);
-void ctf__mock_will_return_nth(struct ctf__mock *mock, uintmax_t n,
-                               struct ctf__mock_return *returns,
-                               uintmax_t return_size, uintptr_t thread_index);
+void ctf__mock_return_nth(struct ctf__mock *mock, uintmax_t n,
+                          struct ctf__mock_return *returns,
+                          uintmax_t return_size, uintptr_t thread_index);
 uintmax_t ctf__mock_return_capacity(uintmax_t cap);
 
 #define ctf_mock_group(name) ctf__mock_group(ctf__mock_group_st_##name)
@@ -269,12 +251,12 @@ uintmax_t ctf__mock_return_capacity(uintmax_t cap);
 void ctf_unmock(void);
 #define ctf_unmock_group(name) ctf__unmock_group(ctf__mock_group_st_##name)
 #define ctf_mock_call_count CTF__MOCK_STRUCT_SELECTED->call_count
-#define ctf_mock_will_return(val) ctf_mock_will_return_nth(1, val)
-#define ctf_mock_will_return_nth(n, val)                                      \
+#define ctf_mock_return(val) ctf_mock_return_nth(1, val)
+#define ctf_mock_return_nth(n, val)                                           \
   do {                                                                        \
     ctf__mock_returns_ensure_allocated(CTF__MOCK_SELECTED,                    \
                                        ctf__local_thread_index);              \
-    ctf__mock_will_return_nth(                                                \
+    ctf__mock_return_nth(                                                     \
       CTF__MOCK_SELECTED, n,                                                  \
       (struct ctf__mock_return *)((*ctf__mock_return_selected) +              \
                                   ctf__local_thread_index),                   \
@@ -285,83 +267,328 @@ void ctf_unmock(void);
       val;                                                                    \
   } while(0)
 #define ctf_mock_real(name) __real_##name
-#define ctf_mock_check(name)                      \
+#define ctf_mock_check_select(name)               \
   struct ctf__mock_state *ctf__mock_check_state = \
     ctf__mock_struct_##name.states +              \
     (uintptr_t)pthread_getspecific(ctf__thread_index)
+#define ctf_mock_check(name)        \
+  _Generic((name),                  \
+    char: ctf__mock_check_char,     \
+    int8_t: ctf__mock_check_int,    \
+    int16_t: ctf__mock_check_int,   \
+    int32_t: ctf__mock_check_int,   \
+    int64_t: ctf__mock_check_int,   \
+    uint8_t: ctf__mock_check_uint,  \
+    uint16_t: ctf__mock_check_uint, \
+    uint32_t: ctf__mock_check_uint, \
+    uint64_t: ctf__mock_check_uint, \
+    default: ctf__mock_check_ptr)(ctf__mock_check_state, name, #name)
 
+#if __STDC_VERSION__ >= 201112L
+#define ctf_mock_expect(var, cmp, val)                                     \
+  _Generic((val),                                                          \
+    char: ctf__mock_expect_char,                                           \
+    int8_t: ctf__mock_expect_int,                                          \
+    int16_t: ctf__mock_expect_int,                                         \
+    int32_t: ctf__mock_expect_int,                                         \
+    int64_t: ctf__mock_expect_int,                                         \
+    uint8_t: ctf__mock_expect_uint,                                        \
+    uint16_t: ctf__mock_expect_uint,                                       \
+    uint32_t: ctf__mock_expect_uint,                                       \
+    uint64_t: ctf__mock_expect_uint,                                       \
+    default: ctf__mock_expect_ptr)(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, \
+                                   __FILE__, #val, #var, #cmp, val)
+#define ctf_mock_assert(var, cmp, val)                                     \
+  _Generic((val),                                                          \
+    char: ctf__mock_assert_char,                                           \
+    int8_t: ctf__mock_assert_int,                                          \
+    int16_t: ctf__mock_assert_int,                                         \
+    int32_t: ctf__mock_assert_int,                                         \
+    int64_t: ctf__mock_assert_int,                                         \
+    uint8_t: ctf__mock_assert_uint,                                        \
+    uint16_t: ctf__mock_assert_uint,                                       \
+    uint32_t: ctf__mock_assert_uint,                                       \
+    uint64_t: ctf__mock_assert_uint,                                       \
+    default: ctf__mock_assert_ptr)(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, \
+                                   __FILE__, #val, #var, #cmp, val)
+#define ctf_mock_expect_nth(n, var, cmp, val)                              \
+  _Generic((val),                                                          \
+    char: ctf__mock_expect_char,                                           \
+    int8_t: ctf__mock_expect_int,                                          \
+    int16_t: ctf__mock_expect_int,                                         \
+    int32_t: ctf__mock_expect_int,                                         \
+    int64_t: ctf__mock_expect_int,                                         \
+    uint8_t: ctf__mock_expect_uint,                                        \
+    uint16_t: ctf__mock_expect_uint,                                       \
+    uint32_t: ctf__mock_expect_uint,                                       \
+    uint64_t: ctf__mock_expect_uint,                                       \
+    default: ctf__mock_expect_ptr)(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, \
+                                   __FILE__, #val, #var, #cmp, val)
+#define ctf_mock_assert_nth(n, var, cmp, val)                              \
+  _Generic((val),                                                          \
+    char: ctf__mock_assert_char,                                           \
+    int8_t: ctf__mock_assert_int,                                          \
+    int16_t: ctf__mock_assert_int,                                         \
+    int32_t: ctf__mock_assert_int,                                         \
+    int64_t: ctf__mock_assert_int,                                         \
+    uint8_t: ctf__mock_assert_uint,                                        \
+    uint16_t: ctf__mock_assert_uint,                                       \
+    uint32_t: ctf__mock_assert_uint,                                       \
+    uint64_t: ctf__mock_assert_uint,                                       \
+    default: ctf__mock_assert_ptr)(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, \
+                                   __FILE__, #val, #var, #cmp, val)
+#define ctf_mock_expect_mem(var, cmp, val, l)                                  \
+  ctf__mock_expect_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
+                       #var, #cmp, val, l,                                     \
+                       _Generic(*(val),                                        \
+                         char: CTF__ASSERT_PRINT_TYPE_char,                    \
+                         int8_t: CTF__ASSERT_PRINT_TYPE_int,                   \
+                         int16_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int32_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int64_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         uint8_t: CTF__ASSERT_PRINT_TYPE_uint,                 \
+                         uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         default: CTF__ASSERT_PRINT_TYPE_ptr))
+#define ctf_mock_assert_mem(var, cmp, val, l)                                  \
+  ctf__mock_assert_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
+                       #var, #cmp, val, l,                                     \
+                       _Generic(*(val),                                        \
+                         char: CTF__ASSERT_PRINT_TYPE_char,                    \
+                         int8_t: CTF__ASSERT_PRINT_TYPE_int,                   \
+                         int16_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int32_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int64_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         uint8_t: CTF__ASSERT_PRINT_TYPE_uint,                 \
+                         uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         default: CTF__ASSERT_PRINT_TYPE_ptr))
+#define ctf_mock_expect_arr(var, cmp, val)                                     \
+  ctf__mock_expect_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
+                       #var, #cmp, val, sizeof(val) / sizeof(*(val)),          \
+                       _Generic(*(val),                                        \
+                         char: CTF__ASSERT_PRINT_TYPE_char,                    \
+                         int8_t: CTF__ASSERT_PRINT_TYPE_int,                   \
+                         int16_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int32_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int64_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         uint8_t: CTF__ASSERT_PRINT_TYPE_uint,                 \
+                         uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         default: CTF__ASSERT_PRINT_TYPE_ptr))
+#define ctf_mock_assert_arr(var, cmp, val)                                     \
+  ctf__mock_assert_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
+                       #var, #cmp, val, sizeof(val) / sizeof(*(val)),          \
+                       _Generic(*(val),                                        \
+                         char: CTF__ASSERT_PRINT_TYPE_char,                    \
+                         int8_t: CTF__ASSERT_PRINT_TYPE_int,                   \
+                         int16_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int32_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int64_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         uint8_t: CTF__ASSERT_PRINT_TYPE_uint,                 \
+                         uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         default: CTF__ASSERT_PRINT_TYPE_ptr))
+#endif
+#define MOCK_FUNCTION(ea, EA, type, TYPE)                                     \
+  void ctf__mock_##ea##_##type(struct ctf__mock_state *state, uintmax_t, int, \
+                               const char *, const char *, const char *,      \
+                               const char *, CTF__ASSERT_TYPE_##TYPE);
+#define MOCK_MEM_FUNCTION(ea, EA)                                     \
+  void ctf__mock_##ea##_mem(struct ctf__mock_state *, uintmax_t, int, \
+                            const char *, const char *, const char *, \
+                            const char *, const void *, uintmax_t, int);
 // clang-format off
 /*
-define(`MOCK_FUNCTION_HELPER', `void ctf__mock_$1(struct ctf__mock_state *state, uintmax_t, int, int, const char *, const char*, void *, const char*, $2 val);')
-define(`MOCK_FUNCTION', `MOCK_FUNCTION_HELPER(`$1',TYPE(`$1'))')
 define(`MOCK_CHECK_FUNCTION_HELPER', `void ctf__mock_check_$1(struct ctf__mock_state *state, $2 v, const char *v_print);')
-define(`MOCK_CHECK_MEMORY_FUNCTION_HELPER', `void ctf__mock_check_memory_$1(struct ctf__mock_state *state, const void *v, const char *v_print, uintmax_t step, int sign);')
+define(`MOCK_CHECK_MEM_FUNCTION_HELPER', `void ctf__mock_check_mem_$1(struct ctf__mock_state *state, const void *v, const char *v_print, uintmax_t step, int sign);')
 define(`MOCK_CHECK_FUNCTION', `MOCK_CHECK_FUNCTION_HELPER(`$1', TYPE(`$1'))')
-define(`MOCK_CHECK_MEMORY_FUNCTION', `MOCK_CHECK_MEMORY_FUNCTION_HELPER(`$1', TYPE(`$1'))')
+define(`MOCK_CHECK_MEM_FUNCTION', `MOCK_CHECK_MEM_FUNCTION_HELPER(`$1', TYPE(`$1'))')
 
-define(`MOCK_EA_TEMPLATE',
-`format(`#define $4mock_$3_$1_$2(var, val) CTF__MOCK_EXPECT($1, 1, $2, %s, name, #var, val);', ifelse(`$3', `assert', `CTF__MOCK_TYPE_ASSERT', `0' ))')
-define(`MOCK_EA_MEMORY_TEMPLATE',
-`format(`#define $4mock_$3_memory_$1_$2(var, val, length) CTF__MOCK_%s_MEMORY($1, 1, $2, 0, name, #var, val, length);', ifelse(`$3', `assert', `ASSERT', `EXPECT'))')
-define(`MOCK_EA_ARRAY_TEMPLATE',
-`format(`#define $4mock_$3_array_$1_$2(var, val) CTF__MOCK_%s_MEMORY($1, 1, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));', ifelse(`$3', `assert', `ASSERT', `EXPECT'))')
-define(`MOCK_EA_NTH_TEMPLATE',
-`format(`#define $4mock_$3_nth_$1_$2(n, var, val) CTF__MOCK_EXPECT($1, n, $2, %s, name, #var, val);', ifelse(`$3', `assert', `CTF__MOCK_TYPE_ASSERT', `0' ))')
-define(`MOCK_EA_NTH_MEMORY_TEMPLATE',
-`format(`#define $4mock_$3_nth_memory_$1_$2(n, var, val, length) CTF__MOCK_%s_MEMORY($1, n, $2, 0, name, #var, val, length);', ifelse(`$3', `assert', `ASSERT', `EXPECT'))')
-define(`MOCK_EA_NTH_ARRAY_TEMPLATE',
-`format(`#define $4mock_$3_nth_array_$1_$2(n, var, val) CTF__MOCK_%s_MEMORY($1, n, $2, 0, name, #var, val, sizeof(val)/sizeof(*(val)));', ifelse(`$3', `assert', `ASSERT', `EXPECT'))')
+define(`MOCK_EA_COMP_TEMPLATE', `#define $3mock_$2_$1(var, cmp, val) ctf__mock_$2_$1(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, #var, #cmp, val)')
+define(`MOCK_EA_COMP_MEM_TEMPLATE', `#define $3mock_$2_mem_$1(var, cmp, val, length) ctf__mock_$2_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, #var, #cmp, val, length, CTF__ASSERT_PRINT_TYPE_$1);')
+define(`MOCK_EA_COMP_ARR_TEMPLATE', `#define $3mock_$2_arr_$1(var, cmp, val) ctf__mock_$2_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, #var, #cmp, val, sizeof(val)/sizeof(*(val)), CTF__ASSERT_PRINT_TYPE_$1);')
+define(`MOCK_EA_COMP_NTH_TEMPLATE', `#define $3mock_$2_nth_$1(n, var, cmp, val) ctf__mock_$2_$1(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, __FILE__, #val, #var, #cmp, val)')
+define(`MOCK_EA_COMP_NTH_MEM_TEMPLATE', `#define $3mock_$2_nth_mem_$1(var, cmp, val, length) ctf__mock_$2_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, #var, #cmp, val, length, CTF__ASSERT_PRINT_TYPE_$1);')
+define(`MOCK_EA_COMP_NTH_ARR_TEMPLATE', `#define $3mock_$2_nth_arr_$1(n, var, cmp, val) ctf__mock_$2_mem(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, __FILE__, #val, #var, #cmp, val, sizeof(val)/sizeof(*(val)), CTF__ASSERT_PRINT_TYPE_$1);')
 
 define(`MOCK_CHECK', `#define ctf_mock_check_$1(v) ctf__mock_check_$1(ctf__mock_check_state, v, #v)')
 define(`MOCK_CHECK_STRING', `#define ctf_mock_check_str(v) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
 ctf__mock_check_str(ctf__mock_check_state, v, #v)')
-define(`MOCK_CHECK_MEMORY',
-`format(`#define ctf_mock_check_memory_$1(v) \
+define(`MOCK_CHECK_MEM',
+`format(`#define ctf_mock_check_mem_$1(v) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
-ctf__mock_check_memory_$1(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
+ctf__mock_check_mem_$1(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
   ,ifelse(`$1',`int',1,0))')
 */
-COMB(`MOCK_FUNCTION', `(PRIMITIVE_TYPES, str)')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_MEMORY_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_ARRAY_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_MEMORY_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_ARRAY_TEMPLATE')
+COMB3(`RUN2', `(MOCK_FUNCTION)', `(EAS)', `(PRIMITIVE_TYPES, str)')
+COMB2(`RUN1', `(MOCK_MEM_FUNCTION)', `(EAS)')
+EA_COMP_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_TEMPLATE')
+EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_COMP_MEM_TEMPLATE')
+EA_COMP_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_ARR_TEMPLATE')
+EA_COMP_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_NTH_TEMPLATE')
+EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_COMP_NTH_MEM_TEMPLATE')
+EA_COMP_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_NTH_ARR_TEMPLATE')
 COMB(`MOCK_CHECK_FUNCTION', `(PRIMITIVE_TYPES, str)')
 COMB(`MOCK_CHECK', `(PRIMITIVE_TYPES)')
 MOCK_CHECK_STRING
-COMB(`MOCK_CHECK_MEMORY', `(PRIMITIVE_TYPES)')
+COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
 // clang-format on
 
 #if CTF_ALIASES == CTF_ON
+#if __STDC_VERSION__ >= 201112L
+#define mock_expect(var, cmp, val)                                         \
+  _Generic((val),                                                          \
+    char: ctf__mock_expect_char,                                           \
+    int8_t: ctf__mock_expect_int,                                          \
+    int16_t: ctf__mock_expect_int,                                         \
+    int32_t: ctf__mock_expect_int,                                         \
+    int64_t: ctf__mock_expect_int,                                         \
+    uint8_t: ctf__mock_expect_uint,                                        \
+    uint16_t: ctf__mock_expect_uint,                                       \
+    uint32_t: ctf__mock_expect_uint,                                       \
+    uint64_t: ctf__mock_expect_uint,                                       \
+    default: ctf__mock_expect_ptr)(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, \
+                                   __FILE__, #val, #var, #cmp, val)
+#define mock_assert(var, cmp, val)                                         \
+  _Generic((val),                                                          \
+    char: ctf__mock_assert_char,                                           \
+    int8_t: ctf__mock_assert_int,                                          \
+    int16_t: ctf__mock_assert_int,                                         \
+    int32_t: ctf__mock_assert_int,                                         \
+    int64_t: ctf__mock_assert_int,                                         \
+    uint8_t: ctf__mock_assert_uint,                                        \
+    uint16_t: ctf__mock_assert_uint,                                       \
+    uint32_t: ctf__mock_assert_uint,                                       \
+    uint64_t: ctf__mock_assert_uint,                                       \
+    default: ctf__mock_assert_ptr)(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, \
+                                   __FILE__, #val, #var, #cmp, val)
+#define mock_expect_nth(n, var, cmp, val)                                  \
+  _Generic((val),                                                          \
+    char: ctf__mock_expect_char,                                           \
+    int8_t: ctf__mock_expect_int,                                          \
+    int16_t: ctf__mock_expect_int,                                         \
+    int32_t: ctf__mock_expect_int,                                         \
+    int64_t: ctf__mock_expect_int,                                         \
+    uint8_t: ctf__mock_expect_uint,                                        \
+    uint16_t: ctf__mock_expect_uint,                                       \
+    uint32_t: ctf__mock_expect_uint,                                       \
+    uint64_t: ctf__mock_expect_uint,                                       \
+    default: ctf__mock_expect_ptr)(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, \
+                                   __FILE__, #val, #var, #cmp, val)
+#define mock_assert_nth(n, var, cmp, val)                                  \
+  _Generic((val),                                                          \
+    char: ctf__mock_assert_char,                                           \
+    int8_t: ctf__mock_assert_int,                                          \
+    int16_t: ctf__mock_assert_int,                                         \
+    int32_t: ctf__mock_assert_int,                                         \
+    int64_t: ctf__mock_assert_int,                                         \
+    uint8_t: ctf__mock_assert_uint,                                        \
+    uint16_t: ctf__mock_assert_uint,                                       \
+    uint32_t: ctf__mock_assert_uint,                                       \
+    uint64_t: ctf__mock_assert_uint,                                       \
+    default: ctf__mock_assert_ptr)(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, \
+                                   __FILE__, #val, #var, #cmp, val)
+#define mock_expect_mem(var, cmp, val, l)                                      \
+  ctf__mock_expect_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
+                       #var, #cmp, val, l,                                     \
+                       _Generic(*(val),                                        \
+                         char: CTF__ASSERT_PRINT_TYPE_char,                    \
+                         int8_t: CTF__ASSERT_PRINT_TYPE_int,                   \
+                         int16_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int32_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int64_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         uint8_t: CTF__ASSERT_PRINT_TYPE_uint,                 \
+                         uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         default: CTF__ASSERT_PRINT_TYPE_ptr))
+#define mock_assert_mem(var, cmp, val, l)                                      \
+  ctf__mock_assert_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
+                       #var, #cmp, val, l,                                     \
+                       _Generic(*(val),                                        \
+                         char: CTF__ASSERT_PRINT_TYPE_char,                    \
+                         int8_t: CTF__ASSERT_PRINT_TYPE_int,                   \
+                         int16_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int32_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int64_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         uint8_t: CTF__ASSERT_PRINT_TYPE_uint,                 \
+                         uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         default: CTF__ASSERT_PRINT_TYPE_ptr))
+#define mock_expect_arr(var, cmp, val)                                         \
+  ctf__mock_expect_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
+                       #var, #cmp, val, sizeof(val) / sizeof(*(val)),          \
+                       _Generic(*(val),                                        \
+                         char: CTF__ASSERT_PRINT_TYPE_char,                    \
+                         int8_t: CTF__ASSERT_PRINT_TYPE_int,                   \
+                         int16_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int32_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int64_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         uint8_t: CTF__ASSERT_PRINT_TYPE_uint,                 \
+                         uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         default: CTF__ASSERT_PRINT_TYPE_ptr))
+#define mock_assert_arr(var, cmp, val)                                         \
+  ctf__mock_assert_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
+                       #var, #cmp, val, sizeof(val) / sizeof(*(val)),          \
+                       _Generic(*(val),                                        \
+                         char: CTF__ASSERT_PRINT_TYPE_char,                    \
+                         int8_t: CTF__ASSERT_PRINT_TYPE_int,                   \
+                         int16_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int32_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         int64_t: CTF__ASSERT_PRINT_TYPE_int,                  \
+                         uint8_t: CTF__ASSERT_PRINT_TYPE_uint,                 \
+                         uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         default: CTF__ASSERT_PRINT_TYPE_ptr))
+#endif
+#define mock_check(name)            \
+  _Generic((name),                  \
+    char: ctf__mock_check_char,     \
+    int8_t: ctf__mock_check_int,    \
+    int16_t: ctf__mock_check_int,   \
+    int32_t: ctf__mock_check_int,   \
+    int64_t: ctf__mock_check_int,   \
+    uint8_t: ctf__mock_check_uint,  \
+    uint16_t: ctf__mock_check_uint, \
+    uint32_t: ctf__mock_check_uint, \
+    uint64_t: ctf__mock_check_uint, \
+    default: ctf__mock_check_ptr)(ctf__mock_check_state, name, #name)
 // clang-format off
 /*
 define(`MOCK_CHECK_ALIAS', `#define mock_check_$1(v) ctf__mock_check_$1(ctf__mock_check_state, v, #v)')
 define(`MOCK_CHECK_STRING_ALIAS', `#define mock_check_str(v) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
 ctf__mock_check_str(ctf__mock_check_state, v, #v)')
-define(`MOCK_CHECK_MEMORY_ALIAS',
-`format(`#define mock_check_memory_$1(v) \
+define(`MOCK_CHECK_MEM_ALIAS',
+`format(`#define mock_check_mem_$1(v) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
-ctf__mock_check_memory(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
+ctf__mock_check_mem(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
   ,ifelse(`$1',`int',1,0))')
 */
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_MEMORY_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_ARRAY_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_MEMORY_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `MOCK_EA_NTH_ARRAY_TEMPLATE')
+EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_TEMPLATE')
+EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_COMP_MEM_TEMPLATE')
+EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_ARR_TEMPLATE')
+EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_NTH_TEMPLATE')
+EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_COMP_NTH_MEM_TEMPLATE')
+EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_NTH_ARR_TEMPLATE')
 COMB(`MOCK_CHECK_ALIAS', `(PRIMITIVE_TYPES)')
 MOCK_CHECK_STRING_ALIAS
-COMB(`MOCK_CHECK_MEMORY_ALIAS', `(PRIMITIVE_TYPES)')
+COMB(`MOCK_CHECK_MEM_ALIAS', `(PRIMITIVE_TYPES)')
 COMB(`ALIAS',
      `(mock_global(name, f), mock(name, f), unmock(), mock_select(fn),
        mock_group(name), unmock_group(name),
        mock_call_count, mock_real(name),
-       mock_check(name),
-       mock_will_return(val), mock_will_return_nth(n, val))')
+       mock_check_select(name),
+       mock_return(val), mock_return_nth(n, val))')
 // clang-format on
 #endif

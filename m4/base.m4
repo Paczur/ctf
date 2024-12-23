@@ -9,8 +9,11 @@ define(`foreach', `pushdef(`$1')_$0(`$1',
 define(`_arg1', `$1')dnl
 define(`_foreach', `ifelse(`$2', `(`')', `',
   `define(`$1', _arg1$2)$3`'$0(`$1', (dquote(shift$2)), `$3')')')
+
 define(`PRIMITIVE_TYPES', ``char', `int', `uint', `ptr'')
 define(`CMPS', ``eq', `neq', `lt', `gt', `lte', `gte'')
+define(`EAS', ``assert', `expect'')
+
 define(`COMB', `foreach(`x', `$2', `indir(`$1', x)
 ')')
 define(`COMB2', `foreach(`x', `$2', `foreach(`y', `$3', `indir(`$1', x, y)

@@ -48,12 +48,6 @@
 #define CTF__STRINGIFY2(x) #x
 #define CTF__STRINGIFY(x) CTF__STRINGIFY2(x)
 
-#define CTF__ASSERT_TYPE_INT intmax_t
-#define CTF__ASSERT_TYPE_UINT uintmax_t
-#define CTF__ASSERT_TYPE_CHAR char
-#define CTF__ASSERT_TYPE_PTR const void *
-#define CTF__ASSERT_TYPE_STR const char *
-
 #define CTF__ASSERT_CMP_EQ ==
 #define CTF__ASSERT_CMP_NEQ !=
 #define CTF__ASSERT_CMP_GT >
@@ -134,34 +128,34 @@
     CTF__ASSERT_JMP_##EA(status, thread_index);                               \
     return status;                                                            \
   }
-#define EA_MEM_GEN(ea, EA, cmp, CMP)                                           \
-  int ctf__##ea##_memory_##cmp(const void *a, const void *b, uintmax_t l,      \
-                               uintmax_t step, int sign, int type,             \
-                               const char *a_str, const char *b_str, int line, \
-                               const char *file) {                             \
-    int status;                                                                \
-    intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);  \
-    struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;    \
-    struct ctf__state *state = state_next(thread_data);                        \
-    state->status = 2;                                                         \
-    assert_copy(state, line, file);                                            \
-    print_mem(state, a, b, l, l, step, sign, a_str, b_str,                     \
-              CTF__STRINGIFY(CTF__ASSERT_CMP_##CMP), type);                    \
-    status = state->status CTF__ASSERT_CMP_##CMP 0;                            \
-    state->status = !status;                                                   \
-    if(status) {                                                               \
-      thread_data->stats.expects_passed++;                                     \
-    } else {                                                                   \
-      thread_data->stats.expects_failed++;                                     \
-    }                                                                          \
-    CTF__ASSERT_JMP_##EA(status, thread_index);                                \
-    return status;                                                             \
+#define EA_MEM_GEN(ea, EA, cmp, CMP)                                          \
+  int ctf__##ea##_mem_##cmp(const void *a, const void *b, uintmax_t l,        \
+                            uintmax_t step, int sign, int type,               \
+                            const char *a_str, const char *b_str, int line,   \
+                            const char *file) {                               \
+    int status;                                                               \
+    intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index); \
+    struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;   \
+    struct ctf__state *state = state_next(thread_data);                       \
+    state->status = 2;                                                        \
+    assert_copy(state, line, file);                                           \
+    print_mem(state, a, b, l, l, step, sign, a_str, b_str,                    \
+              CTF__STRINGIFY(CTF__ASSERT_CMP_##CMP), type);                   \
+    status = state->status CTF__ASSERT_CMP_##CMP 0;                           \
+    state->status = !status;                                                  \
+    if(status) {                                                              \
+      thread_data->stats.expects_passed++;                                    \
+    } else {                                                                  \
+      thread_data->stats.expects_failed++;                                    \
+    }                                                                         \
+    CTF__ASSERT_JMP_##EA(status, thread_index);                               \
+    return status;                                                            \
   }
 #define EA_ARR_GEN(ea, EA, cmp, CMP)                                          \
-  int ctf__##ea##_array_##cmp(const void *a, const void *b, uintmax_t la,     \
-                              uintmax_t lb, uintmax_t step, int sign,         \
-                              int type, const char *a_str, const char *b_str, \
-                              int line, const char *file) {                   \
+  int ctf__##ea##_arr_##cmp(const void *a, const void *b, uintmax_t la,       \
+                            uintmax_t lb, uintmax_t step, int sign, int type, \
+                            const char *a_str, const char *b_str, int line,   \
+                            const char *file) {                               \
     int status;                                                               \
     intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index); \
     struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;   \
@@ -183,6 +177,74 @@
     }                                                                         \
     CTF__ASSERT_JMP_##EA(status, thread_index);                               \
     return status;                                                            \
+  }
+#define EA_COMP_GEN(ea, EA, type, TYPE)                                   \
+  int ctf__##ea##_##type(CTF__ASSERT_TYPE_##TYPE a, const char *cmp,      \
+                         CTF__ASSERT_TYPE_##TYPE b, const char *a_str,    \
+                         const char *b_str, int line, const char *file) { \
+    if(cmp[0] == '>' && cmp[1] == 0) {                                    \
+      return ctf__##ea##_##type##_gt(a, b, a_str, b_str, line, file);     \
+    } else if(cmp[0] == '<' && cmp[1] == 0) {                             \
+      return ctf__##ea##_##type##_lt(a, b, a_str, b_str, line, file);     \
+    } else if(cmp[0] == '!' && cmp[1] == '=' && cmp[2] == 0) {            \
+      return ctf__##ea##_##type##_neq(a, b, a_str, b_str, line, file);    \
+    } else if(cmp[0] == '>' && cmp[1] == '=' && cmp[2] == 0) {            \
+      return ctf__##ea##_##type##_gte(a, b, a_str, b_str, line, file);    \
+    } else if(cmp[0] == '<' && cmp[1] == '=' && cmp[2] == 0) {            \
+      return ctf__##ea##_##type##_lte(a, b, a_str, b_str, line, file);    \
+    } else {                                                              \
+      return ctf__##ea##_##type##_eq(a, b, a_str, b_str, line, file);     \
+    }                                                                     \
+  }
+#define EA_COMP_MEM_GEN(ea, EA)                                                \
+  int ctf__##ea##_mem(const void *a, const char *cmp, const void *b,           \
+                      uintmax_t l, uintmax_t step, int sign, int type,         \
+                      const char *a_str, const char *b_str, int line,          \
+                      const char *file) {                                      \
+    if(cmp[0] == '>' && cmp[1] == 0) {                                         \
+      return ctf__##ea##_mem_gt(a, b, l, step, sign, type, a_str, b_str, line, \
+                                file);                                         \
+    } else if(cmp[0] == '<' && cmp[1] == 0) {                                  \
+      return ctf__##ea##_mem_lt(a, b, l, step, sign, type, a_str, b_str, line, \
+                                file);                                         \
+    } else if(cmp[0] == '!' && cmp[1] == '=' && cmp[2] == 0) {                 \
+      return ctf__##ea##_mem_neq(a, b, l, step, sign, type, a_str, b_str,      \
+                                 line, file);                                  \
+    } else if(cmp[0] == '>' && cmp[1] == '=' && cmp[2] == 0) {                 \
+      return ctf__##ea##_mem_gte(a, b, l, step, sign, type, a_str, b_str,      \
+                                 line, file);                                  \
+    } else if(cmp[0] == '<' && cmp[1] == '=' && cmp[2] == 0) {                 \
+      return ctf__##ea##_mem_lte(a, b, l, step, sign, type, a_str, b_str,      \
+                                 line, file);                                  \
+    } else {                                                                   \
+      return ctf__##ea##_mem_eq(a, b, l, step, sign, type, a_str, b_str, line, \
+                                file);                                         \
+    }                                                                          \
+  }
+#define EA_COMP_ARR_GEN(ea, EA)                                                \
+  int ctf__##ea##_arr(const void *a, const char *cmp, const void *b,           \
+                      uintmax_t la, uintmax_t lb, uintmax_t step, int sign,    \
+                      int type, const char *a_str, const char *b_str,          \
+                      int line, const char *file) {                            \
+    if(cmp[0] == '>' && cmp[1] == 0) {                                         \
+      return ctf__##ea##_arr_gt(a, b, la, lb, step, sign, type, a_str, b_str,  \
+                                line, file);                                   \
+    } else if(cmp[0] == '<' && cmp[1] == 0) {                                  \
+      return ctf__##ea##_arr_lt(a, b, la, lb, step, sign, type, a_str, b_str,  \
+                                line, file);                                   \
+    } else if(cmp[0] == '!' && cmp[1] == '=' && cmp[2] == 0) {                 \
+      return ctf__##ea##_arr_neq(a, b, la, lb, step, sign, type, a_str, b_str, \
+                                 line, file);                                  \
+    } else if(cmp[0] == '>' && cmp[1] == '=' && cmp[2] == 0) {                 \
+      return ctf__##ea##_arr_gte(a, b, la, lb, step, sign, type, a_str, b_str, \
+                                 line, file);                                  \
+    } else if(cmp[0] == '<' && cmp[1] == '=' && cmp[2] == 0) {                 \
+      return ctf__##ea##_arr_lte(a, b, la, lb, step, sign, type, a_str, b_str, \
+                                 line, file);                                  \
+    } else {                                                                   \
+      return ctf__##ea##_arr_eq(a, b, la, lb, step, sign, type, a_str, b_str,  \
+                                line, file);                                   \
+    }                                                                          \
   }
 
 static void msg_reserve(struct ctf__state *state, uintmax_t size) {
@@ -552,7 +614,10 @@ uintmax_t ctf__assert_msg(int status, const char *msg, int line,
 }
 
 // clang-format off
-COMB4(`RUN3', `(EA_GEN)', `(expect, assert)', `(PRIMITIVE_TYPES, str)', `(CMPS)')
-COMB3(`RUN2', `(EA_MEM_GEN)', `(expect, assert)', `(CMPS)')
-COMB3(`RUN2', `(EA_ARR_GEN)', `(expect, assert)', `(CMPS)')
+COMB4(`RUN3', `(EA_GEN)', `(EAS)', `(PRIMITIVE_TYPES, str)', `(CMPS)')
+COMB3(`RUN2', `(EA_MEM_GEN)', `(EAS)', `(CMPS)')
+COMB3(`RUN2', `(EA_ARR_GEN)', `(EAS)', `(CMPS)')
+COMB3(`RUN2', `(EA_COMP_GEN)', `(EAS)', `(PRIMITIVE_TYPES, str)')
+COMB2(`RUN1', `(EA_COMP_MEM_GEN)', `(EAS)')
+COMB2(`RUN1', `(EA_COMP_ARR_GEN)', `(EAS)')
 // clang-format on
