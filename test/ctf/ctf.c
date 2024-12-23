@@ -1022,6 +1022,42 @@ CTF_TEST(uint_assert) {
   assert(a, >=, a);
   assert(b, >=, a);
 }
+CTF_TEST(float_expect_success) {
+  float a = -0.3;
+  float b = 0.9;
+  expect(a, ==, a);
+  expect(a, !=, b);
+  expect(a, <, b);
+  expect(b, >, a);
+  expect(a, <=, a);
+  expect(a, <=, b);
+  expect(a, >=, a);
+  expect(b, >=, a);
+}
+CTF_TEST(float_expect_failure) {
+  float a = -0.3;
+  float b = 0.9;
+  expect(a, ==, b);
+  expect(a, !=, a);
+  expect(a, <, a);
+  expect(b, <, a);
+  expect(a, >, a);
+  expect(a, >, b);
+  expect(b, <=, a);
+  expect(a, >=, b);
+}
+CTF_TEST(float_assert) {
+  float a = -0.3;
+  float b = 0.9;
+  assert(a, ==, a);
+  assert(a, !=, b);
+  assert(a, <, b);
+  assert(b, >, a);
+  assert(a, <=, a);
+  assert(a, <=, b);
+  assert(a, >=, a);
+  assert(b, >=, a);
+}
 CTF_TEST(ptr_expect_success) {
   int arr[2];
   int *a = arr;
@@ -1158,10 +1194,10 @@ CTF_TEST(str_assert) {
   assert_str(s4, >=, s1);
 }
 CTF_GROUP(primitive_success) = {
-  char_expect_success, char_assert, int_expect_success,  int_assert,
-  bool_expect_success, bool_assert, uint_expect_success, uint_assert,
-  ptr_expect_success,  ptr_assert,  null_expect_success, null_assert,
-  str_expect_success,  str_assert,
+  char_expect_success,  char_assert,  int_expect_success,  int_assert,
+  bool_expect_success,  bool_assert,  uint_expect_success, uint_assert,
+  float_expect_success, float_assert, ptr_expect_success,  ptr_assert,
+  null_expect_success,  null_assert,  str_expect_success,  str_assert,
 };
 
 CTF_TEST(array_char_expect_success) {
@@ -1398,6 +1434,84 @@ CTF_TEST(array_uint_assert) {
   assert_arr(a3, >=, a1);
   assert_arr(a4, >=, a1);
 }
+CTF_TEST(array_float_expect_success) {
+  const float a1[] = {-0.1};
+  const float a2[] = {0.1};
+  const float a3[] = {-0.1, 0.1};
+  const float a4[] = {0.1, -0.1};
+  expect_arr(a1, ==, a1);
+  expect_arr(a1, !=, a2);
+  expect_arr(a1, !=, a3);
+  expect_arr(a2, !=, a4);
+  expect_arr(a1, <, a2);
+  expect_arr(a1, <, a3);
+  expect_arr(a1, <, a4);
+  expect_arr(a2, >, a1);
+  expect_arr(a3, >, a1);
+  expect_arr(a4, >, a1);
+  expect_arr(a1, <=, a1);
+  expect_arr(a3, <=, a3);
+  expect_arr(a1, <=, a2);
+  expect_arr(a1, <=, a3);
+  expect_arr(a1, <=, a4);
+  expect_arr(a1, >=, a1);
+  expect_arr(a3, >=, a3);
+  expect_arr(a2, >=, a1);
+  expect_arr(a3, >=, a1);
+  expect_arr(a4, >=, a1);
+}
+CTF_TEST(array_float_expect_failure) {
+  const float a1[] = {-0.1};
+  const float a2[] = {0.1};
+  const float a3[] = {-0.1, 0.1};
+  const float a4[] = {0.1, -0.1};
+  expect_arr(a1, ==, a2);
+  expect_arr(a1, ==, a3);
+  expect_arr(a2, ==, a4);
+  expect_arr(a1, !=, a1);
+  expect_arr(a1, <, a1);
+  expect_arr(a3, <, a3);
+  expect_arr(a2, <, a1);
+  expect_arr(a3, <, a1);
+  expect_arr(a4, <, a1);
+  expect_arr(a1, >, a1);
+  expect_arr(a3, >, a3);
+  expect_arr(a1, >, a2);
+  expect_arr(a1, >, a3);
+  expect_arr(a1, >, a4);
+  expect_arr(a2, <=, a1);
+  expect_arr(a3, <=, a1);
+  expect_arr(a4, <=, a1);
+  expect_arr(a1, >=, a2);
+  expect_arr(a1, >=, a3);
+  expect_arr(a1, >=, a4);
+}
+CTF_TEST(array_float_assert) {
+  const float a1[] = {-0.1};
+  const float a2[] = {0.1};
+  const float a3[] = {-0.1, 0.1};
+  const float a4[] = {0.1, -0.1};
+  assert_arr(a1, ==, a1);
+  assert_arr(a1, !=, a2);
+  assert_arr(a1, !=, a3);
+  assert_arr(a2, !=, a4);
+  assert_arr(a1, <, a2);
+  assert_arr(a1, <, a3);
+  assert_arr(a1, <, a4);
+  assert_arr(a2, >, a1);
+  assert_arr(a3, >, a1);
+  assert_arr(a4, >, a1);
+  assert_arr(a1, <=, a1);
+  assert_arr(a3, <=, a3);
+  assert_arr(a1, <=, a2);
+  assert_arr(a1, <=, a3);
+  assert_arr(a1, <=, a4);
+  assert_arr(a1, >=, a1);
+  assert_arr(a3, >=, a3);
+  assert_arr(a2, >=, a1);
+  assert_arr(a3, >=, a1);
+  assert_arr(a4, >=, a1);
+}
 CTF_TEST(array_ptr_expect_success) {
   int arr[2];
   const int *const a1[] = {arr};
@@ -1480,10 +1594,11 @@ CTF_TEST(array_ptr_assert) {
   assert_arr(a4, >=, a1);
 }
 CTF_GROUP(array_success) = {
-  array_char_expect_success, array_char_assert,
-  array_int_expect_success,  array_int_assert,
-  array_uint_expect_success, array_uint_assert,
-  array_ptr_expect_success,  array_ptr_assert,
+  array_char_expect_success,  array_char_assert,
+  array_int_expect_success,   array_int_assert,
+  array_uint_expect_success,  array_uint_assert,
+  array_float_expect_success, array_float_assert,
+  array_ptr_expect_success,   array_ptr_assert,
 };
 
 CTF_TEST(memory_char_expect_success) {
@@ -1594,6 +1709,42 @@ CTF_TEST(memory_uint_assert) {
   assert_mem(a1, >=, a1, 1);
   assert_mem(a2, >=, a1, 1);
 }
+CTF_TEST(memory_float_expect_success) {
+  const float a1[] = {-0.1};
+  const float a2[] = {0.1};
+  expect_mem(a1, ==, a1, 1);
+  expect_mem(a1, !=, a2, 1);
+  expect_mem(a1, <, a2, 1);
+  expect_mem(a2, >, a1, 1);
+  expect_mem(a1, <=, a1, 1);
+  expect_mem(a1, <=, a2, 1);
+  expect_mem(a1, >=, a1, 1);
+  expect_mem(a2, >=, a1, 1);
+}
+CTF_TEST(memory_float_expect_failure) {
+  const float a1[] = {-0.1};
+  const float a2[] = {0.1};
+  expect_mem(a1, ==, a2, 1);
+  expect_mem(a1, !=, a1, 1);
+  expect_mem(a1, <, a1, 1);
+  expect_mem(a2, <, a1, 1);
+  expect_mem(a1, >, a1, 1);
+  expect_mem(a1, >, a2, 1);
+  expect_mem(a2, <=, a1, 1);
+  expect_mem(a1, >=, a2, 1);
+}
+CTF_TEST(memory_float_assert) {
+  const float a1[] = {-0.1};
+  const float a2[] = {0.1};
+  assert_mem(a1, ==, a1, 1);
+  assert_mem(a1, !=, a2, 1);
+  assert_mem(a1, <, a2, 1);
+  assert_mem(a2, >, a1, 1);
+  assert_mem(a1, <=, a1, 1);
+  assert_mem(a1, <=, a2, 1);
+  assert_mem(a1, >=, a1, 1);
+  assert_mem(a2, >=, a1, 1);
+}
 CTF_TEST(memory_ptr_expect_success) {
   int arr[2];
   const int *const a1[] = {arr};
@@ -1634,10 +1785,11 @@ CTF_TEST(memory_ptr_assert) {
   assert_mem(a2, >=, a1, 1);
 }
 CTF_GROUP(memory_success) = {
-  memory_char_expect_success, memory_char_assert,
-  memory_int_expect_success,  memory_int_assert,
-  memory_uint_expect_success, memory_uint_assert,
-  memory_ptr_expect_success,  memory_ptr_assert,
+  memory_char_expect_success,  memory_char_assert,
+  memory_int_expect_success,   memory_int_assert,
+  memory_uint_expect_success,  memory_uint_assert,
+  memory_float_expect_success, memory_float_assert,
+  memory_ptr_expect_success,   memory_ptr_assert,
 };
 
 CTF_TEST(pass_and_fail) {
@@ -1660,16 +1812,19 @@ CTF_GROUP(failure) = {
   int_expect_failure,
   bool_expect_failure,
   uint_expect_failure,
+  float_expect_failure,
   ptr_expect_failure,
   null_expect_failure,
   str_expect_failure,
   array_char_expect_failure,
   array_int_expect_failure,
   array_uint_expect_failure,
+  array_float_expect_failure,
   array_ptr_expect_failure,
   memory_char_expect_failure,
   memory_int_expect_failure,
   memory_uint_expect_failure,
+  memory_float_expect_failure,
   memory_ptr_expect_failure,
   pass_and_fail,
   subtests,

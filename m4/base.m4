@@ -10,7 +10,7 @@ define(`_arg1', `$1')dnl
 define(`_foreach', `ifelse(`$2', `(`')', `',
   `define(`$1', _arg1$2)$3`'$0(`$1', (dquote(shift$2)), `$3')')')
 
-define(`PRIMITIVE_TYPES', ``char', `int', `uint', `ptr'')
+define(`PRIMITIVE_TYPES', ``char', `int', `uint', `ptr', `float'')
 define(`CMPS', ``eq', `neq', `lt', `gt', `lte', `gte'')
 define(`EAS', ``assert', `expect'')
 
@@ -31,8 +31,8 @@ define(`RQ',`changequote(<,>)dnl`
 'changequote`'')
 define(`CMP_SYMBOL', `ifelse(`$1',eq,==,`$1',neq,!=,`$1',gt,>,`$1',lt,<,`$1',gte,>=,`$1',lte,<=)')
 define(`FORMAT', `ifelse(`$1',char,`"'RQ()`%c'RQ()`"',`$1',int,"%jd",`$1',uint,"%ju",`$1',ptr,"%p",`$1',str,"\"%s\"")')
-define(`TYPE', `ifelse(`$1',char,char,`$1',int,intmax_t,`$1',uint,uintmax_t,`$1',ptr,const void *,`$1',str,const char *)')
-define(`SHORT', `ifelse(`$1',char,c,`$1',int,i,`$1',uint,u,`$1',ptr,p,`$1',str,p)')
+define(`TYPE', `ifelse(`$1',char,char,`$1',int,intmax_t,`$1',uint,uintmax_t,`$1',ptr,const void *,`$1',str,const char *,`$1',float,long double)')
+define(`SHORT', `ifelse(`$1',char,c,`$1',int,i,`$1',uint,u,`$1',ptr,p,`$1',str,p,`$1',float,f)')
 define(`RUN3', `format(`%s(%s, %s, %s, %s, %s, %s)', `$1', `$2', `UP(`$2')', `$3', `UP(`$3')', `$4', `UP(`$4')')')
 define(`RUN2', `format(`%s(%s, %s, %s, %s)', `$1', `$2', `UP(`$2')', `$3', `UP(`$3')')')
 define(`RUN1', `format(`%s(%s, %s)', `$1', `$2', `UP(`$2')')')

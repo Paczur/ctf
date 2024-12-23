@@ -21,6 +21,7 @@ include(`base.m4')
 #define CTF__ASSERT_PRINT_TYPE_uint 1
 #define CTF__ASSERT_PRINT_TYPE_ptr 2
 #define CTF__ASSERT_PRINT_TYPE_char 3
+#define CTF__ASSERT_PRINT_TYPE_float 4
 
 struct ctf__state {
   int status;
@@ -259,9 +260,9 @@ void ctf_assert_hide(uintmax_t count);
 /*
 define(`EA_TEMPLATE', `#define $4$3_$1_$2(a, b) ctf__$3_$1_$2(a, b, #a, #b, __LINE__, __FILE__)')dnl
 define(`EA_MEM_TEMPLATE',
-`format(`#define $4$3_mem_$1_$2(a, b, length) ctf__$3_mem_$2((const void *)a, (const void *)b, length,  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+`format(`#define $4$3_mem_$1_$2(a, b, length) ctf__$3_mem_$2((const void *)a, (const void *)b, length,  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `$1', `float', `2', `0'))')dnl
 define(`EA_ARR_TEMPLATE',
-`format(`#define $4$3_arr_$1_$2(a, b) ctf__$3_arr_$2((const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+`format(`#define $4$3_arr_$1_$2(a, b) ctf__$3_arr_$2((const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `$1', `float', `2', `0'))')dnl
 define(`EA_FUNCTION',
 `format(`int ctf__$3_$1_$2(%s, %s, const char *, const char *, int, const char *);',TYPE(`$1'),TYPE(`$1'))')dnl
 define(`EA_MEM_FUNCTION',
@@ -275,9 +276,9 @@ indir(`$3', type, comp, `expect', `ctf_')
 ')')')dnl
 define(`EA_COMP_TEMPLATE', `#define $3$2_$1(a, cmp, b) ctf__$2_$1(a, #cmp, b, #a, #b, __LINE__, __FILE__)')dnl
 define(`EA_COMP_MEM_TEMPLATE',
-`format(`#define $3$2_mem_$1(a, cmp, b, length) ctf__$2_mem((const void *)a, #cmp, (const void *)b, length,  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+`format(`#define $3$2_mem_$1(a, cmp, b, length) ctf__$2_mem((const void *)a, #cmp, (const void *)b, length,  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `$1', `float', `2', `0'))')dnl
 define(`EA_COMP_ARR_TEMPLATE',
-`format(`#define $3$2_arr_$1(a, cmp, b) ctf__$2_arr((const void *const *)a, #cmp, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `0'))')dnl
+`format(`#define $3$2_arr_$1(a, cmp, b) ctf__$2_arr((const void *const *)a, #cmp, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `$1', `float', `2', `0'))')dnl
 define(`EA_COMP_FUNCTION', `format(`int ctf__$2_$1(%s, const char *, %s, const char *, const char *, int, const char*);',TYPE(`$1'),TYPE(`$1'))')
 define(`EA_COMP_MEM_FUNCTION',
 `int ctf__$2_mem(const void *, const char *, const void *, uintmax_t, uintmax_t, int, int, const char *, const char *, int, const char *);')dnl
@@ -301,15 +302,18 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
 #if __STDC_VERSION__ >= 201112L
 #define ctf_expect(a, cmp, b) \
   _Generic((b), \
-           char    : ctf__expect_char,\
-           int8_t  : ctf__expect_int,\
-           int16_t : ctf__expect_int,\
-           int32_t : ctf__expect_int,\
-           int64_t : ctf__expect_int,\
-           uint8_t : ctf__expect_uint,\
-           uint16_t: ctf__expect_uint,\
-           uint32_t: ctf__expect_uint,\
-           uint64_t: ctf__expect_uint,\
+           char       : ctf__expect_char,\
+           int8_t     : ctf__expect_int,\
+           int16_t    : ctf__expect_int,\
+           int32_t    : ctf__expect_int,\
+           int64_t    : ctf__expect_int,\
+           uint8_t    : ctf__expect_uint,\
+           uint16_t   : ctf__expect_uint,\
+           uint32_t   : ctf__expect_uint,\
+           uint64_t   : ctf__expect_uint,\
+           float      : ctf__expect_float,\
+           double     : ctf__expect_float,\
+           long double: ctf__expect_float,\
            default    : ctf__expect_ptr)\
 ((a), #cmp, (b), #a, #b, __LINE__, __FILE__)
 #define ctf_assert(a, cmp, b) \
@@ -323,6 +327,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
            uint16_t: ctf__assert_uint,\
            uint32_t: ctf__assert_uint,\
            uint64_t: ctf__assert_uint,\
+           float:    ctf__assert_float,\
+           double:    ctf__assert_float,\
+           long double:    ctf__assert_float,\
            default    : ctf__assert_ptr)\
 ((a), #cmp, (b), #a, #b, __LINE__, __FILE__)
 #define ctf_expect_mem(a, cmp, b, l) \
@@ -333,6 +340,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
                            int16_t : 1,\
                            int32_t : 1,\
                            int64_t : 1,\
+                           float   : 2,\
+                           double   : 2,\
+                           long double   : 2,\
                            default : 0), \
                            _Generic((*(b)),\
            char     : CTF__ASSERT_PRINT_TYPE_char,\
@@ -344,6 +354,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
            uint16_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint32_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint64_t : CTF__ASSERT_PRINT_TYPE_uint,\
+           float: CTF__ASSERT_PRINT_TYPE_float,\
+           double: CTF__ASSERT_PRINT_TYPE_float,\
+           long double: CTF__ASSERT_PRINT_TYPE_float,\
            default    : CTF__ASSERT_PRINT_TYPE_ptr),\
 #a, #b, __LINE__, __FILE__)
 #define ctf_assert_mem(a, cmp, b, l) \
@@ -354,6 +367,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
                            int16_t : 1,\
                            int32_t : 1,\
                            int64_t : 1,\
+                           float   : 2,\
+                           double   : 2,\
+                           long double   : 2,\
                            default : 0), \
                            _Generic((*(b)),\
            char     : CTF__ASSERT_PRINT_TYPE_char,\
@@ -365,6 +381,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
            uint16_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint32_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint64_t : CTF__ASSERT_PRINT_TYPE_uint,\
+           float: CTF__ASSERT_PRINT_TYPE_float,\
+           double: CTF__ASSERT_PRINT_TYPE_float,\
+           long double: CTF__ASSERT_PRINT_TYPE_float,\
            default    : CTF__ASSERT_PRINT_TYPE_ptr),\
 #a, #b, __LINE__, __FILE__)
 #define ctf_expect_arr(a, cmp, b) \
@@ -375,6 +394,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
                            int16_t : 1,\
                            int32_t : 1,\
                            int64_t : 1,\
+                           float   : 2,\
+                           double   : 2,\
+                           long double   : 2,\
                            default : 0), \
                            _Generic((*(b)),\
            char     : CTF__ASSERT_PRINT_TYPE_char,\
@@ -386,6 +408,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
            uint16_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint32_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint64_t : CTF__ASSERT_PRINT_TYPE_uint,\
+           float: CTF__ASSERT_PRINT_TYPE_float,\
+           double: CTF__ASSERT_PRINT_TYPE_float,\
+           long double: CTF__ASSERT_PRINT_TYPE_float,\
            default    : CTF__ASSERT_PRINT_TYPE_ptr),\
 #a, #b, __LINE__, __FILE__)
 #define ctf_assert_arr(a, cmp, b) \
@@ -396,6 +421,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
                            int16_t : 1,\
                            int32_t : 1,\
                            int64_t : 1,\
+                           float   : 2,\
+                           double   : 2,\
+                           long double   : 2,\
                            default : 0), \
                            _Generic((*(b)),\
            char     : CTF__ASSERT_PRINT_TYPE_char,\
@@ -407,6 +435,9 @@ EA_COMP_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_FUNCTION')
            uint16_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint32_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint64_t : CTF__ASSERT_PRINT_TYPE_uint,\
+           float: CTF__ASSERT_PRINT_TYPE_float,\
+           double: CTF__ASSERT_PRINT_TYPE_float,\
+           long double: CTF__ASSERT_PRINT_TYPE_float,\
            default    : CTF__ASSERT_PRINT_TYPE_ptr),\
 #a, #b, __LINE__, __FILE__)
 #endif
@@ -429,15 +460,18 @@ define(`ALIAS', `#define $1 ctf_$1
 #if __STDC_VERSION__ >= 201112L
 #define expect(a, cmp, b) \
   _Generic((b), \
-           char    : ctf__expect_char,\
-           int8_t  : ctf__expect_int,\
-           int16_t : ctf__expect_int,\
-           int32_t : ctf__expect_int,\
-           int64_t : ctf__expect_int,\
-           uint8_t : ctf__expect_uint,\
-           uint16_t: ctf__expect_uint,\
-           uint32_t: ctf__expect_uint,\
-           uint64_t: ctf__expect_uint,\
+           char       : ctf__expect_char,\
+           int8_t     : ctf__expect_int,\
+           int16_t    : ctf__expect_int,\
+           int32_t    : ctf__expect_int,\
+           int64_t    : ctf__expect_int,\
+           uint8_t    : ctf__expect_uint,\
+           uint16_t   : ctf__expect_uint,\
+           uint32_t   : ctf__expect_uint,\
+           uint64_t   : ctf__expect_uint,\
+           float      : ctf__expect_float,\
+           double     : ctf__expect_float,\
+           long double: ctf__expect_float,\
            default    : ctf__expect_ptr)\
 ((a), #cmp, (b), #a, #b, __LINE__, __FILE__)
 #define assert(a, cmp, b) \
@@ -451,6 +485,9 @@ define(`ALIAS', `#define $1 ctf_$1
            uint16_t: ctf__assert_uint,\
            uint32_t: ctf__assert_uint,\
            uint64_t: ctf__assert_uint,\
+           float:    ctf__assert_float,\
+           double:    ctf__assert_float,\
+           long double:    ctf__assert_float,\
            default    : ctf__assert_ptr)\
 ((a), #cmp, (b), #a, #b, __LINE__, __FILE__)
 #define expect_mem(a, cmp, b, l) \
@@ -461,6 +498,9 @@ define(`ALIAS', `#define $1 ctf_$1
                            int16_t : 1,\
                            int32_t : 1,\
                            int64_t : 1,\
+                           float   : 2,\
+                           double   : 2,\
+                           long double   : 2,\
                            default : 0), \
                            _Generic((*(b)),\
            char     : CTF__ASSERT_PRINT_TYPE_char,\
@@ -472,6 +512,9 @@ define(`ALIAS', `#define $1 ctf_$1
            uint16_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint32_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint64_t : CTF__ASSERT_PRINT_TYPE_uint,\
+           float: CTF__ASSERT_PRINT_TYPE_float,\
+           double: CTF__ASSERT_PRINT_TYPE_float,\
+           long double: CTF__ASSERT_PRINT_TYPE_float,\
            default    : CTF__ASSERT_PRINT_TYPE_ptr),\
 #a, #b, __LINE__, __FILE__)
 #define assert_mem(a, cmp, b, l) \
@@ -482,6 +525,9 @@ define(`ALIAS', `#define $1 ctf_$1
                            int16_t : 1,\
                            int32_t : 1,\
                            int64_t : 1,\
+                           float   : 2,\
+                           double   : 2,\
+                           long double   : 2,\
                            default : 0), \
                            _Generic((*(b)),\
            char     : CTF__ASSERT_PRINT_TYPE_char,\
@@ -493,6 +539,9 @@ define(`ALIAS', `#define $1 ctf_$1
            uint16_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint32_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint64_t : CTF__ASSERT_PRINT_TYPE_uint,\
+           float: CTF__ASSERT_PRINT_TYPE_float,\
+           double: CTF__ASSERT_PRINT_TYPE_float,\
+           long double: CTF__ASSERT_PRINT_TYPE_float,\
            default    : CTF__ASSERT_PRINT_TYPE_ptr),\
 #a, #b, __LINE__, __FILE__)
 #define expect_arr(a, cmp, b) \
@@ -503,6 +552,9 @@ define(`ALIAS', `#define $1 ctf_$1
                            int16_t : 1,\
                            int32_t : 1,\
                            int64_t : 1,\
+                           float   : 2,\
+                           double   : 2,\
+                           long double   : 2,\
                            default : 0), \
                            _Generic((*(b)),\
            char     : CTF__ASSERT_PRINT_TYPE_char,\
@@ -514,6 +566,9 @@ define(`ALIAS', `#define $1 ctf_$1
            uint16_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint32_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint64_t : CTF__ASSERT_PRINT_TYPE_uint,\
+           float: CTF__ASSERT_PRINT_TYPE_float,\
+           double: CTF__ASSERT_PRINT_TYPE_float,\
+           long double: CTF__ASSERT_PRINT_TYPE_float,\
            default    : CTF__ASSERT_PRINT_TYPE_ptr),\
 #a, #b, __LINE__, __FILE__)
 #define assert_arr(a, cmp, b) \
@@ -524,6 +579,9 @@ define(`ALIAS', `#define $1 ctf_$1
                            int16_t : 1,\
                            int32_t : 1,\
                            int64_t : 1,\
+                           float   : 2,\
+                           double   : 2,\
+                           long double   : 2,\
                            default : 0), \
                            _Generic((*(b)),\
            char     : CTF__ASSERT_PRINT_TYPE_char,\
@@ -535,6 +593,9 @@ define(`ALIAS', `#define $1 ctf_$1
            uint16_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint32_t : CTF__ASSERT_PRINT_TYPE_uint,\
            uint64_t : CTF__ASSERT_PRINT_TYPE_uint,\
+           float: CTF__ASSERT_PRINT_TYPE_float,\
+           double: CTF__ASSERT_PRINT_TYPE_float,\
+           long double: CTF__ASSERT_PRINT_TYPE_float,\
            default    : CTF__ASSERT_PRINT_TYPE_ptr),\
 #a, #b, __LINE__, __FILE__)
 #endif

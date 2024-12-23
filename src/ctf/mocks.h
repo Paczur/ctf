@@ -10,6 +10,7 @@
 #define CTF__ASSERT_TYPE_CHAR char
 #define CTF__ASSERT_TYPE_PTR const void *
 #define CTF__ASSERT_TYPE_STR const char *
+#define CTF__ASSERT_TYPE_FLOAT long double
 
 #define CTF__MOCK_SELECTED                                    \
   ((struct ctf__mock *)(((void *)ctf__mock_return_selected) - \
@@ -23,9 +24,11 @@ struct ctf__check {
     int (*i)(intmax_t, intmax_t, const char *, const char *, int, const char *);
     int (*u)(uintmax_t, uintmax_t, const char *, const char *, int,
              const char *);
-    int (*p)(const void *, const void *, const char *, const char *, int,
+    int (*f)(long double, long double, const char *, const char *, int,
              const char *);
     int (*c)(char, char, const char *, const char *, int, const char *);
+    int (*p)(const void *, const void *, const char *, const char *, int,
+             const char *);
     int (*s)(const char *, const char *, const char *, const char *, int,
              const char *);
     int (*m)(const void *, const void *, uintmax_t, uintmax_t, int, int,
@@ -41,6 +44,7 @@ struct ctf__check {
   union {
     uintmax_t u;
     intmax_t i;
+    long double f;
     char c;
     const void *p;
     const char *s;
@@ -271,20 +275,23 @@ void ctf_unmock(void);
   struct ctf__mock_state *ctf__mock_check_state = \
     ctf__mock_struct_##name.states +              \
     (uintptr_t)pthread_getspecific(ctf__thread_index)
-#define ctf_mock_check(name)        \
-  _Generic((name),                  \
-    char: ctf__mock_check_char,     \
-    int8_t: ctf__mock_check_int,    \
-    int16_t: ctf__mock_check_int,   \
-    int32_t: ctf__mock_check_int,   \
-    int64_t: ctf__mock_check_int,   \
-    uint8_t: ctf__mock_check_uint,  \
-    uint16_t: ctf__mock_check_uint, \
-    uint32_t: ctf__mock_check_uint, \
-    uint64_t: ctf__mock_check_uint, \
-    default: ctf__mock_check_ptr)(ctf__mock_check_state, name, #name)
 
 #if __STDC_VERSION__ >= 201112L
+#define ctf_mock_check(name)            \
+  _Generic((name),                      \
+    char: ctf__mock_check_char,         \
+    int8_t: ctf__mock_check_int,        \
+    int16_t: ctf__mock_check_int,       \
+    int32_t: ctf__mock_check_int,       \
+    int64_t: ctf__mock_check_int,       \
+    uint8_t: ctf__mock_check_uint,      \
+    uint16_t: ctf__mock_check_uint,     \
+    uint32_t: ctf__mock_check_uint,     \
+    uint64_t: ctf__mock_check_uint,     \
+    float: ctf__mock_check_float,       \
+    double: ctf__mock_check_float,      \
+    long double: ctf__mock_check_float, \
+    default: ctf__mock_check_ptr)(ctf__mock_check_state, name, #name)
 #define ctf_mock_expect(var, cmp, val)                                     \
   _Generic((val),                                                          \
     char: ctf__mock_expect_char,                                           \
@@ -296,6 +303,9 @@ void ctf_unmock(void);
     uint16_t: ctf__mock_expect_uint,                                       \
     uint32_t: ctf__mock_expect_uint,                                       \
     uint64_t: ctf__mock_expect_uint,                                       \
+    float: ctf__mock_expect_float,                                         \
+    double: ctf__mock_expect_float,                                        \
+    long double: ctf__mock_expect_float,                                   \
     default: ctf__mock_expect_ptr)(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, \
                                    __FILE__, #val, #var, #cmp, val)
 #define ctf_mock_assert(var, cmp, val)                                     \
@@ -309,6 +319,9 @@ void ctf_unmock(void);
     uint16_t: ctf__mock_assert_uint,                                       \
     uint32_t: ctf__mock_assert_uint,                                       \
     uint64_t: ctf__mock_assert_uint,                                       \
+    float: ctf__mock_assert_float,                                         \
+    double: ctf__mock_assert_float,                                        \
+    long double: ctf__mock_assert_float,                                   \
     default: ctf__mock_assert_ptr)(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, \
                                    __FILE__, #val, #var, #cmp, val)
 #define ctf_mock_expect_nth(n, var, cmp, val)                              \
@@ -322,6 +335,9 @@ void ctf_unmock(void);
     uint16_t: ctf__mock_expect_uint,                                       \
     uint32_t: ctf__mock_expect_uint,                                       \
     uint64_t: ctf__mock_expect_uint,                                       \
+    float: ctf__mock_expect_float,                                         \
+    double: ctf__mock_expect_float,                                        \
+    long double: ctf__mock_expect_float,                                   \
     default: ctf__mock_expect_ptr)(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, \
                                    __FILE__, #val, #var, #cmp, val)
 #define ctf_mock_assert_nth(n, var, cmp, val)                              \
@@ -335,6 +351,9 @@ void ctf_unmock(void);
     uint16_t: ctf__mock_assert_uint,                                       \
     uint32_t: ctf__mock_assert_uint,                                       \
     uint64_t: ctf__mock_assert_uint,                                       \
+    float: ctf__mock_assert_float,                                         \
+    double: ctf__mock_assert_float,                                        \
+    long double: ctf__mock_assert_float,                                   \
     default: ctf__mock_assert_ptr)(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, \
                                    __FILE__, #val, #var, #cmp, val)
 #define ctf_mock_expect_mem(var, cmp, val, l)                                  \
@@ -350,6 +369,9 @@ void ctf_unmock(void);
                          uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         float: CTF__ASSERT_PRINT_TYPE_float,                  \
+                         double: CTF__ASSERT_PRINT_TYPE_float,                 \
+                         long double: CTF__ASSERT_PRINT_TYPE_float,            \
                          default: CTF__ASSERT_PRINT_TYPE_ptr))
 #define ctf_mock_assert_mem(var, cmp, val, l)                                  \
   ctf__mock_assert_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
@@ -364,6 +386,9 @@ void ctf_unmock(void);
                          uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         float: CTF__ASSERT_PRINT_TYPE_float,                  \
+                         double: CTF__ASSERT_PRINT_TYPE_float,                 \
+                         long double: CTF__ASSERT_PRINT_TYPE_float,            \
                          default: CTF__ASSERT_PRINT_TYPE_ptr))
 #define ctf_mock_expect_arr(var, cmp, val)                                     \
   ctf__mock_expect_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
@@ -378,6 +403,9 @@ void ctf_unmock(void);
                          uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         float: CTF__ASSERT_PRINT_TYPE_float,                  \
+                         double: CTF__ASSERT_PRINT_TYPE_float,                 \
+                         long double: CTF__ASSERT_PRINT_TYPE_float,            \
                          default: CTF__ASSERT_PRINT_TYPE_ptr))
 #define ctf_mock_assert_arr(var, cmp, val)                                     \
   ctf__mock_assert_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
@@ -392,6 +420,9 @@ void ctf_unmock(void);
                          uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         float: CTF__ASSERT_PRINT_TYPE_float,                  \
+                         double: CTF__ASSERT_PRINT_TYPE_float,                 \
+                         long double: CTF__ASSERT_PRINT_TYPE_float,            \
                          default: CTF__ASSERT_PRINT_TYPE_ptr))
 #endif
 #define MOCK_FUNCTION(ea, EA, type, TYPE)                                     \
@@ -424,7 +455,7 @@ define(`MOCK_CHECK_MEM',
 `format(`#define ctf_mock_check_mem_$1(v) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
 ctf__mock_check_mem_$1(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
-  ,ifelse(`$1',`int',1,0))')
+  ,ifelse(`$1',`int', 1, `$1',`float',2,0))')
 */
 COMB3(`RUN2', `(MOCK_FUNCTION)', `(EAS)', `(PRIMITIVE_TYPES, str)')
 COMB2(`RUN1', `(MOCK_MEM_FUNCTION)', `(EAS)')
@@ -442,6 +473,21 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
 
 #if CTF_ALIASES == CTF_ON
 #if __STDC_VERSION__ >= 201112L
+#define mock_check(name)                \
+  _Generic((name),                      \
+    char: ctf__mock_check_char,         \
+    int8_t: ctf__mock_check_int,        \
+    int16_t: ctf__mock_check_int,       \
+    int32_t: ctf__mock_check_int,       \
+    int64_t: ctf__mock_check_int,       \
+    uint8_t: ctf__mock_check_uint,      \
+    uint16_t: ctf__mock_check_uint,     \
+    uint32_t: ctf__mock_check_uint,     \
+    uint64_t: ctf__mock_check_uint,     \
+    float: ctf__mock_check_float,       \
+    double: ctf__mock_check_float,      \
+    long double: ctf__mock_check_float, \
+    default: ctf__mock_check_ptr)(ctf__mock_check_state, name, #name)
 #define mock_expect(var, cmp, val)                                         \
   _Generic((val),                                                          \
     char: ctf__mock_expect_char,                                           \
@@ -453,6 +499,9 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
     uint16_t: ctf__mock_expect_uint,                                       \
     uint32_t: ctf__mock_expect_uint,                                       \
     uint64_t: ctf__mock_expect_uint,                                       \
+    float: ctf__mock_expect_float,                                         \
+    double: ctf__mock_expect_float,                                        \
+    long double: ctf__mock_expect_float,                                   \
     default: ctf__mock_expect_ptr)(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, \
                                    __FILE__, #val, #var, #cmp, val)
 #define mock_assert(var, cmp, val)                                         \
@@ -466,6 +515,9 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
     uint16_t: ctf__mock_assert_uint,                                       \
     uint32_t: ctf__mock_assert_uint,                                       \
     uint64_t: ctf__mock_assert_uint,                                       \
+    float: ctf__mock_assert_float,                                         \
+    double: ctf__mock_assert_float,                                        \
+    long double: ctf__mock_assert_float,                                   \
     default: ctf__mock_assert_ptr)(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, \
                                    __FILE__, #val, #var, #cmp, val)
 #define mock_expect_nth(n, var, cmp, val)                                  \
@@ -479,6 +531,9 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
     uint16_t: ctf__mock_expect_uint,                                       \
     uint32_t: ctf__mock_expect_uint,                                       \
     uint64_t: ctf__mock_expect_uint,                                       \
+    float: ctf__mock_expect_float,                                         \
+    double: ctf__mock_expect_float,                                        \
+    long double: ctf__mock_expect_float,                                   \
     default: ctf__mock_expect_ptr)(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, \
                                    __FILE__, #val, #var, #cmp, val)
 #define mock_assert_nth(n, var, cmp, val)                                  \
@@ -492,6 +547,9 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
     uint16_t: ctf__mock_assert_uint,                                       \
     uint32_t: ctf__mock_assert_uint,                                       \
     uint64_t: ctf__mock_assert_uint,                                       \
+    float: ctf__mock_assert_float,                                         \
+    double: ctf__mock_assert_float,                                        \
+    long double: ctf__mock_assert_float,                                   \
     default: ctf__mock_assert_ptr)(CTF__MOCK_STRUCT_SELECTED, n, __LINE__, \
                                    __FILE__, #val, #var, #cmp, val)
 #define mock_expect_mem(var, cmp, val, l)                                      \
@@ -507,6 +565,9 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
                          uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         float: CTF__ASSERT_PRINT_TYPE_float,                  \
+                         double: CTF__ASSERT_PRINT_TYPE_float,                 \
+                         long double: CTF__ASSERT_PRINT_TYPE_float,            \
                          default: CTF__ASSERT_PRINT_TYPE_ptr))
 #define mock_assert_mem(var, cmp, val, l)                                      \
   ctf__mock_assert_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
@@ -521,6 +582,9 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
                          uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         float: CTF__ASSERT_PRINT_TYPE_float,                  \
+                         double: CTF__ASSERT_PRINT_TYPE_float,                 \
+                         long double: CTF__ASSERT_PRINT_TYPE_float,            \
                          default: CTF__ASSERT_PRINT_TYPE_ptr))
 #define mock_expect_arr(var, cmp, val)                                         \
   ctf__mock_expect_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
@@ -535,6 +599,9 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
                          uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         float: CTF__ASSERT_PRINT_TYPE_float,                  \
+                         double: CTF__ASSERT_PRINT_TYPE_float,                 \
+                         long double: CTF__ASSERT_PRINT_TYPE_float,            \
                          default: CTF__ASSERT_PRINT_TYPE_ptr))
 #define mock_assert_arr(var, cmp, val)                                         \
   ctf__mock_assert_mem(CTF__MOCK_STRUCT_SELECTED, 1, __LINE__, __FILE__, #val, \
@@ -549,20 +616,11 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
                          uint16_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint32_t: CTF__ASSERT_PRINT_TYPE_uint,                \
                          uint64_t: CTF__ASSERT_PRINT_TYPE_uint,                \
+                         float: CTF__ASSERT_PRINT_TYPE_float,                  \
+                         double: CTF__ASSERT_PRINT_TYPE_float,                 \
+                         long double: CTF__ASSERT_PRINT_TYPE_float,            \
                          default: CTF__ASSERT_PRINT_TYPE_ptr))
 #endif
-#define mock_check(name)            \
-  _Generic((name),                  \
-    char: ctf__mock_check_char,     \
-    int8_t: ctf__mock_check_int,    \
-    int16_t: ctf__mock_check_int,   \
-    int32_t: ctf__mock_check_int,   \
-    int64_t: ctf__mock_check_int,   \
-    uint8_t: ctf__mock_check_uint,  \
-    uint16_t: ctf__mock_check_uint, \
-    uint32_t: ctf__mock_check_uint, \
-    uint64_t: ctf__mock_check_uint, \
-    default: ctf__mock_check_ptr)(ctf__mock_check_state, name, #name)
 // clang-format off
 /*
 define(`MOCK_CHECK_ALIAS', `#define mock_check_$1(v) ctf__mock_check_$1(ctf__mock_check_state, v, #v)')
@@ -573,7 +631,7 @@ define(`MOCK_CHECK_MEM_ALIAS',
 `format(`#define mock_check_mem_$1(v) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
 ctf__mock_check_mem(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
-  ,ifelse(`$1',`int',1,0))')
+  ,ifelse(`$1',`int', 1, `$1',`float',2,0))')
 */
 EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_COMP_TEMPLATE')
 EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_COMP_MEM_TEMPLATE')

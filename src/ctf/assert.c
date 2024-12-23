@@ -60,11 +60,13 @@
 #define CTF__ASSERT_FORMAT_CHAR "'%c'"
 #define CTF__ASSERT_FORMAT_PTR "%p"
 #define CTF__ASSERT_FORMAT_STR "\"%s\""
+#define CTF__ASSERT_FORMAT_FLOAT "%Lg"
 
 #define CTF__ASSERT_FCMP_INT(a, eq, b) ((a)eq(b))
 #define CTF__ASSERT_FCMP_UINT(a, eq, b) ((a)eq(b))
 #define CTF__ASSERT_FCMP_CHAR(a, eq, b) ((a)eq(b))
 #define CTF__ASSERT_FCMP_PTR(a, eq, b) ((a)eq(b))
+#define CTF__ASSERT_FCMP_FLOAT(a, eq, b) ((a)eq(b))
 #define CTF__ASSERT_FCMP_STR(a, eq, b) (strcmp((a), (b)) eq 0)
 
 #define CTF__ASSERT_JMP_ASSERT(status, thread_index) \
@@ -84,6 +86,8 @@
   CTF__ASSERT_PRINT_GENERIC(UINT, CMP, state, a, b, a_str, b_str)
 #define CTF__ASSERT_PRINT_PTR(CMP, state, a, b, a_str, b_str) \
   CTF__ASSERT_PRINT_GENERIC(PTR, CMP, state, a, b, a_str, b_str)
+#define CTF__ASSERT_PRINT_FLOAT(CMP, state, a, b, a_str, b_str) \
+  CTF__ASSERT_PRINT_GENERIC(FLOAT, CMP, state, a, b, a_str, b_str)
 #define CTF__ASSERT_PRINT_STR(CMP, state, a, b, a_str, b_str)                 \
   do {                                                                        \
     MSG_SPRINTF((state)->msg,                                                 \
@@ -372,56 +376,73 @@ static void print_arr(struct ctf__state *state, const void *data,
       const uint16_t *u16;
       const uint32_t *u32;
       const uint64_t *u64;
+      const float *f;
+      const double *lf;
+      const long double *Lf;
     };
   } iterator;
   iterator.u8 = data;
-  const char *format = (type == CTF__ASSERT_PRINT_TYPE_int)    ? "%jd, "
-                       : (type == CTF__ASSERT_PRINT_TYPE_uint) ? "%ju, "
-                       : (type == CTF__ASSERT_PRINT_TYPE_ptr)  ? "%p, "
-                                                               : "";
-  switch(step) {
-  case 1:
-    if(type == CTF__ASSERT_PRINT_TYPE_char) {
-      for(uintmax_t i = 0; i < size; i++) {
-        MSG_SPRINTF_APPEND(state->msg, "%c", '\'');
-        escaped_char(state, (char)iterator.u8[i]);
-        MSG_SPRINTF_APPEND(state->msg, "%s", "', ");
+  const char *format = (type == CTF__ASSERT_PRINT_TYPE_int)     ? "%jd, "
+                       : (type == CTF__ASSERT_PRINT_TYPE_uint)  ? "%ju, "
+                       : (type == CTF__ASSERT_PRINT_TYPE_ptr)   ? "%p, "
+                       : (type == CTF__ASSERT_PRINT_TYPE_float) ? "%Lg, "
+                                                                : "";
+  if(sign == 2) {
+    if(step == sizeof(float)) {
+      for(uintmax_t i = 0; i < size; i++)
+        MSG_SPRINTF_APPEND(state->msg, format, (long double)iterator.f[i]);
+    } else if(step == sizeof(double)) {
+      for(uintmax_t i = 0; i < size; i++)
+        MSG_SPRINTF_APPEND(state->msg, format, (long double)iterator.lf[i]);
+    } else if(step == sizeof(long double)) {
+      for(uintmax_t i = 0; i < size; i++)
+        MSG_SPRINTF_APPEND(state->msg, format, (long double)iterator.Lf[i]);
+    }
+  } else {
+    switch(step) {
+    case 1:
+      if(type == CTF__ASSERT_PRINT_TYPE_char) {
+        for(uintmax_t i = 0; i < size; i++) {
+          MSG_SPRINTF_APPEND(state->msg, "%c", '\'');
+          escaped_char(state, (char)iterator.u8[i]);
+          MSG_SPRINTF_APPEND(state->msg, "%s", "', ");
+        }
+      } else if(sign) {
+        for(uintmax_t i = 0; i < size; i++)
+          MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i8[i]);
+      } else {
+        for(uintmax_t i = 0; i < size; i++)
+          MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u8[i]);
       }
-    } else if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i8[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u8[i]);
+      break;
+    case 2:
+      if(sign) {
+        for(uintmax_t i = 0; i < size; i++)
+          MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i16[i]);
+      } else {
+        for(uintmax_t i = 0; i < size; i++)
+          MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u16[i]);
+      }
+      break;
+    case 4:
+      if(sign) {
+        for(uintmax_t i = 0; i < size; i++)
+          MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i32[i]);
+      } else {
+        for(uintmax_t i = 0; i < size; i++)
+          MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u32[i]);
+      }
+      break;
+    case 8:
+      if(sign) {
+        for(uintmax_t i = 0; i < size; i++)
+          MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i64[i]);
+      } else {
+        for(uintmax_t i = 0; i < size; i++)
+          MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u64[i]);
+      }
+      break;
     }
-    break;
-  case 2:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i16[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u16[i]);
-    }
-    break;
-  case 4:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i32[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u32[i]);
-    }
-    break;
-  case 8:
-    if(sign) {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (intmax_t)iterator.i64[i]);
-    } else {
-      for(uintmax_t i = 0; i < size; i++)
-        MSG_SPRINTF_APPEND(state->msg, format, (uintmax_t)iterator.u64[i]);
-    }
-    break;
   }
   state->msg_size -= 2;
 }
@@ -438,88 +459,119 @@ static int order_arr(const void *a, const void *b, uintmax_t la, uintmax_t lb,
       const uint16_t *u16;
       const uint32_t *u32;
       const uint64_t *u64;
+      const float *f;
+      const double *lf;
+      const long double *Lf;
     };
   };
   struct iterator ia = *(struct iterator *)&a;
   struct iterator ib = *(struct iterator *)&b;
   uintmax_t min = MIN(la, lb);
-  switch(step) {
-  case 1:
-    if(sign) {
+  if(sign == 2) {
+    if(step == sizeof(float)) {
       for(uintmax_t i = 0; i < min; i++) {
-        if(ia.i8[i] < ib.i8[i]) {
+        if(ia.f[i] < ib.f[i]) {
           return -1;
-        } else if(ia.i8[i] > ib.i8[i]) {
+        } else if(ia.f[i] > ib.f[i]) {
           return 1;
         }
       }
-    } else {
+    } else if(step == sizeof(double)) {
       for(uintmax_t i = 0; i < min; i++) {
-        if(ia.u8[i] < ib.u8[i]) {
+        if(ia.lf[i] < ib.lf[i]) {
           return -1;
-        } else if(ia.u8[i] > ib.u8[i]) {
+        } else if(ia.lf[i] > ib.lf[i]) {
           return 1;
         }
       }
-    }
-    break;
-  case 2:
-    if(sign) {
+    } else if(step == sizeof(long double)) {
       for(uintmax_t i = 0; i < min; i++) {
-        if(ia.i16[i] < ib.i16[i]) {
+        if(ia.Lf[i] < ib.Lf[i]) {
           return -1;
-        } else if(ia.i16[i] > ib.i16[i]) {
-          return 1;
-        }
-      }
-    } else {
-      for(uintmax_t i = 0; i < min; i++) {
-        if(ia.u16[i] < ib.u16[i]) {
-          return -1;
-        } else if(ia.u16[i] > ib.u16[i]) {
+        } else if(ia.Lf[i] > ib.Lf[i]) {
           return 1;
         }
       }
     }
-    break;
-  case 4:
-    if(sign) {
-      for(uintmax_t i = 0; i < min; i++) {
-        if(ia.i32[i] < ib.i32[i]) {
-          return -1;
-        } else if(ia.i32[i] > ib.i32[i]) {
-          return 1;
+  } else {
+    switch(step) {
+    case 1:
+      if(sign) {
+        for(uintmax_t i = 0; i < min; i++) {
+          if(ia.i8[i] < ib.i8[i]) {
+            return -1;
+          } else if(ia.i8[i] > ib.i8[i]) {
+            return 1;
+          }
+        }
+      } else {
+        for(uintmax_t i = 0; i < min; i++) {
+          if(ia.u8[i] < ib.u8[i]) {
+            return -1;
+          } else if(ia.u8[i] > ib.u8[i]) {
+            return 1;
+          }
         }
       }
-    } else {
-      for(uintmax_t i = 0; i < min; i++) {
-        if(ia.u32[i] < ib.u32[i]) {
-          return -1;
-        } else if(ia.u32[i] > ib.u32[i]) {
-          return 1;
+      break;
+    case 2:
+      if(sign) {
+        for(uintmax_t i = 0; i < min; i++) {
+          if(ia.i16[i] < ib.i16[i]) {
+            return -1;
+          } else if(ia.i16[i] > ib.i16[i]) {
+            return 1;
+          }
+        }
+      } else {
+        for(uintmax_t i = 0; i < min; i++) {
+          if(ia.u16[i] < ib.u16[i]) {
+            return -1;
+          } else if(ia.u16[i] > ib.u16[i]) {
+            return 1;
+          }
         }
       }
+      break;
+    case 4:
+      if(sign) {
+        for(uintmax_t i = 0; i < min; i++) {
+          if(ia.i32[i] < ib.i32[i]) {
+            return -1;
+          } else if(ia.i32[i] > ib.i32[i]) {
+            return 1;
+          }
+        }
+      } else {
+        for(uintmax_t i = 0; i < min; i++) {
+          if(ia.u32[i] < ib.u32[i]) {
+            return -1;
+          } else if(ia.u32[i] > ib.u32[i]) {
+            return 1;
+          }
+        }
+      }
+      break;
+    case 8:
+      if(sign) {
+        for(uintmax_t i = 0; i < min; i++) {
+          if(ia.i64[i] < ib.i64[i]) {
+            return -1;
+          } else if(ia.i64[i] > ib.i64[i]) {
+            return 1;
+          }
+        }
+      } else {
+        for(uintmax_t i = 0; i < min; i++) {
+          if(ia.u64[i] < ib.u64[i]) {
+            return -1;
+          } else if(ia.u64[i] > ib.u64[i]) {
+            return 1;
+          }
+        }
+      }
+      break;
     }
-    break;
-  case 8:
-    if(sign) {
-      for(uintmax_t i = 0; i < min; i++) {
-        if(ia.i64[i] < ib.i64[i]) {
-          return -1;
-        } else if(ia.i64[i] > ib.i64[i]) {
-          return 1;
-        }
-      }
-    } else {
-      for(uintmax_t i = 0; i < min; i++) {
-        if(ia.u64[i] < ib.u64[i]) {
-          return -1;
-        } else if(ia.u64[i] > ib.u64[i]) {
-          return 1;
-        }
-      }
-    }
-    break;
   }
   if(la < lb) return -1;
   if(la > lb) return 1;
