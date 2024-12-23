@@ -258,11 +258,6 @@ void ctf_assert_hide(uintmax_t count);
 
 // clang-format off
 /*
-define(`EA_TEMPLATE', `#define $4$3_$1_$2(a, b) ctf__$3_$1_$2(a, b, #a, #b, __LINE__, __FILE__)')dnl
-define(`EA_MEM_TEMPLATE',
-`format(`#define $4$3_mem_$1_$2(a, b, length) ctf__$3_mem_$2((const void *)a, (const void *)b, length,  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `$1', `float', `2', `0'))')dnl
-define(`EA_ARR_TEMPLATE',
-`format(`#define $4$3_arr_$1_$2(a, b) ctf__$3_arr_$2((const void *const *)a, (const void *const *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)),  sizeof(*(a)), %d, CTF__ASSERT_PRINT_TYPE_$1, #a, #b, __LINE__, __FILE__)', ifelse(`$1', `int', `1', `$1', `float', `2', `0'))')dnl
 define(`EA_FUNCTION',
 `format(`int ctf__$3_$1_$2(%s, %s, const char *, const char *, int, const char *);',TYPE(`$1'),TYPE(`$1'))')dnl
 define(`EA_MEM_FUNCTION',
@@ -603,9 +598,6 @@ COMB(`ALIAS',
      `(assert_barrier(), assert_fold(count, msg), subtest(name),
        assert_true(a), assert_false(a), expect_true(a), expect_false(a),
        assert_null(a), assert_non_null(a), expect_null(a), expect_non_null(a))')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `(CMPS)', `EA_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_MEM_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `(CMPS)', `EA_ARR_TEMPLATE')
 EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `EA_COMP_TEMPLATE')
 EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_MEM_TEMPLATE')
 EA_COMP_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `EA_COMP_ARR_TEMPLATE')
