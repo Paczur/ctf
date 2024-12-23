@@ -125,9 +125,9 @@
     status = CTF__ASSERT_FCMP_##TYPE(a, CTF__ASSERT_CMP_##CMP, b);            \
     state->status = !status;                                                  \
     if(status) {                                                              \
-      thread_data->stats.expects_passed++;                                    \
+      thread_data->stats.ea##s_passed++;                                      \
     } else {                                                                  \
-      thread_data->stats.expects_failed++;                                    \
+      thread_data->stats.ea##s_failed++;                                      \
     }                                                                         \
     CTF__ASSERT_JMP_##EA(status, thread_index);                               \
     return status;                                                            \
@@ -148,9 +148,9 @@
     status = state->status CTF__ASSERT_CMP_##CMP 0;                           \
     state->status = !status;                                                  \
     if(status) {                                                              \
-      thread_data->stats.expects_passed++;                                    \
+      thread_data->stats.ea##s_passed++;                                      \
     } else {                                                                  \
-      thread_data->stats.expects_failed++;                                    \
+      thread_data->stats.ea##s_failed++;                                      \
     }                                                                         \
     CTF__ASSERT_JMP_##EA(status, thread_index);                               \
     return status;                                                            \
@@ -175,9 +175,9 @@
     }                                                                         \
     state->status = !status;                                                  \
     if(status) {                                                              \
-      thread_data->stats.expects_passed++;                                    \
+      thread_data->stats.ea##s_passed++;                                      \
     } else {                                                                  \
-      thread_data->stats.expects_failed++;                                    \
+      thread_data->stats.ea##s_failed++;                                      \
     }                                                                         \
     CTF__ASSERT_JMP_##EA(status, thread_index);                               \
     return status;                                                            \
