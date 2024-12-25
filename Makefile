@@ -79,7 +79,7 @@ $(TEST_RUN): bin/$(TEST_BIN)
 bin/$(TEST_BIN): $(TEST_OBJECTS) build/src/ctf/ctf.o | build/test/$(TEST_BIN).lf
 	mkdir -p $(@D)
 	$(info LN   $@)
-	$(CC) $(LINK_FLAGS) $(TEST_FLAGS) `cat $|` -o $@ $^
+	time $(CC) $(LINK_FLAGS) $(TEST_FLAGS) `cat $|` -o $@ $^
 
 build/test/$(TEST_BIN).lf: $(TESTS)
 	$(info FLG  $@)
@@ -93,12 +93,12 @@ build/test/%.c: test/%.c | build/src/ctf/ctf.h
 build/test/%.o: test/%.c | build/src/ctf/ctf.h
 	mkdir -p $(@D)
 	$(info CC   $@)
-	$(CC) $(TEST_FLAGS) -c -o $@ $<
+	time $(CC) $(TEST_FLAGS) -c -o $@ $<
 
 build/test/main.o: test/main.c | build/src/ctf/ctf.h
 	mkdir -p $(@D)
 	$(info CC   $@)
-	$(CC) $(TEST_FLAGS) -c -o $@ $<
+	time $(CC) $(TEST_FLAGS) -c -o $@ $<
 
 build/src/%.o: build/src/%.c build/src/%.h
 	mkdir -p $(@D)

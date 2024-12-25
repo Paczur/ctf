@@ -176,8 +176,9 @@ static void err(void) {
 static void test_cleanup(void) {
   uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++)
+  for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++) {
     thread_data->mock_reset_stack[i]->states->mock_f = NULL;
+  }
   thread_data->mock_reset_stack_size = 0;
 }
 
