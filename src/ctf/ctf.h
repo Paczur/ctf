@@ -300,18 +300,18 @@ define(`EA_MEM_FUNCTION',
 `int ctf__$2_mem(const void *, const char *, const void *, uintmax_t, uintmax_t, int, int, const char *, const char *, int, const char *);')dnl
 define(`EA_ARR_FUNCTION',
 `int ctf__$2_arr(const void *, const char *, const void *, uintmax_t, uintmax_t, uintmax_t, int, int, const char *, const char *, int, const char*);')dnl
-define(`EA_FACTORY', `foreach(`type', `$1',
+define(`EA_FACTORY', `foreach(`type', `$2',
 `
-indir(`$2', type, `assert', `ctf_')
-indir(`$2', type, `expect', `ctf_')
+indir(`$1', type, `assert', `$3')
+indir(`$1', type, `expect', `$3')
 ')')')dnl
 */
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `EA_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `EA_MEM_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `EA_ARR_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `EA_FUNCTION')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `EA_MEM_FUNCTION')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `EA_ARR_FUNCTION')
+EA_FACTORY(`EA_TEMPLATE',     `(PRIMITIVE_TYPES, str)', `ctf_')
+EA_FACTORY(`EA_MEM_TEMPLATE', `(PRIMITIVE_TYPES)', `ctf_')
+EA_FACTORY(`EA_ARR_TEMPLATE', `(PRIMITIVE_TYPES)', `ctf_')
+EA_FACTORY(`EA_FUNCTION',     `(PRIMITIVE_TYPES, str)', `ctf_')
+EA_FACTORY(`EA_MEM_FUNCTION', `(PRIMITIVE_TYPES)', `ctf_')
+EA_FACTORY(`EA_ARR_FUNCTION', `(PRIMITIVE_TYPES)', `ctf_')
 COMB2(`RUN1', `(CTF__EA_FUN)', `(PRIMITIVE_TYPES, str)')
 #if __STDC_VERSION__ >= 201112L
 #define ctf_expect(a, cmp, b) \
@@ -456,21 +456,6 @@ __LINE__, __FILE__)
 __LINE__, __FILE__)
 #endif
 #if CTF_ALIASES == CTF_ON
-/*
-define(`EA_ALIAS_FACTORY', `foreach(`type', `$1', `foreach(`comp', `$2',
-`
-indir(`$3', type, comp, `assert', `')
-indir(`$3', type, comp, `expect', `')
-'
-)')')dnl
-define(`EA_ALIAS_FACTORY', `foreach(`type', `$1',
-`
-indir(`$2', type, `assert', `')
-indir(`$2', type, `expect', `')
-')')')dnl
-define(`ALIAS', `#define $1 ctf_$1
-')dnl
-*/
 #if __STDC_VERSION__ >= 201112L
 #define expect(a, cmp, b) \
   _Generic((b), \
@@ -613,14 +598,16 @@ __LINE__, __FILE__)
            default    : CTF__EA_MEM_TYPE_ptr),\
 __LINE__, __FILE__)
 #endif
+// define(`ALIAS', `#define $1 ctf__$1')
 COMB(`ALIAS',
      `(assert_barrier(), assert_fold(count, msg), subtest(name),
        assert_true(a), assert_false(a), expect_true(a), expect_false(a),
        assert_null(a), assert_non_null(a), expect_null(a), expect_non_null(a))')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `EA_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `EA_MEM_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `EA_ARR_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `EA_FUNCTION')
+EA_FACTORY(`EA_TEMPLATE',     `(PRIMITIVE_TYPES, str)', `')
+EA_FACTORY(`EA_MEM_TEMPLATE', `(PRIMITIVE_TYPES)', `')
+EA_FACTORY(`EA_ARR_TEMPLATE', `(PRIMITIVE_TYPES)', `')
+EA_FACTORY(`EA_MEM_FUNCTION', `(PRIMITIVE_TYPES)', `')
+EA_FACTORY(`EA_ARR_FUNCTION', `(PRIMITIVE_TYPES)', `')
 // clang-format on
 
 #endif

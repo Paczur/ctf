@@ -450,30 +450,30 @@ define(`MOCK_EA_NTH_TEMPLATE', `#define $3mock_$2_nth_$1(n, var, cmp, val) ctf__
 define(`MOCK_EA_NTH_MEM_TEMPLATE', `#define $3mock_$2_nth_mem_$1(n, var, cmp, val, length) ctf__mock_ea_mem(CTF__MOCK_STRUCT_SELECTED, n, #var, #cmp, val, length, #val, CTF__EA_FLAG_$2, CTF__EA_MEM_TYPE_$1, __LINE__, __FILE__);')
 define(`MOCK_EA_NTH_ARR_TEMPLATE', `#define $3mock_$2_nth_arr_$1(n, var, cmp, val) ctf__mock_ea_mem(CTF__MOCK_STRUCT_SELECTED, n, #var, #cmp, val, sizeof(val)/sizeof(*(val)), #val, CTF__EA_FLAG_$2, CTF__EA_MEM_TYPE_$1, __LINE__, __FILE__);')
 
-define(`MOCK_CHECK', `#define ctf_mock_check_$1(v) ctf__mock_check_$1(ctf__mock_check_state, v, #v)')
-define(`MOCK_CHECK_STRING', `#define ctf_mock_check_str(v) \
+define(`MOCK_CHECK', `#define $1mock_check_$2(v) ctf__mock_check_$2(ctf__mock_check_state, v, #v)')
+define(`MOCK_CHECK_STRING', `#define $1mock_check_str(v) \
 do { \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
 ctf__mock_check_str(ctf__mock_check_state, v, #v); \
 } while(0)')
 define(`MOCK_CHECK_MEM',
-`format(`#define ctf_mock_check_mem_$1(v) \
+`format(`#define $1mock_check_mem_$2(v) \
 do { \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
 ctf__mock_check_mem_$1(ctf__mock_check_state, v, #v, sizeof(*(v)), %d);\
-} while(0)', ifelse(`$1',`int', 1, `$1',`float',2,0))')
+} while(0)', ifelse(`$2',`int', 1, `$2',`float',2,0))')
 */
 COMB2(`RUN1', `(MOCK_FUNCTION)', `(PRIMITIVE_TYPES, str)')
 COMB2(`RUN1', `(MOCK_CHECK_FUNCTION)', `(PRIMITIVE_TYPES, str)')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_MEM_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_ARR_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_NTH_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_NTH_MEM_TEMPLATE')
-EA_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_NTH_ARR_TEMPLATE')
-COMB(`MOCK_CHECK', `(PRIMITIVE_TYPES)')
-MOCK_CHECK_STRING
-COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
+EA_FACTORY(`MOCK_EA_TEMPLATE',         `(PRIMITIVE_TYPES, str)', `ctf_')
+EA_FACTORY(`MOCK_EA_MEM_TEMPLATE',     `(PRIMITIVE_TYPES)', `ctf_')
+EA_FACTORY(`MOCK_EA_ARR_TEMPLATE',     `(PRIMITIVE_TYPES)', `ctf_')
+EA_FACTORY(`MOCK_EA_NTH_TEMPLATE',     `(PRIMITIVE_TYPES, str)', `ctf_')
+EA_FACTORY(`MOCK_EA_NTH_MEM_TEMPLATE', `(PRIMITIVE_TYPES)', `ctf_')
+EA_FACTORY(`MOCK_EA_NTH_ARR_TEMPLATE', `(PRIMITIVE_TYPES)', `ctf_')
+SCOMB(`MOCK_CHECK', `ctf_', `(PRIMITIVE_TYPES)')
+MOCK_CHECK_STRING(`ctf_')
+SCOMB(`MOCK_CHECK_MEM', `ctf_', `(PRIMITIVE_TYPES)')
 // clang-format on
 
 #if CTF_ALIASES == CTF_ON
@@ -630,26 +630,15 @@ COMB(`MOCK_CHECK_MEM', `(PRIMITIVE_TYPES)')
                    __LINE__, __FILE__)
 #endif
 // clang-format off
-/*
-define(`MOCK_CHECK_ALIAS', `#define mock_check_$1(v) ctf__mock_check_$1(ctf__mock_check_state, v, #v)')
-define(`MOCK_CHECK_STRING_ALIAS', `#define mock_check_str(v) \
-ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
-ctf__mock_check_str(ctf__mock_check_state, v, #v)')
-define(`MOCK_CHECK_MEM_ALIAS',
-`format(`#define mock_check_mem_$1(v) \
-ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
-ctf__mock_check_mem(ctf__mock_check_state, v, #v, sizeof(*(v)), %d)'
-  ,ifelse(`$1',`int', 1, `$1',`float',2,0))')
-*/
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_MEM_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_ARR_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_NTH_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES)', `MOCK_EA_NTH_MEM_TEMPLATE')
-EA_ALIAS_FACTORY(`(PRIMITIVE_TYPES, str)', `MOCK_EA_NTH_ARR_TEMPLATE')
-COMB(`MOCK_CHECK_ALIAS', `(PRIMITIVE_TYPES)')
-MOCK_CHECK_STRING_ALIAS
-COMB(`MOCK_CHECK_MEM_ALIAS', `(PRIMITIVE_TYPES)')
+EA_FACTORY(`MOCK_EA_TEMPLATE',         `(PRIMITIVE_TYPES, str)', `')
+EA_FACTORY(`MOCK_EA_MEM_TEMPLATE',     `(PRIMITIVE_TYPES)', `')
+EA_FACTORY(`MOCK_EA_ARR_TEMPLATE',     `(PRIMITIVE_TYPES)', `')
+EA_FACTORY(`MOCK_EA_NTH_TEMPLATE',     `(PRIMITIVE_TYPES, str)', `')
+EA_FACTORY(`MOCK_EA_NTH_MEM_TEMPLATE', `(PRIMITIVE_TYPES)', `')
+EA_FACTORY(`MOCK_EA_NTH_ARR_TEMPLATE', `(PRIMITIVE_TYPES)', `')
+SCOMB(`MOCK_CHECK', `', `(PRIMITIVE_TYPES)')
+MOCK_CHECK_STRING(`')
+SCOMB(`MOCK_CHECK_MEM', `', `(PRIMITIVE_TYPES)')
 COMB(`ALIAS',
      `(mock_global(name, f), mock(name, f), unmock(), mock_select(fn),
        mock_group(name), unmock_group(name),

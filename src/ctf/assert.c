@@ -44,6 +44,8 @@
     }                                                             \
     msg##_size = vsnprintf(msg, msg##_capacity, f, vc);           \
   } while(0)
+#define SIGN(x) (((x) > 0) - ((x) < 0))
+#define CMP(x, y) (((x) > (y)) - ((x) < (y)))
 
 #define CTF__STRINGIFY2(x) #x
 #define CTF__STRINGIFY(x) CTF__STRINGIFY2(x)
@@ -81,12 +83,11 @@
     MSG_SPRINTF_APPEND((state)->msg, "\")");                      \
   } while(0)
 
-#define CTF__EA_ORD_GENERIC(a, b) (((a) > (b)) - ((b) > (a)))
-#define CTF__EA_ORD_INT(a, b) CTF__EA_ORD_GENERIC(a, b)
-#define CTF__EA_ORD_UINT(a, b) CTF__EA_ORD_GENERIC(a, b)
-#define CTF__EA_ORD_FLOAT(a, b) CTF__EA_ORD_GENERIC(a, b)
-#define CTF__EA_ORD_CHAR(a, b) CTF__EA_ORD_GENERIC(a, b)
-#define CTF__EA_ORD_PTR(a, b) CTF__EA_ORD_GENERIC(a, b)
+#define CTF__EA_ORD_INT(a, b) CMP(a, b)
+#define CTF__EA_ORD_UINT(a, b) CMP(a, b)
+#define CTF__EA_ORD_FLOAT(a, b) CMP(a, b)
+#define CTF__EA_ORD_CHAR(a, b) CMP(a, b)
+#define CTF__EA_ORD_PTR(a, b) CMP(a, b)
 #define CTF__EA_ORD_STR(a, b) strcmp(a, b)
 
 static void msg_reserve(struct ctf__state *state, uintmax_t size) {
@@ -309,55 +310,55 @@ static int order_arr(const void *a, const void *b, uintmax_t la, uintmax_t lb,
   if(sign == 2) {
     if(step == sizeof(float)) {
       for(uintmax_t i = 0; i < min; i++)
-        if((t = (ia.f[i] > ib.f[i]) - (ib.f[i] > ia.f[i]))) return t;
+        if((t = CMP(ia.f[i], ib.f[i]))) return t;
     } else if(step == sizeof(double)) {
       for(uintmax_t i = 0; i < min; i++)
-        if((t = (ia.lf[i] > ib.lf[i]) - (ib.lf[i] > ia.lf[i]))) return t;
+        if((t = CMP(ia.lf[i], ib.lf[i]))) return t;
     } else if(step == sizeof(long double)) {
       for(uintmax_t i = 0; i < min; i++)
-        if((t = (ia.Lf[i] > ib.Lf[i]) - (ib.Lf[i] > ia.Lf[i]))) return t;
+        if((t = CMP(ia.Lf[i], ib.Lf[i]))) return t;
     }
   } else {
     switch(step) {
     case 1:
       if(sign) {
         for(uintmax_t i = 0; i < min; i++)
-          if((t = (ia.i8[i] > ib.i8[i]) - (ib.i8[i] > ia.i8[i]))) return t;
+          if((t = CMP(ia.i8[i], ib.i8[i]))) return t;
       } else {
         for(uintmax_t i = 0; i < min; i++)
-          if((t = (ia.u8[i] > ib.u8[i]) - (ib.u8[i] > ia.u8[i]))) return t;
+          if((t = CMP(ia.u8[i], ib.u8[i]))) return t;
       }
       break;
     case 2:
       if(sign) {
         for(uintmax_t i = 0; i < min; i++)
-          if((t = (ia.i16[i] > ib.i16[i]) - (ib.i16[i] > ia.i16[i]))) return t;
+          if((t = CMP(ia.i16[i], ib.i16[i]))) return t;
       } else {
         for(uintmax_t i = 0; i < min; i++)
-          if((t = (ia.u16[i] > ib.u16[i]) - (ib.u16[i] > ia.u16[i]))) return t;
+          if((t = CMP(ia.u16[i], ib.u16[i]))) return t;
       }
       break;
     case 4:
       if(sign) {
         for(uintmax_t i = 0; i < min; i++)
-          if((t = (ia.i32[i] > ib.i32[i]) - (ib.i32[i] > ia.i32[i]))) return t;
+          if((t = CMP(ia.i32[i], ib.i32[i]))) return t;
       } else {
         for(uintmax_t i = 0; i < min; i++)
-          if((t = (ia.u32[i] > ib.u32[i]) - (ib.u32[i] > ia.u32[i]))) return t;
+          if((t = CMP(ia.u32[i], ib.u32[i]))) return t;
       }
       break;
     case 8:
       if(sign) {
         for(uintmax_t i = 0; i < min; i++)
-          if((t = (ia.i64[i] > ib.i64[i]) - (ib.i64[i] > ia.i64[i]))) return t;
+          if((t = CMP(ia.i64[i], ib.i64[i]))) return t;
       } else {
         for(uintmax_t i = 0; i < min; i++)
-          if((t = (ia.u64[i] > ib.u64[i]) - (ib.u64[i] > ia.u64[i]))) return t;
+          if((t = CMP(ia.u64[i], ib.u64[i]))) return t;
       }
       break;
     }
   }
-  return (la > lb) - (lb > la);
+  return CMP(la, lb);
 }
 
 static void print_mem(struct ctf__state *state, const void *a, const char *cmp,
