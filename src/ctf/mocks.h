@@ -460,7 +460,7 @@ define(`MOCK_CHECK_MEM',
 `format(`#define $1mock_check_mem_$2(v) \
 do { \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v); \
-ctf__mock_check_mem_$1(ctf__mock_check_state, v, #v, sizeof(*(v)), %d);\
+ctf__mock_check_mem(ctf__mock_check_state, v, #v, sizeof(*(v)), %d);\
 } while(0)', ifelse(`$2',`int', 1, `$2',`float',2,0))')
 */
 COMB2(`RUN1', `(MOCK_FUNCTION)', `(PRIMITIVE_TYPES, str)')
@@ -476,7 +476,7 @@ MOCK_CHECK_STRING(`ctf_')
 SCOMB(`MOCK_CHECK_MEM', `ctf_', `(PRIMITIVE_TYPES)')
 // clang-format on
 
-#if CTF_ALIASES == CTF_ON
+#if CTF_MOCK_ALIASES == CTF_ON
 #if __STDC_VERSION__ >= 201112L
 #define mock_check(name)                \
   _Generic((name),                      \

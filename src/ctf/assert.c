@@ -439,27 +439,6 @@ uintmax_t ctf__pass(const char *m, int line, const char *file, ...) {
   return 1;
 }
 
-uintmax_t ctf__assert_msg(int status, const char *msg, int line,
-                          const char *file, ...) {
-  va_list args;
-  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__state *state = state_next(thread_data);
-  state->status = status;
-  state->line = line;
-  state->file = file;
-  state->msg_size = 0;
-  va_start(args, file);
-  if(status) {
-    thread_data->stats.asserts_passed++;
-  } else {
-    thread_data->stats.asserts_failed++;
-  }
-  MSG_VSPRINTF(state->msg, msg, args);
-  va_end(args);
-  return status;
-}
-
 static int ea_end(intptr_t thread_index, int status, int assert) {
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   if(assert) {
@@ -480,6 +459,23 @@ static int ea_end(intptr_t thread_index, int status, int assert) {
       }
     }
   }
+  return status;
+}
+
+uintmax_t ctf__ea_msg(int status, const char *msg, int assert, int line,
+                      const char *file, ...) {
+  va_list args;
+  intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
+  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
+  struct ctf__state *state = state_next(thread_data);
+  state->status = status;
+  state->line = line;
+  state->file = file;
+  state->msg_size = 0;
+  va_start(args, file);
+  MSG_VSPRINTF(state->msg, msg, args);
+  va_end(args);
+  ea_end(thread_index, !status, assert);
   return status;
 }
 
