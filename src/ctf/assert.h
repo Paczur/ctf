@@ -4,13 +4,6 @@
 #define CTF__EA_MEM_TYPE_char 3
 #define CTF__EA_MEM_TYPE_float 4
 
-#define CTF__EA_TYPE_INT intmax_t
-#define CTF__EA_TYPE_UINT uintmax_t
-#define CTF__EA_TYPE_CHAR char
-#define CTF__EA_TYPE_PTR const void *
-#define CTF__EA_TYPE_STR const char *
-#define CTF__EA_TYPE_FLOAT long double
-
 #define CTF__EA_FLAG_expect 0
 #define CTF__EA_FLAG_assert 1
 
@@ -56,11 +49,10 @@ void ctf_assert_hide(uintmax_t count);
 #define ctf_expect_msg(p, m, ...) \
   ctf__ea_msg(p, m, 0, __LINE__, __FILE__, ##__VA_ARGS__)
 
-#define CTF__EA_FUN(type, TYPE)                                \
-  int ctf__ea_##type(CTF__EA_TYPE_##TYPE a, const char *cmp,   \
-                     CTF__EA_TYPE_##TYPE b, const char *a_str, \
-                     const char *b_str, int assert, int line,  \
-                     const char *file);
+#define CTF__EA_FUN(type, TYPE)                                               \
+  int ctf__ea_##type(CTF__TYPE_##TYPE a, const char *cmp, CTF__TYPE_##TYPE b, \
+                     const char *a_str, const char *b_str, int assert,        \
+                     int line, const char *file);
 // clang-format off
 /*
 define(`EA_FUNCTION',

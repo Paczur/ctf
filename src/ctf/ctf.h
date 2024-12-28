@@ -1,6 +1,13 @@
 #ifndef CTF_H
 #define CTF_H
 
+#define CTF__TYPE_INT intmax_t
+#define CTF__TYPE_UINT uintmax_t
+#define CTF__TYPE_CHAR char
+#define CTF__TYPE_PTR const void *
+#define CTF__TYPE_STR const char *
+#define CTF__TYPE_FLOAT long double
+
 #ifndef CTF_EA_ALIASES
 #define CTF_EA_ALIASES CTF_ON
 #endif
@@ -87,6 +94,8 @@ struct ctf__thread_data {
   uintmax_t mock_reset_stack_capacity;
   struct ctf__stats stats;
 };
+
+#define CTF__MACRO_VA(...) __VA_ARGS__
 
 extern struct ctf__thread_data *restrict ctf__thread_data;
 extern int ctf_exit_code;
@@ -200,6 +209,12 @@ extern int ctf__opt_cleanup;
     ctf__group_test_teardown_def_##name;                   \
   static void ctf__group_test_teardown_def_##name(void)
 
+void ctf__print_error(char *msg, uintmax_t msg_size, int line, const char *file);
+#define ctf__error(msg)                                         \
+  do {                                                          \
+    ctf__print_error(msg, sizeof(msg) - 1, __LINE__, __FILE__); \
+    exit(1);                                                    \
+  } while(0)
 void *ctf__cleanup_realloc(void *ptr, uintmax_t size, uintptr_t thread_index);
 void *ctf__cleanup_malloc(uintmax_t size, uintptr_t thread_index);
 void ctf__groups_run(int count, ...);
@@ -212,9 +227,7 @@ void ctf_group_run(struct ctf__group group);
   ctf__groups_run(sizeof((const struct ctf__group[]){__VA_ARGS__}) / \
                     sizeof(const struct ctf__group),                 \
                   __VA_ARGS__)
-
 void ctf_sigsegv_handler(int unused);
-
 #define ctf_subtest(name)                                                \
   for(uintptr_t ctf__subtest_thread_index =                              \
                   (uintptr_t)pthread_getspecific(ctf__thread_index),     \

@@ -148,14 +148,14 @@ void ctf_unmock(void) {
   struct ctf__mock *mock =
     thread_data->mock_reset_stack[--thread_data->mock_reset_stack_size];
   if(mock->states == NULL) return;
-  mock->states[thread_index].mock_f = NULL;
+  mock->states[thread_index].enabled = 0;
 }
 
 void ctf__mock_group(struct ctf__mock_bind *bind) {
   uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   struct ctf__mock *mock;
-  for(uintmax_t i = 0; i < CTF_CONST_MOCK_GROUP_SIZE && bind[i].f; i++) {
+  for(uintmax_t i = 0; i < CTF_CONST_MOCK_GROUP_SIZE && bind[i].mock; i++) {
     mock = bind[i].mock;
     if(ctf__opt_threads > 1) pthread_rwlock_rdlock(&mock_states_lock);
     if(!mock->states_initialized) {
@@ -175,6 +175,7 @@ void ctf__mock_group(struct ctf__mock_bind *bind) {
     }
     thread_data->mock_reset_stack[thread_data->mock_reset_stack_size++] = mock;
     mock->states[thread_index].mock_f = (void (*)(void))bind[i].f;
+    mock->states[thread_index].enabled = 1;
   }
 }
 
@@ -190,6 +191,7 @@ void ctf__mock_global(struct ctf__mock *mock, void (*f)(void)) {
     ctf__mock_reset(mock->states + thread_index);
   }
   mock->states[thread_index].mock_f = f;
+  mock->states[thread_index].enabled = 1;
   if(thread_data->mock_reset_stack_size + 1 >=
      thread_data->mock_reset_stack_capacity) {
     thread_data->mock_reset_stack_capacity *= 2;
@@ -204,10 +206,10 @@ void ctf__mock_global(struct ctf__mock *mock, void (*f)(void)) {
 void ctf__unmock_group(struct ctf__mock_bind *bind) {
   uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__mock *mock;
-  for(uintmax_t i = 0; i < CTF_CONST_MOCK_GROUP_SIZE && bind[i].f; i++) {
+  for(uintmax_t i = 0; i < CTF_CONST_MOCK_GROUP_SIZE && bind[i].mock; i++) {
     mock = bind[i].mock;
     if(mock->states == NULL) continue;
-    mock->states[thread_index].mock_f = NULL;
+    mock->states[thread_index].enabled = 0;
   }
 }
 
@@ -284,7 +286,7 @@ void ctf__mock_check_mem(struct ctf__mock_state *state, const void *v,
 }
 
 #define MOCK_CHECK(t, T)                                                      \
-  void ctf__mock_check_##t(struct ctf__mock_state *state, CTF__EA_TYPE_##T v, \
+  void ctf__mock_check_##t(struct ctf__mock_state *state, CTF__TYPE_##T v,    \
                            const char *v_print) {                             \
     for(uintmax_t i = 0; i < state->checks_count; i++) {                      \
       if(CTF__MOCK_CHECK_STR_##T(state->checks[i].type & CTF__MOCK_TYPE_MEM)) \
@@ -300,17 +302,17 @@ void ctf__mock_check_mem(struct ctf__mock_state *state, const void *v,
     }                                                                         \
     mock_check_base(state, v_print, 0);                                       \
   }
-#define MOCK_EA(type, TYPE)                                                    \
-  void ctf__mock_ea_##type(                                                    \
-    struct ctf__mock_state *state, uintmax_t call_count, const char *var,      \
-    const char *cmp, CTF__EA_TYPE_##TYPE val, const char *val_str, int assert, \
-    int line, const char *file) {                                              \
-    mock_base(state, call_count, assert | CTF__MOCK_CHECK_TYPE_TYPE_##TYPE,    \
-              line, file, val_str, var);                                       \
-    struct ctf__check *const check = state->checks + state->checks_count - 1;  \
-    check->val.CTF__MOCK_CHECK_TYPE_##TYPE = val;                              \
-    check->cmp = cmp;                                                          \
-    check->f.CTF__MOCK_CHECK_TYPE_##TYPE = ctf__ea_##type;                     \
+#define MOCK_EA(type, TYPE)                                                   \
+  void ctf__mock_ea_##type(                                                   \
+    struct ctf__mock_state *state, uintmax_t call_count, const char *var,     \
+    const char *cmp, CTF__TYPE_##TYPE val, const char *val_str, int assert,   \
+    int line, const char *file) {                                             \
+    mock_base(state, call_count, assert | CTF__MOCK_CHECK_TYPE_TYPE_##TYPE,   \
+              line, file, val_str, var);                                      \
+    struct ctf__check *const check = state->checks + state->checks_count - 1; \
+    check->val.CTF__MOCK_CHECK_TYPE_##TYPE = val;                             \
+    check->cmp = cmp;                                                         \
+    check->f.CTF__MOCK_CHECK_TYPE_##TYPE = ctf__ea_##type;                    \
   }
 
 void ctf__mock_ea_mem(struct ctf__mock_state *state, uintmax_t call_count,

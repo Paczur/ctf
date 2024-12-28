@@ -480,10 +480,9 @@ uintmax_t ctf__ea_msg(int status, const char *msg, int assert, int line,
 }
 
 #define EA(type, TYPE)                                                        \
-  int ctf__ea_##type(CTF__EA_TYPE_##TYPE a, const char *cmp,                  \
-                     CTF__EA_TYPE_##TYPE b, const char *a_str,                \
-                     const char *b_str, int assert, int line,                 \
-                     const char *file) {                                      \
+  int ctf__ea_##type(CTF__TYPE_##TYPE a, const char *cmp, CTF__TYPE_##TYPE b, \
+                     const char *a_str, const char *b_str, int assert,        \
+                     int line, const char *file) {                            \
     int ord;                                                                  \
     intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index); \
     struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;   \

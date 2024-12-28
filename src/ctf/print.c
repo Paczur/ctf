@@ -167,12 +167,12 @@ static uintmax_t print_name_status(struct buff *buff, const char *name,
 }
 
 static uintmax_t print_state(struct buff *buff, const struct ctf__state *state,
-                             uintmax_t level) {
+                             uintmax_t level, int ldetail) {
   uintmax_t spaces = level * INDENT_PER_LEVEL;
   uintmax_t full_size = 0;
   if(buff == NULL) {
     full_size += spaces;
-    if(detail) {
+    if(ldetail) {
       full_size +=
         snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
                  state->file, state->line);
@@ -189,7 +189,7 @@ static uintmax_t print_state(struct buff *buff, const struct ctf__state *state,
     return full_size;
   }
   if(state->status == 0) {
-    if(detail) {
+    if(ldetail) {
       spaces += snprintf(NULL, 0, "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d",
                          state->file, state->line);
       spaces += 2;  // 'E' ']'
@@ -200,7 +200,7 @@ static uintmax_t print_state(struct buff *buff, const struct ctf__state *state,
   } else {
     memset(buff->buff + buff->size, ' ', spaces);
     buff->size += spaces;
-    if(detail) {
+    if(ldetail) {
       buff->size += sprintf(buff->buff + buff->size,
                             "[%s|%0" STRINGIFY(MIN_DIGITS_FOR_LINE) "d|",
                             state->file, state->line);
@@ -229,7 +229,7 @@ static uintmax_t print_states(struct buff *buff,
   if(!parent_status && level > opt_verbosity && !states_status(states))
     return full_size;
   for(uintmax_t i = 0; i < states->size; i++)
-    full_size += print_state(buff, states->states + i, level);
+    full_size += print_state(buff, states->states + i, level, detail);
   return full_size;
 }
 
@@ -294,6 +294,20 @@ static uintmax_t print_test(struct buff *buff, const struct ctf__test *test,
     }
   }
   return full_size;
+}
+
+void ctf__print_error(char *msg, uintmax_t msg_size, int line,
+                      const char *file) {
+  struct buff buff;
+  const struct ctf__state state = {.status = 1,
+                                   .line = line,
+                                   .file = file,
+                                   .msg = msg,
+                                   .msg_size = msg_size,
+                                   .msg_capacity = msg_size};
+  buff_reserve(&buff, print_state(NULL, &state, 0, 1));
+  print_state(&buff, &state, 0, 1);
+  write(STDERR_FILENO, buff.buff, buff.size);
 }
 
 void ctf_sigsegv_handler(int unused) {
