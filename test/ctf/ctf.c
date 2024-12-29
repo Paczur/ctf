@@ -10,12 +10,13 @@ CTF_MOCK(int, add, (int a, int b), (a, b)) {
   mock_check(a);
   mock_check(b);
 }
-CTF_MOCK(int, wrapped_strcmp, (const char *a, const char *b), (a, b)) {
+CTF_MOCK_CUSTOM(strcmp, int, wrapped_strcmp, (const char *a, const char *b),
+                (a, b)) {
   mock_check_str(a);
   mock_check_str(b);
 }
-CTF_MOCK(int, wrapped_memcmp, (const void *a, const void *b, size_t l),
-         (a, b, l)) {
+CTF_MOCK_CUSTOM(memcmp, int, wrapped_memcmp,
+                (const void *a, const void *b, size_t l), (a, b, l)) {
   mock_check_mem_int(a);
   mock_check_mem_int(b);
   mock_check(l);
