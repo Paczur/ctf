@@ -22,20 +22,17 @@ CTF_MOCK_CUSTOM(memcmp, int, wrapped_memcmp,
   mock_check(l);
 }
 
-int stub_add(int a, int b) {
+int mock_add(int a, int b) {
   (void)(a - b);
   return 0;
 }
-int stub_sub(int a, int b) {
+int mock_sub(int a, int b) {
   (void)(a + b);
   return 1;
 }
-int mock_add(int a, int b) { return a + b; }
-int mock_sub(int a, int b) { return a - b; }
-
 CTF_MOCK_GROUP(add_sub) = {
-  CTF_MOCK_BIND(add, stub_add),
-  CTF_MOCK_BIND(sub, stub_sub),
+  CTF_MOCK_BIND(add, mock_add),
+  CTF_MOCK_BIND(sub, mock_sub),
 };
 
 CTF_TEST(mock_grouped) {
@@ -54,10 +51,10 @@ CTF_TEST(mock_grouped) {
   }
 }
 CTF_TEST(mock_multiple) {
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_expect(a, ==, 1);
     mock_expect(b, ==, 2);
-    mock(sub, mock_sub) {
+    mock_spy(sub) {
       mock_expect(a, ==, 2);
       mock_expect(b, ==, 3);
       expect(-1, ==, sub(2, 3));
@@ -79,7 +76,7 @@ CTF_TEST(mock_return) {
 CTF_TEST(mock_char_expect_success) {
   char a = 'a';
   char b = 'b';
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_expect(a, ==, a);
     mock_expect(b, ==, b);
     mock_expect(a, !=, b);
@@ -107,7 +104,7 @@ CTF_TEST(mock_char_expect_success) {
 CTF_TEST(mock_char_expect_failure) {
   char a = 'a';
   char b = 'b';
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_expect(a, ==, b);
     mock_expect(b, ==, a);
     mock_expect(a, !=, a);
@@ -124,7 +121,7 @@ CTF_TEST(mock_char_expect_failure) {
 CTF_TEST(mock_char_assert) {
   char a = 'a';
   char b = 'b';
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_assert(a, ==, a);
     mock_assert(b, ==, b);
     mock_assert(a, !=, b);
@@ -152,7 +149,7 @@ CTF_TEST(mock_char_assert) {
 CTF_TEST(mock_int_expect_success) {
   int a = -2;
   int b = -1;
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_expect(a, ==, a);
     mock_expect(b, ==, b);
     mock_expect(a, !=, b);
@@ -180,7 +177,7 @@ CTF_TEST(mock_int_expect_success) {
 CTF_TEST(mock_int_expect_failure) {
   int a = -2;
   int b = -1;
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_expect(a, ==, b);
     mock_expect(b, ==, a);
     mock_expect(a, !=, a);
@@ -197,7 +194,7 @@ CTF_TEST(mock_int_expect_failure) {
 CTF_TEST(mock_int_assert) {
   int a = -2;
   int b = -1;
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_assert(a, ==, a);
     mock_assert(b, ==, b);
     mock_assert(a, !=, b);
@@ -225,7 +222,7 @@ CTF_TEST(mock_int_assert) {
 CTF_TEST(mock_uint_expect_success) {
   unsigned a = 0;
   unsigned b = 1;
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_expect(a, ==, a);
     mock_expect(b, ==, b);
     mock_expect(a, !=, b);
@@ -253,7 +250,7 @@ CTF_TEST(mock_uint_expect_success) {
 CTF_TEST(mock_uint_expect_failure) {
   unsigned a = 0;
   unsigned b = 1;
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_expect(a, ==, b);
     mock_expect(b, ==, a);
     mock_expect(a, !=, a);
@@ -270,7 +267,7 @@ CTF_TEST(mock_uint_expect_failure) {
 CTF_TEST(mock_uint_assert) {
   unsigned a = 0;
   unsigned b = 1;
-  mock(add, mock_add) {
+  mock_spy(add) {
     mock_assert(a, ==, a);
     mock_assert(b, ==, b);
     mock_assert(a, !=, b);
