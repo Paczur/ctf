@@ -307,7 +307,9 @@ void ctf__print_error(char *msg, uintmax_t msg_size, int line,
                                    .msg_capacity = msg_size};
   buff_reserve(&buff, print_state(NULL, &state, 0, 1));
   print_state(&buff, &state, 0, 1);
+#pragma GCC diagnostic ignored "-Wunused-result"
   write(STDERR_FILENO, buff.buff, buff.size);
+#pragma GCC diagnostic pop
 }
 
 void ctf_sigsegv_handler(int unused) {
