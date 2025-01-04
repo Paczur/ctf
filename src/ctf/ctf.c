@@ -149,10 +149,11 @@ static void thread_data_init(struct ctf__thread_data *data) {
   if(opt_statistics) stats_init(&data->stats);
 }
 
-static void thread_data_deinit(struct ctf__thread_data *data) {
-  test_elements_cleanup(data);
-  free(data->test_elements);
-  free(data->mock_reset_stack);
+static void thread_data_deinit(uintptr_t thread_index) {
+  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
+  test_elements_cleanup(thread_index);
+  free(thread_data->test_elements);
+  free(thread_data->mock_reset_stack);
 }
 
 static void pthread_key_destr(void *v) {
@@ -209,7 +210,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
     group.test_teardown();
     test_cleanup();
     buff->size -= temp_size;
-    status = test_status(thread_data);
+    status = test_status(thread_index);
 
     if(status) {
       group_status = 1;
@@ -218,10 +219,10 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
       if(opt_statistics) thread_data->stats.tests_passed++;
     }
 
-    buff_reserve(buff,
-                 print_test(NULL, group.tests + i, test_name_len, thread_data));
-    print_test(buff, group.tests + i, test_name_len, thread_data);
-    test_elements_cleanup(thread_data);
+    buff_reserve(
+      buff, print_test(NULL, group.tests + i, test_name_len, thread_index));
+    print_test(buff, group.tests + i, test_name_len, thread_index);
+    test_elements_cleanup(thread_index);
   }
   group.teardown();
   temp_size = buff->size;
@@ -465,7 +466,7 @@ int main(int argc, char *argv[]) {
   }
   if(ctf__opt_cleanup) {
     for(int j = 0; j < ctf__opt_threads; j++) {
-      thread_data_deinit(ctf__thread_data + j);
+      thread_data_deinit(j);
       for(uintmax_t k = 0; k < cleanup_list[j].size; k++)
         free(cleanup_list[j].pointers[k]);
       free(cleanup_list[j].pointers);

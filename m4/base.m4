@@ -24,10 +24,21 @@ define(`COMB3', `foreach(`x', `$2', `foreach(`y', `$3',
 define(`COMB4', `foreach(`x', `$2', `foreach(`y', `$3',
 `foreach(`z', `$4', `foreach(`a', `$5', `indir(`$1', x, y, z, a)
 ')')')')')
+define(`COMB5', `foreach(`x', `$2', `foreach(`y', `$3',
+                                             `foreach(`z', `$4', `foreach(`a', `$5', 
+                                                                          `foreach(`b', `$6', `indir(`$1', x, y, z, a, b)
+                                                                                  ')')')')')')
+define(`COMB6', `foreach(`x', `$2', `foreach(`y', `$3',
+                                             `foreach(`z', `$4', `foreach(`a', `$5', 
+                                                                          `foreach(`b', `$6', 
+                                                                                   `foreach(`c', `$7', `indir(`$1', x, y, z, a, b, c)
+                                                                                  ')')')')')')')
 define(`TYPE', `ifelse(`$1',char,char,`$1',int,intmax_t,`$1',uint,uintmax_t,`$1',ptr,const void *,`$1',str,const char *,`$1',float,long double)')
 define(`SHORT', `ifelse(`$1',char,c,`$1',int,i,`$1',uint,u,`$1',ptr,p,`$1',str,p,`$1',float,f)')
 define(`RUN3', `format(`%s(%s, %s, %s, %s, %s, %s)', `$1', `$2', `UP(`$2')', `$3', `UP(`$3')', `$4', `UP(`$4')')')
 define(`RUN2', `format(`%s(%s, %s, %s, %s)', `$1', `$2', `UP(`$2')', `$3', `UP(`$3')')')
 define(`RUN1', `format(`%s(%s, %s)', `$1', `$2', `UP(`$2')')')
+
+define(`EAS', `expect, assert')
 
 divert(0)dnl

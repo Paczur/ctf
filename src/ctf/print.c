@@ -233,8 +233,8 @@ static uintmax_t print_states(struct buff *buff,
   return full_size;
 }
 
-static uintmax_t print_subtest(struct buff *buff, struct ctf__subtest *subtest,
-                               int test_status) {
+static uintmax_t print_subtest(struct buff *buff, uintptr_t thread_index,
+                               struct ctf__subtest *subtest, int test_status) {
   uintmax_t full_size = 0;
   uintmax_t level = 2;
   uintmax_t t;
@@ -247,25 +247,27 @@ static uintmax_t print_subtest(struct buff *buff, struct ctf__subtest *subtest,
     if(subtest->size > 0) {
       for(uintmax_t i = subtest->size - 1; i > 0; i--) {
         if(subtest->elements[i].issubtest) {
-          subtest_stack_push(subtest->elements[i].el.subtest);
-          level_stack_push(level + 1);
+          subtest_stack_push(subtest_stack + thread_index,
+                             subtest->elements[i].el.subtest);
+          level_stack_push(level_stack + thread_index, level + 1);
         } else {
           full_size += print_states(buff, subtest->elements[i].el.states,
                                     level + 1, subtest->status);
         }
       }
       if(subtest->elements[0].issubtest) {
-        subtest_stack_push(subtest->elements[0].el.subtest);
-        level_stack_push(level + 1);
+        subtest_stack_push(subtest_stack + thread_index,
+                           subtest->elements[0].el.subtest);
+        level_stack_push(level_stack + thread_index, level + 1);
       } else {
         full_size += print_states(buff, subtest->elements[0].el.states,
                                   level + 1, subtest->status);
       }
     }
 
-    subtest = subtest_stack_pop();
+    subtest = subtest_stack_pop(subtest_stack + thread_index);
     if(subtest == NULL) break;
-    t = level_stack_pop();
+    t = level_stack_pop(level_stack + thread_index);
     if(status)
       full_size += print_name_status(buff, subtest->name, strlen(subtest->name),
                                      subtest->status, t);
@@ -275,20 +277,20 @@ static uintmax_t print_subtest(struct buff *buff, struct ctf__subtest *subtest,
 }
 
 static uintmax_t print_test(struct buff *buff, const struct ctf__test *test,
-                            uintmax_t test_name_len,
-                            struct ctf__thread_data *thread_data) {
+                            uintmax_t test_name_len, uintptr_t thread_index) {
+  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   uintmax_t full_size = 0;
   int status;
   struct ctf__test_element *el;
 
-  status = test_status(thread_data);
+  status = test_status(thread_index);
   if(!status && opt_verbosity < 2) return full_size;
 
   full_size += print_name_status(buff, test->name, test_name_len, status, 1);
   for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
     el = thread_data->test_elements + i;
     if(el->issubtest) {
-      full_size += print_subtest(buff, el->el.subtest, status);
+      full_size += print_subtest(buff, thread_index, el->el.subtest, status);
     } else {
       full_size += print_states(buff, el->el.states, 2, status);
     }
@@ -337,7 +339,7 @@ void ctf_sigsegv_handler(int unused) {
         print_buff[thread_index].size);
   for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
     if(thread_data->test_elements[i].issubtest) {
-      print_subtest(print_buff + thread_index,
+      print_subtest(print_buff + thread_index, thread_index,
                     thread_data->test_elements[i].el.subtest, 2);
     } else {
       print_states(print_buff + thread_index,

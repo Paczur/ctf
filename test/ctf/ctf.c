@@ -3,23 +3,36 @@
 #include "add.h"
 
 CTF_MOCK(int, sub, (int a, int b), (a, b)) {
-  mock_check(a);
-  mock_check(b);
+  if(mock_in) {
+    mock_check(a);
+    mock_check(b);
+  } else {
+    mock_check(mock_return_value);
+  }
 }
 CTF_MOCK(int, add, (int a, int b), (a, b)) {
-  mock_check(a);
-  mock_check(b);
+  if(mock_in) {
+    mock_check(a);
+    mock_check(b);
+  } else {
+    mock_check(mock_return_value);
+  }
 }
 CTF_MOCK_CUSTOM(strcmp, int, wrapped_strcmp, (const char *a, const char *b),
                 (a, b)) {
   mock_check_str(a);
   mock_check_str(b);
+  if(mock_out) mock_check(mock_return_value);
 }
 CTF_MOCK_CUSTOM(memcmp, int, wrapped_memcmp,
                 (const void *a, const void *b, size_t l), (a, b, l)) {
   mock_check_mem_int(a);
   mock_check_mem_int(b);
-  mock_check(l);
+  if(mock_in) {
+    mock_check(l);
+  } else {
+    mock_check(mock_return_value);
+  }
 }
 
 int mock_add(int a, int b) {
@@ -77,16 +90,16 @@ CTF_TEST(mock_char_expect_success) {
   char a = 'a';
   char b = 'b';
   mock_spy(add) {
-    mock_expect(a, ==, a);
-    mock_expect(b, ==, b);
-    mock_expect(a, !=, b);
-    mock_expect(b, !=, a);
-    mock_expect(b, >, a);
-    mock_expect(a, <, b);
-    mock_expect(a, <=, a);
     mock_expect(b, >=, a);
     mock_expect(a, >=, a);
     mock_expect(a, <=, b);
+    mock_expect_nth(1, a, ==, a);
+    mock_expect_nth(1, b, ==, b);
+    mock_expect_nth(1, a, !=, b);
+    mock_expect_nth(1, b, !=, a);
+    mock_expect_nth(1, b, >, a);
+    mock_expect_nth(1, a, <, b);
+    mock_expect_nth(1, a, <=, a);
     mock_expect_nth(2, b, ==, a);
     mock_expect_nth(2, a, ==, b);
     mock_expect_nth(2, a, !=, a);
@@ -122,16 +135,16 @@ CTF_TEST(mock_char_assert) {
   char a = 'a';
   char b = 'b';
   mock_spy(add) {
-    mock_assert(a, ==, a);
-    mock_assert(b, ==, b);
-    mock_assert(a, !=, b);
-    mock_assert(b, !=, a);
-    mock_assert(b, >, a);
-    mock_assert(a, <, b);
-    mock_assert(a, <=, a);
-    mock_assert(b, >=, a);
-    mock_assert(a, >=, a);
-    mock_assert(a, <=, b);
+    mock_assert_nth(1, a, ==, a);
+    mock_assert_nth(1, b, ==, b);
+    mock_assert_nth(1, a, !=, b);
+    mock_assert_nth(1, b, !=, a);
+    mock_assert_nth(1, b, >, a);
+    mock_assert_nth(1, a, <, b);
+    mock_assert_nth(1, a, <=, a);
+    mock_assert_nth(1, b, >=, a);
+    mock_assert_nth(1, a, >=, a);
+    mock_assert_nth(1, a, <=, b);
     mock_assert_nth(2, b, ==, a);
     mock_assert_nth(2, a, ==, b);
     mock_assert_nth(2, a, !=, a);
@@ -150,16 +163,16 @@ CTF_TEST(mock_int_expect_success) {
   int a = -2;
   int b = -1;
   mock_spy(add) {
-    mock_expect(a, ==, a);
-    mock_expect(b, ==, b);
-    mock_expect(a, !=, b);
-    mock_expect(b, !=, a);
-    mock_expect(b, >, a);
-    mock_expect(a, <, b);
-    mock_expect(a, <=, a);
     mock_expect(b, >=, a);
     mock_expect(a, >=, a);
     mock_expect(a, <=, b);
+    mock_expect_nth(1, a, ==, a);
+    mock_expect_nth(1, b, ==, b);
+    mock_expect_nth(1, a, !=, b);
+    mock_expect_nth(1, b, !=, a);
+    mock_expect_nth(1, b, >, a);
+    mock_expect_nth(1, a, <, b);
+    mock_expect_nth(1, a, <=, a);
     mock_expect_nth(2, b, ==, a);
     mock_expect_nth(2, a, ==, b);
     mock_expect_nth(2, a, !=, a);
@@ -195,16 +208,16 @@ CTF_TEST(mock_int_assert) {
   int a = -2;
   int b = -1;
   mock_spy(add) {
-    mock_assert(a, ==, a);
-    mock_assert(b, ==, b);
-    mock_assert(a, !=, b);
-    mock_assert(b, !=, a);
-    mock_assert(b, >, a);
-    mock_assert(a, <, b);
-    mock_assert(a, <=, a);
-    mock_assert(b, >=, a);
-    mock_assert(a, >=, a);
-    mock_assert(a, <=, b);
+    mock_assert_nth(1, a, ==, a);
+    mock_assert_nth(1, b, ==, b);
+    mock_assert_nth(1, a, !=, b);
+    mock_assert_nth(1, b, !=, a);
+    mock_assert_nth(1, b, >, a);
+    mock_assert_nth(1, a, <, b);
+    mock_assert_nth(1, a, <=, a);
+    mock_assert_nth(1, b, >=, a);
+    mock_assert_nth(1, a, >=, a);
+    mock_assert_nth(1, a, <=, b);
     mock_assert_nth(2, b, ==, a);
     mock_assert_nth(2, a, ==, b);
     mock_assert_nth(2, a, !=, a);
@@ -223,16 +236,16 @@ CTF_TEST(mock_uint_expect_success) {
   unsigned a = 0;
   unsigned b = 1;
   mock_spy(add) {
-    mock_expect(a, ==, a);
-    mock_expect(b, ==, b);
-    mock_expect(a, !=, b);
-    mock_expect(b, !=, a);
-    mock_expect(b, >, a);
-    mock_expect(a, <, b);
-    mock_expect(a, <=, a);
     mock_expect(b, >=, a);
     mock_expect(a, >=, a);
     mock_expect(a, <=, b);
+    mock_expect_nth(1, a, ==, a);
+    mock_expect_nth(1, b, ==, b);
+    mock_expect_nth(1, a, !=, b);
+    mock_expect_nth(1, b, !=, a);
+    mock_expect_nth(1, b, >, a);
+    mock_expect_nth(1, a, <, b);
+    mock_expect_nth(1, a, <=, a);
     mock_expect_nth(2, b, ==, a);
     mock_expect_nth(2, a, ==, b);
     mock_expect_nth(2, a, !=, a);
@@ -268,16 +281,16 @@ CTF_TEST(mock_uint_assert) {
   unsigned a = 0;
   unsigned b = 1;
   mock_spy(add) {
-    mock_assert(a, ==, a);
-    mock_assert(b, ==, b);
-    mock_assert(a, !=, b);
-    mock_assert(b, !=, a);
-    mock_assert(b, >, a);
-    mock_assert(a, <, b);
-    mock_assert(a, <=, a);
-    mock_assert(b, >=, a);
-    mock_assert(a, >=, a);
-    mock_assert(a, <=, b);
+    mock_assert_nth(1, a, ==, a);
+    mock_assert_nth(1, b, ==, b);
+    mock_assert_nth(1, a, !=, b);
+    mock_assert_nth(1, b, !=, a);
+    mock_assert_nth(1, b, >, a);
+    mock_assert_nth(1, a, <, b);
+    mock_assert_nth(1, a, <=, a);
+    mock_assert_nth(1, b, >=, a);
+    mock_assert_nth(1, a, >=, a);
+    mock_assert_nth(1, a, <=, b);
     mock_assert_nth(2, b, ==, a);
     mock_assert_nth(2, a, ==, b);
     mock_assert_nth(2, a, !=, a);
@@ -297,7 +310,7 @@ CTF_TEST(mock_ptr_expect_success) {
   const char *a = arr;
   const char *b = arr + 1;
   mock_spy(wrapped_strcmp) {
-    mock_expect(a, ==, a);
+    mock_expect_nth(1, a, ==, a);
     mock_expect(b, ==, b);
     mock_expect(a, !=, b);
     mock_expect(b, !=, a);
@@ -344,7 +357,7 @@ CTF_TEST(mock_ptr_assert) {
   const char *a = arr;
   const char *b = arr + 1;
   mock_spy(wrapped_strcmp) {
-    mock_assert(a, ==, a);
+    mock_assert_nth(1, a, ==, a);
     mock_assert(b, ==, b);
     mock_assert(a, !=, b);
     mock_assert(b, !=, a);
@@ -372,16 +385,16 @@ CTF_TEST(mock_str_expect_success) {
   const char a[] = "a";
   const char b[] = "b";
   mock_spy(wrapped_strcmp) {
-    mock_expect_str(a, ==, a);
-    mock_expect_str(b, ==, b);
-    mock_expect_str(a, !=, b);
-    mock_expect_str(b, !=, a);
-    mock_expect_str(b, >, a);
-    mock_expect_str(a, <, b);
-    mock_expect_str(a, <=, a);
     mock_expect_str(b, >=, a);
     mock_expect_str(a, >=, a);
     mock_expect_str(a, <=, b);
+    mock_expect_nth_str(1, a, ==, a);
+    mock_expect_nth_str(1, b, ==, b);
+    mock_expect_nth_str(1, a, !=, b);
+    mock_expect_nth_str(1, b, !=, a);
+    mock_expect_nth_str(1, b, >, a);
+    mock_expect_nth_str(1, a, <, b);
+    mock_expect_nth_str(1, a, <=, a);
     mock_expect_nth_str(2, b, ==, a);
     mock_expect_nth_str(2, a, ==, b);
     mock_expect_nth_str(2, a, !=, a);
@@ -417,16 +430,16 @@ CTF_TEST(mock_str_assert) {
   const char a[] = "a";
   const char b[] = "b";
   mock_spy(wrapped_strcmp) {
-    mock_assert_str(a, ==, a);
-    mock_assert_str(b, ==, b);
-    mock_assert_str(a, !=, b);
-    mock_assert_str(b, !=, a);
-    mock_assert_str(b, >, a);
-    mock_assert_str(a, <, b);
-    mock_assert_str(a, <=, a);
-    mock_assert_str(b, >=, a);
-    mock_assert_str(a, >=, a);
-    mock_assert_str(a, <=, b);
+    mock_assert_nth_str(1, a, ==, a);
+    mock_assert_nth_str(1, b, ==, b);
+    mock_assert_nth_str(1, a, !=, b);
+    mock_assert_nth_str(1, b, !=, a);
+    mock_assert_nth_str(1, b, >, a);
+    mock_assert_nth_str(1, a, <, b);
+    mock_assert_nth_str(1, a, <=, a);
+    mock_assert_nth_str(1, b, >=, a);
+    mock_assert_nth_str(1, a, >=, a);
+    mock_assert_nth_str(1, a, <=, b);
     mock_assert_nth_str(2, b, ==, a);
     mock_assert_nth_str(2, a, ==, b);
     mock_assert_nth_str(2, a, !=, a);
@@ -457,8 +470,8 @@ CTF_TEST(mock_memory_char_expect_success) {
   const char a[] = {'a'};
   const char b[] = {'b'};
   mock_spy(wrapped_memcmp) {
-    mock_expect_mem(a, ==, a, 1);
-    mock_expect_mem(a, !=, b, 1);
+    mock_expect_nth_mem(1, a, ==, a, 1);
+    mock_expect_nth_mem(1, a, !=, b, 1);
     mock_expect_mem(b, >, a, 1);
     mock_expect_mem(a, <, b, 1);
     mock_expect_mem(a, >=, a, 1);
@@ -488,152 +501,8 @@ CTF_TEST(mock_memory_char_assert) {
   const char a[] = {'a'};
   const char b[] = {'b'};
   mock_spy(wrapped_memcmp) {
-    mock_assert_mem(a, ==, a, 1);
-    mock_assert_mem(a, !=, b, 1);
-    mock_assert_mem(b, >, a, 1);
-    mock_assert_mem(a, <, b, 1);
-    mock_assert_mem(a, >=, a, 1);
-    mock_assert_mem(b, >=, a, 1);
-    mock_assert_mem(a, <=, a, 1);
-    mock_assert_mem(a, <=, b, 1);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_memory_int_expect_success) {
-  const int a[] = {-2};
-  const int b[] = {-1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_mem(a, ==, a, 1);
-    mock_expect_mem(a, !=, b, 1);
-    mock_expect_mem(b, >, a, 1);
-    mock_expect_mem(a, <, b, 1);
-    mock_expect_mem(a, >=, a, 1);
-    mock_expect_mem(b, >=, a, 1);
-    mock_expect_mem(a, <=, a, 1);
-    mock_expect_mem(a, <=, b, 1);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_memory_int_expect_failure) {
-  const int a[] = {-2};
-  const int b[] = {-1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_mem(a, ==, b, 1);
-    mock_expect_mem(a, !=, a, 1);
-    mock_expect_mem(a, <, a, 1);
-    mock_expect_mem(b, <, a, 1);
-    mock_expect_mem(a, >, a, 1);
-    mock_expect_mem(a, >, b, 1);
-    mock_expect_mem(b, <=, a, 1);
-    mock_expect_mem(a, >=, b, 1);
-    wrapped_memcmp(a, b, 1);
-  }
-}
-CTF_TEST(mock_memory_int_assert) {
-  const int a[] = {-2};
-  const int b[] = {-1};
-  mock_spy(wrapped_memcmp) {
-    mock_assert_mem(a, ==, a, 1);
-    mock_assert_mem(a, !=, b, 1);
-    mock_assert_mem(b, >, a, 1);
-    mock_assert_mem(a, <, b, 1);
-    mock_assert_mem(a, >=, a, 1);
-    mock_assert_mem(b, >=, a, 1);
-    mock_assert_mem(a, <=, a, 1);
-    mock_assert_mem(a, <=, b, 1);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_memory_uint_expect_success) {
-  const unsigned a[] = {0};
-  const unsigned b[] = {1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_mem(a, ==, a, 1);
-    mock_expect_mem(a, !=, b, 1);
-    mock_expect_mem(b, >, a, 1);
-    mock_expect_mem(a, <, b, 1);
-    mock_expect_mem(a, >=, a, 1);
-    mock_expect_mem(b, >=, a, 1);
-    mock_expect_mem(a, <=, a, 1);
-    mock_expect_mem(a, <=, b, 1);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_memory_uint_expect_failure) {
-  const unsigned a[] = {0};
-  const unsigned b[] = {1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_mem(a, ==, b, 1);
-    mock_expect_mem(a, !=, a, 1);
-    mock_expect_mem(a, <, a, 1);
-    mock_expect_mem(b, <, a, 1);
-    mock_expect_mem(a, >, a, 1);
-    mock_expect_mem(a, >, b, 1);
-    mock_expect_mem(b, <=, a, 1);
-    mock_expect_mem(a, >=, b, 1);
-    wrapped_memcmp(a, b, 1);
-  }
-}
-CTF_TEST(mock_memory_uint_assert) {
-  const unsigned a[] = {0};
-  const unsigned b[] = {1};
-  mock_spy(wrapped_memcmp) {
-    mock_assert_mem(a, ==, a, 1);
-    mock_assert_mem(a, !=, b, 1);
-    mock_assert_mem(b, >, a, 1);
-    mock_assert_mem(a, <, b, 1);
-    mock_assert_mem(a, >=, a, 1);
-    mock_assert_mem(b, >=, a, 1);
-    mock_assert_mem(a, <=, a, 1);
-    mock_assert_mem(a, <=, b, 1);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_memory_ptr_expect_success) {
-  const char *arr[2];
-  const void *a[] = {arr};
-  const void *b[] = {arr + 1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_mem(a, ==, a, 1);
-    mock_expect_mem(a, !=, b, 1);
-    mock_expect_mem(b, >, a, 1);
-    mock_expect_mem(a, <, b, 1);
-    mock_expect_mem(a, >=, a, 1);
-    mock_expect_mem(b, >=, a, 1);
-    mock_expect_mem(a, <=, a, 1);
-    mock_expect_mem(a, <=, b, 1);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_memory_ptr_expect_failure) {
-  const char *arr[2];
-  const void *a[] = {arr};
-  const void *b[] = {arr + 1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_mem(a, ==, b, 1);
-    mock_expect_mem(a, !=, a, 1);
-    mock_expect_mem(a, <, a, 1);
-    mock_expect_mem(b, <, a, 1);
-    mock_expect_mem(a, >, a, 1);
-    mock_expect_mem(a, >, b, 1);
-    mock_expect_mem(b, <=, a, 1);
-    mock_expect_mem(a, >=, b, 1);
-    wrapped_memcmp(a, b, 1);
-  }
-}
-CTF_TEST(mock_memory_ptr_assert) {
-  const char *arr[2];
-  const void *a[] = {arr};
-  const void *b[] = {arr + 1};
-  mock_spy(wrapped_memcmp) {
-    mock_assert_mem(a, ==, a, 1);
-    mock_assert_mem(a, !=, b, 1);
+    mock_assert_nth_mem(1, a, ==, a, 1);
+    mock_assert_nth_mem(1, a, !=, b, 1);
     mock_assert_mem(b, >, a, 1);
     mock_assert_mem(a, <, b, 1);
     mock_assert_mem(a, >=, a, 1);
@@ -692,160 +561,10 @@ CTF_TEST(mock_array_char_assert) {
     wrapped_memcmp(b, a, 1);
   }
 }
-CTF_TEST(mock_array_int_expect_success) {
-  const int a[] = {-2};
-  const int b[] = {-1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_arr(a, ==, a);
-    mock_expect_arr(a, !=, b);
-    mock_expect_arr(b, >, a);
-    mock_expect_arr(a, <, b);
-    mock_expect_arr(a, >=, a);
-    mock_expect_arr(b, >=, a);
-    mock_expect_arr(a, <=, a);
-    mock_expect_arr(a, <=, b);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_array_int_expect_failure) {
-  const int a[] = {-2};
-  const int b[] = {-1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_arr(a, ==, b);
-    mock_expect_arr(a, !=, a);
-    mock_expect_arr(a, <, a);
-    mock_expect_arr(b, <, a);
-    mock_expect_arr(a, >, a);
-    mock_expect_arr(a, >, b);
-    mock_expect_arr(b, <=, a);
-    mock_expect_arr(a, >=, b);
-    wrapped_memcmp(a, b, 1);
-  }
-}
-CTF_TEST(mock_array_int_assert) {
-  const int a[] = {-2};
-  const int b[] = {-1};
-  mock_spy(wrapped_memcmp) {
-    mock_assert_arr(a, ==, a);
-    mock_assert_arr(a, !=, b);
-    mock_assert_arr(b, >, a);
-    mock_assert_arr(a, <, b);
-    mock_assert_arr(a, >=, a);
-    mock_assert_arr(b, >=, a);
-    mock_assert_arr(a, <=, a);
-    mock_assert_arr(a, <=, b);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_array_uint_expect_success) {
-  const unsigned a[] = {0};
-  const unsigned b[] = {1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_arr(a, ==, a);
-    mock_expect_arr(a, !=, b);
-    mock_expect_arr(b, >, a);
-    mock_expect_arr(a, <, b);
-    mock_expect_arr(a, >=, a);
-    mock_expect_arr(b, >=, a);
-    mock_expect_arr(a, <=, a);
-    mock_expect_arr(a, <=, b);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_array_uint_expect_failure) {
-  const unsigned a[] = {0};
-  const unsigned b[] = {1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_arr(a, ==, b);
-    mock_expect_arr(a, !=, a);
-    mock_expect_arr(a, <, a);
-    mock_expect_arr(b, <, a);
-    mock_expect_arr(a, >, a);
-    mock_expect_arr(a, >, b);
-    mock_expect_arr(b, <=, a);
-    mock_expect_arr(a, >=, b);
-    wrapped_memcmp(a, b, 1);
-  }
-}
-CTF_TEST(mock_array_uint_assert) {
-  const unsigned a[] = {0};
-  const unsigned b[] = {1};
-  mock_spy(wrapped_memcmp) {
-    mock_assert_arr(a, ==, a);
-    mock_assert_arr(a, !=, b);
-    mock_assert_arr(b, >, a);
-    mock_assert_arr(a, <, b);
-    mock_assert_arr(a, >=, a);
-    mock_assert_arr(b, >=, a);
-    mock_assert_arr(a, <=, a);
-    mock_assert_arr(a, <=, b);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_array_ptr_expect_success) {
-  const char *arr[2];
-  const void *a[] = {arr};
-  const void *b[] = {arr + 1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_arr(a, ==, a);
-    mock_expect_arr(a, !=, b);
-    mock_expect_arr(b, >, a);
-    mock_expect_arr(a, <, b);
-    mock_expect_arr(a, >=, a);
-    mock_expect_arr(b, >=, a);
-    mock_expect_arr(a, <=, a);
-    mock_expect_arr(a, <=, b);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
-CTF_TEST(mock_array_ptr_expect_failure) {
-  const char *arr[2];
-  const void *a[] = {arr};
-  const void *b[] = {arr + 1};
-  mock_spy(wrapped_memcmp) {
-    mock_expect_arr(a, ==, b);
-    mock_expect_arr(a, !=, a);
-    mock_expect_arr(a, <, a);
-    mock_expect_arr(b, <, a);
-    mock_expect_arr(a, >, a);
-    mock_expect_arr(a, >, b);
-    mock_expect_arr(b, <=, a);
-    mock_expect_arr(a, >=, b);
-    wrapped_memcmp(a, b, 1);
-  }
-}
-CTF_TEST(mock_array_ptr_assert) {
-  const char *arr[2];
-  const void *a[] = {arr};
-  const void *b[] = {arr + 1};
-  mock_spy(wrapped_memcmp) {
-    mock_assert_arr(a, ==, a);
-    mock_assert_arr(a, !=, b);
-    mock_assert_arr(b, >, a);
-    mock_assert_arr(a, <, b);
-    mock_assert_arr(a, >=, a);
-    mock_assert_arr(b, >=, a);
-    mock_assert_arr(a, <=, a);
-    mock_assert_arr(a, <=, b);
-    wrapped_memcmp(a, b, 1);
-    wrapped_memcmp(b, a, 1);
-  }
-}
 
 CTF_GROUP(mocked_memcmp) = {
-  mock_memory_char_expect_success, mock_memory_char_assert,
-  mock_memory_int_expect_success,  mock_memory_int_assert,
-  mock_memory_uint_expect_success, mock_memory_uint_assert,
-  mock_memory_ptr_expect_success,  mock_memory_ptr_assert,
-  mock_array_char_expect_success,  mock_array_char_assert,
-  mock_array_int_expect_success,   mock_array_int_assert,
-  mock_array_uint_expect_success,  mock_array_uint_assert,
-  mock_array_ptr_expect_success,   mock_array_ptr_assert,
+  mock_memory_char_expect_success,
+  mock_memory_char_assert,
 };
 
 CTF_GROUP(mock) = {
@@ -1823,8 +1542,6 @@ CTF_GROUP(mocked_strcmp_failure) = {
   mock_str_expect_failure,
 };
 CTF_GROUP(mocked_memcmp_failure) = {
-  mock_memory_char_expect_failure, mock_memory_int_expect_failure,
-  mock_memory_uint_expect_failure, mock_memory_ptr_expect_failure,
-  mock_array_char_expect_failure,  mock_array_int_expect_failure,
-  mock_array_uint_expect_failure,  mock_array_ptr_expect_failure,
+  mock_memory_char_expect_failure,
+  mock_array_char_expect_failure,
 };

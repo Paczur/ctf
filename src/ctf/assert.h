@@ -1,9 +1,3 @@
-#define CTF__EA_MEM_TYPE_int 0
-#define CTF__EA_MEM_TYPE_uint 1
-#define CTF__EA_MEM_TYPE_ptr 2
-#define CTF__EA_MEM_TYPE_char 3
-#define CTF__EA_MEM_TYPE_float 4
-
 #define CTF__EA_FLAG_expect 0
 #define CTF__EA_FLAG_assert 1
 

@@ -73,7 +73,7 @@ dist/lib64/libctf.so: build/src/ctf/ctf.c
 $(TEST_RUN): bin/$(TEST_BIN)
 	mkdir -p $(@D)
 	$(info RUN  $<)
-	./$< --cleanup --sigsegv
+	./$< -j 2 --cleanup --sigsegv
 	touch $@
 
 bin/$(TEST_BIN): $(TEST_OBJECTS) build/src/ctf/ctf.o | build/test/$(TEST_BIN).lf

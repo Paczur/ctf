@@ -8,6 +8,28 @@
 #define CTF__TYPE_STR const char *
 #define CTF__TYPE_FLOAT long double
 
+#define CTF__EA_MEM_TYPE_int (0 << 2)
+#define CTF__EA_MEM_TYPE_uint (1 << 2)
+#define CTF__EA_MEM_TYPE_ptr (2 << 2)
+#define CTF__EA_MEM_TYPE_char (3 << 2)
+#define CTF__EA_MEM_TYPE_float (4 << 2)
+
+#define CTF__MOCK_TYPE_EXPECT 0
+#define CTF__MOCK_TYPE_ASSERT 1
+#define CTF__MOCK_TYPE_MEM (1 << 1)
+
+#define CTF__MOCK_TYPE_expect 0
+#define CTF__MOCK_TYPE_assert 1
+#define CTF__MOCK_TYPE_mem (1 << 1)
+
+#define CTF__MOCK_CHECK_DIR_OUT (1 << 5)
+#define CTF__MOCK_CHECK_DIR_IN (2 << 5)
+#define CTF__MOCK_CHECK_DIR_INOUT (3 << 5)
+
+#define CTF__MOCK_CHECK_FLAGS_MEM_TYPE(x) ((x) & (4 << 2))
+#define CTF__MOCK_CHECK_FLAGS_TYPE(x) ((x) & 3)
+#define CTF__MOCK_CHECK_FLAGS_DIR(x) ((x) & (3 << 5))
+
 #ifndef CTF_EA_ALIASES
 #define CTF_EA_ALIASES CTF_ON
 #endif
@@ -218,8 +240,8 @@ void ctf__print_error(char *msg, uintmax_t msg_size, int line, const char *file)
 void *ctf__cleanup_realloc(void *ptr, uintmax_t size, uintptr_t thread_index);
 void *ctf__cleanup_malloc(uintmax_t size, uintptr_t thread_index);
 void ctf__groups_run(int count, ...);
-void ctf__subtest_enter(struct ctf__thread_data *thread_data, const char *name);
-void ctf__subtest_leave(struct ctf__thread_data *thread_data);
+void ctf__subtest_enter(uintptr_t thread_index, const char *name);
+void ctf__subtest_leave(uintptr_t thread_index);
 
 void ctf_main(int argc, char *argv[]);
 void ctf_group_run(struct ctf__group group);
@@ -228,16 +250,14 @@ void ctf_group_run(struct ctf__group group);
                     sizeof(const struct ctf__group),                 \
                   __VA_ARGS__)
 void ctf_sigsegv_handler(int unused);
-#define ctf_subtest(name)                                                \
-  for(uintptr_t ctf__subtest_thread_index =                              \
-                  (uintptr_t)pthread_getspecific(ctf__thread_index),     \
-                ctf__local_end_flag = 0;                                 \
-      !ctf__local_end_flag;)                                             \
-    for(ctf__subtest_enter(ctf__thread_data + ctf__subtest_thread_index, \
-                           #name);                                       \
-        !ctf__local_end_flag;                                            \
-        ctf__local_end_flag = 1,                                         \
-        ctf__subtest_leave(ctf__thread_data + ctf__subtest_thread_index))
+#define ctf_subtest(name)                                            \
+  for(uintptr_t ctf__subtest_thread_index =                          \
+                  (uintptr_t)pthread_getspecific(ctf__thread_index), \
+                ctf__local_end_flag = 0;                             \
+      !ctf__local_end_flag;)                                         \
+    for(ctf__subtest_enter(ctf__subtest_thread_index, #name);        \
+        !ctf__local_end_flag; ctf__local_end_flag = 1,               \
+                              ctf__subtest_leave(ctf__subtest_thread_index))
 #define ctf_barrier()      \
   do {                     \
     ctf_parallel_sync();   \

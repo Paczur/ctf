@@ -220,13 +220,19 @@ uintmax_t ctf__mock_return_capacity(uintmax_t cap) {
 }
 
 static void mock_check_base(struct ctf__mock_state *state, const char *v,
-                            int mem) {
+                            int mem, int in_out) {
   int removed = 0;
   for(uintmax_t i = 0; i < state->checks_count; i++) {
-    if(!(state->checks[i].type & CTF__MOCK_TYPE_MEM) == mem) continue;
+    if(!(state->checks[i].flags & CTF__MOCK_TYPE_MEM) == mem) continue;
+    if(!(state->checks[i].flags & in_out)) continue;
+    if(CTF__MOCK_CHECK_FLAGS_DIR(state->checks[i].flags) ==
+         CTF__MOCK_CHECK_DIR_INOUT &&
+       in_out == CTF__MOCK_CHECK_DIR_IN)
+      continue;
     if(strcmp(state->checks[i].var, v)) continue;
-    if(state->checks[i].call_count != state->call_count) continue;
-    state->checks[i].cmp = NULL;
+    if(state->checks[i].call_count > 0 &&
+       state->checks[i].call_count != state->call_count)
+      state->checks[i].cmp = NULL;
     removed++;
   }
   for(uintmax_t i = 0; i < state->checks_count; i++) {
@@ -263,7 +269,7 @@ static void mock_base(struct ctf__mock_state *state, int call_count, int type,
   struct ctf__check *const check = state->checks + state->checks_count;
   check->var = var;
   check->call_count = call_count;
-  check->type = type;
+  check->flags = type;
   check->line = line;
   check->file = file;
   check->print_var = print_var;
@@ -271,43 +277,51 @@ static void mock_base(struct ctf__mock_state *state, int call_count, int type,
 }
 
 void ctf__mock_check_mem(struct ctf__mock_state *state, const void *v,
-                         const char *v_print, uintmax_t step, int sign) {
+                         const char *v_print, int in_out, uintmax_t step,
+                         int sign) {
   for(uintmax_t i = 0; i < state->checks_count; i++) {
-    if(!(state->checks[i].type & CTF__MOCK_TYPE_MEM)) continue;
+    if(!(state->checks[i].flags & CTF__MOCK_TYPE_MEM)) continue;
     if(strcmp(state->checks[i].var, v_print)) continue;
-    if(state->checks[i].call_count != state->call_count) continue;
-    ctf__ea_arr(
-      v, state->checks[i].cmp, state->checks[i].val.p, state->checks[i].length,
-      state->checks[i].length, v_print, state->checks[i].print_var,
-      state->checks[i].type & CTF__MOCK_TYPE_ASSERT, step, sign,
-      state->checks[i].mem_type, state->checks[i].line, state->checks[i].file);
+    if(!(state->checks[i].flags & in_out)) continue;
+    if(state->checks[i].call_count > 0 &&
+       state->checks[i].call_count != state->call_count)
+      continue;
+    ctf__ea_arr(v, state->checks[i].cmp, state->checks[i].val.p,
+                state->checks[i].length, state->checks[i].length, v_print,
+                state->checks[i].print_var,
+                state->checks[i].flags & CTF__MOCK_TYPE_ASSERT, step, sign,
+                CTF__MOCK_CHECK_FLAGS_MEM_TYPE(state->checks[i].flags),
+                state->checks[i].line, state->checks[i].file);
   }
-  mock_check_base(state, v_print, 1);
+  mock_check_base(state, v_print, 1, in_out);
 }
 
-#define MOCK_CHECK(t, T)                                                      \
-  void ctf__mock_check_##t(struct ctf__mock_state *state, CTF__TYPE_##T v,    \
-                           const char *v_print) {                             \
-    for(uintmax_t i = 0; i < state->checks_count; i++) {                      \
-      if(CTF__MOCK_CHECK_STR_##T(state->checks[i].type & CTF__MOCK_TYPE_MEM)) \
-        continue;                                                             \
-      if(strcmp(state->checks[i].var, v_print)) continue;                     \
-      if(state->checks[i].call_count != state->call_count) continue;          \
-      state->checks[i].f.CTF__MOCK_CHECK_TYPE_##T(                            \
-        v, state->checks[i].cmp,                                              \
-        state->checks[i].val.CTF__MOCK_CHECK_TYPE_##T, v_print,               \
-        state->checks[i].print_var,                                           \
-        state->checks[i].type &CTF__MOCK_TYPE_ASSERT, state->checks[i].line,  \
-        state->checks[i].file);                                               \
-    }                                                                         \
-    mock_check_base(state, v_print, 0);                                       \
+#define MOCK_CHECK(t, T)                                                       \
+  void ctf__mock_check_##t(struct ctf__mock_state *state, CTF__TYPE_##T v,     \
+                           const char *v_print, int in_out) {                  \
+    for(uintmax_t i = 0; i < state->checks_count; i++) {                       \
+      if(CTF__MOCK_CHECK_STR_##T(state->checks[i].flags & CTF__MOCK_TYPE_MEM)) \
+        continue;                                                              \
+      if(!(state->checks[i].flags & in_out)) continue;                         \
+      if(strcmp(state->checks[i].var, v_print)) continue;                      \
+      if(state->checks[i].call_count > 0 &&                                    \
+         state->checks[i].call_count != state->call_count)                     \
+        continue;                                                              \
+      state->checks[i].f.CTF__MOCK_CHECK_TYPE_##T(                             \
+        v, state->checks[i].cmp,                                               \
+        state->checks[i].val.CTF__MOCK_CHECK_TYPE_##T, v_print,                \
+        state->checks[i].print_var,                                            \
+        state->checks[i].flags &CTF__MOCK_TYPE_ASSERT, state->checks[i].line,  \
+        state->checks[i].file);                                                \
+    }                                                                          \
+    mock_check_base(state, v_print, 0, in_out);                                \
   }
 #define MOCK_EA(type, TYPE)                                                   \
   void ctf__mock_ea_##type(                                                   \
     struct ctf__mock_state *state, uintmax_t call_count, const char *var,     \
-    const char *cmp, CTF__TYPE_##TYPE val, const char *val_str, int assert,   \
+    const char *cmp, CTF__TYPE_##TYPE val, const char *val_str, int flags,    \
     int line, const char *file) {                                             \
-    mock_base(state, call_count, assert | CTF__MOCK_CHECK_TYPE_TYPE_##TYPE,   \
+    mock_base(state, call_count, flags | CTF__MOCK_CHECK_TYPE_TYPE_##TYPE,    \
               line, file, val_str, var);                                      \
     struct ctf__check *const check = state->checks + state->checks_count - 1; \
     check->val.CTF__MOCK_CHECK_TYPE_##TYPE = val;                             \
@@ -317,13 +331,12 @@ void ctf__mock_check_mem(struct ctf__mock_state *state, const void *v,
 
 void ctf__mock_ea_mem(struct ctf__mock_state *state, uintmax_t call_count,
                       const char *var, const char *cmp, const void *val,
-                      uintmax_t l, const char *val_str, int assert,
-                      int mem_type, int line, const char *file) {
-  mock_base(state, call_count, assert | CTF__MOCK_TYPE_MEM, line, file, val_str,
+                      uintmax_t l, const char *val_str, int flags, int line,
+                      const char *file) {
+  mock_base(state, call_count, flags | CTF__MOCK_TYPE_MEM, line, file, val_str,
             var);
   struct ctf__check *const check = state->checks + state->checks_count - 1;
   check->val.p = val;
-  check->mem_type = mem_type;
   check->length = l;
   check->cmp = cmp;
 }

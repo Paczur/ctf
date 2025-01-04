@@ -380,8 +380,7 @@ void ctf__assert_fold(uintmax_t count, const char *msg, int line,
 
 void ctf_assert_hide(uintmax_t count) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__states *states = states_last(thread_data);
+  struct ctf__states *states = states_last(thread_index);
   if(states == NULL) return;
   if(states->size <= count) {
     for(uintmax_t i = 0; i < states->size; i++) {
@@ -389,7 +388,7 @@ void ctf_assert_hide(uintmax_t count) {
         longjmp(ctf__assert_jmp_buff[thread_index], 1);
       }
     }
-    states_delete(states);
+    states_delete(thread_index, states);
   } else {
     for(uintmax_t i = states->size - count; i < states->size; i++) {
       if(states->states[i].status) {
@@ -402,8 +401,7 @@ void ctf_assert_hide(uintmax_t count) {
 
 void ctf_assert_barrier(void) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__states *states = states_last(thread_data);
+  struct ctf__states *states = states_last(thread_index);
   for(uintmax_t i = 0; i < states->size; i++) {
     if(states->states[i].status) {
       longjmp(ctf__assert_jmp_buff[thread_index], 1);
@@ -414,8 +412,7 @@ void ctf_assert_barrier(void) {
 uintmax_t ctf__fail(const char *m, int line, const char *file, ...) {
   va_list v;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__state *state = state_next(thread_data);
+  struct ctf__state *state = state_next(thread_index);
   state->status = 1;
   state->line = line;
   state->file = file;
@@ -428,8 +425,7 @@ uintmax_t ctf__fail(const char *m, int line, const char *file, ...) {
 uintmax_t ctf__pass(const char *m, int line, const char *file, ...) {
   va_list v;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__state *state = state_next(thread_data);
+  struct ctf__state *state = state_next(thread_index);
   state->status = 0;
   state->line = line;
   state->file = file;
@@ -466,8 +462,7 @@ uintmax_t ctf__ea_msg(int status, const char *msg, int assert, int line,
                       const char *file, ...) {
   va_list args;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__state *state = state_next(thread_data);
+  struct ctf__state *state = state_next(thread_index);
   state->status = status;
   state->line = line;
   state->file = file;
@@ -485,8 +480,7 @@ uintmax_t ctf__ea_msg(int status, const char *msg, int assert, int line,
                      int line, const char *file) {                            \
     int ord;                                                                  \
     intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index); \
-    struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;   \
-    struct ctf__state *state = state_next(thread_data);                       \
+    struct ctf__state *state = state_next(thread_index);                      \
     state->status = 2;                                                        \
     state->line = line;                                                       \
     state->file = file;                                                       \
@@ -505,8 +499,7 @@ int ctf__ea_arr(const void *a, const char *cmp, const void *b, uintmax_t la,
                 const char *file) {
   int ord;
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__state *state = state_next(thread_data);
+  struct ctf__state *state = state_next(thread_index);
   state->status = 2;
   state->line = line;
   state->file = file;
