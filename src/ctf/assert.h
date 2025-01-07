@@ -70,7 +70,7 @@ EA_FACTORY(`EA_FUNCTION',     `(PRIMITIVE_TYPES, str)', `ctf_')
 COMB2(`RUN1', `(CTF__EA_FUN)', `(PRIMITIVE_TYPES, str)')
 #if __STDC_VERSION__ >= 201112L
 #define ctf_expect(a, cmp, b) \
-  _Generic((b), \
+  _Generic((a), \
            char       : ctf__ea_char,\
            int8_t     : ctf__ea_int,\
            int16_t    : ctf__ea_int,\
@@ -86,7 +86,7 @@ COMB2(`RUN1', `(CTF__EA_FUN)', `(PRIMITIVE_TYPES, str)')
            default    : ctf__ea_ptr)\
 ((a), #cmp, (b), #a, #b, 0, __LINE__, __FILE__)
 #define ctf_assert(a, cmp, b) \
-  _Generic((b), \
+  _Generic((a), \
            char    : ctf__ea_char,\
            int8_t  : ctf__ea_int,\
            int16_t : ctf__ea_int,\
@@ -104,7 +104,7 @@ COMB2(`RUN1', `(CTF__EA_FUN)', `(PRIMITIVE_TYPES, str)')
 #define ctf_expect_mem(a, cmp, b, l) \
   ctf__ea_arr((a), #cmp, (b), l, l, #a, #b, 0,\
                   sizeof(*a),\
-                  _Generic((*(b)),\
+                  _Generic((*(a)),\
                            int8_t  : CTF__EA_SIGN_int,\
                            int16_t : CTF__EA_SIGN_int,\
                            int32_t : CTF__EA_SIGN_int,\
@@ -131,7 +131,7 @@ __LINE__, __FILE__)
 #define ctf_assert_mem(a, cmp, b, l) \
   ctf__ea_arr((a), #cmp, (b), l, l, #a, #b, 1,\
                   sizeof(*a),\
-                  _Generic((*(b)),\
+                  _Generic((*(a)),\
                            int8_t  : CTF__EA_SIGN_int,\
                            int16_t : CTF__EA_SIGN_int,\
                            int32_t : CTF__EA_SIGN_int,\
@@ -158,7 +158,7 @@ __LINE__, __FILE__)
 #define ctf_expect_arr(a, cmp, b) \
   ctf__ea_arr((a), #cmp, (b), sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, 0,\
                   sizeof(*a),\
-                  _Generic((*(b)),\
+                  _Generic((*(a)),\
                            int8_t  : CTF__EA_SIGN_int,\
                            int16_t : CTF__EA_SIGN_int,\
                            int32_t : CTF__EA_SIGN_int,\
@@ -185,7 +185,7 @@ __LINE__, __FILE__)
 #define ctf_assert_arr(a, cmp, b) \
   ctf__ea_arr((a), #cmp, (b), sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, 1,\
                   sizeof(*a),\
-                  _Generic((*(b)),\
+                  _Generic((*(a)),\
                            int8_t  : CTF__EA_SIGN_int,\
                            int16_t : CTF__EA_SIGN_int,\
                            int32_t : CTF__EA_SIGN_int,\
@@ -213,7 +213,7 @@ __LINE__, __FILE__)
 #if CTF_EA_ALIASES == CTF_ON
 #if __STDC_VERSION__ >= 201112L
 #define expect(a, cmp, b) \
-  _Generic((b), \
+  _Generic((a), \
            char       : ctf__ea_char,\
            int8_t     : ctf__ea_int,\
            int16_t    : ctf__ea_int,\
@@ -229,7 +229,7 @@ __LINE__, __FILE__)
            default    : ctf__ea_ptr)\
 ((a), #cmp, (b), #a, #b, 0, __LINE__, __FILE__)
 #define assert(a, cmp, b) \
-  _Generic((b), \
+  _Generic((a), \
            char    : ctf__ea_char,\
            int8_t  : ctf__ea_int,\
            int16_t : ctf__ea_int,\
@@ -247,7 +247,7 @@ __LINE__, __FILE__)
 #define expect_mem(a, cmp, b, l) \
   ctf__ea_arr((a), #cmp, (b), l, l, #a, #b, 0,\
                   sizeof(*a),\
-                  _Generic((*(b)),\
+                  _Generic((*(a)),\
                            int8_t  : CTF__EA_SIGN_int,\
                            int16_t : CTF__EA_SIGN_int,\
                            int32_t : CTF__EA_SIGN_int,\
@@ -274,7 +274,7 @@ __LINE__, __FILE__)
 #define assert_mem(a, cmp, b, l) \
   ctf__ea_arr((a), #cmp, (b), l, l, #a, #b, 1,\
                   sizeof(*a),\
-                  _Generic((*(b)),\
+                  _Generic((*(a)),\
                            int8_t  : CTF__EA_SIGN_int,\
                            int16_t : CTF__EA_SIGN_int,\
                            int32_t : CTF__EA_SIGN_int,\
@@ -301,7 +301,7 @@ __LINE__, __FILE__)
 #define expect_arr(a, cmp, b) \
   ctf__ea_arr((a), #cmp, (b), sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, 0,\
                   sizeof(*a),\
-                  _Generic((*(b)),\
+                  _Generic((*(a)),\
                            int8_t  : CTF__EA_SIGN_int,\
                            int16_t : CTF__EA_SIGN_int,\
                            int32_t : CTF__EA_SIGN_int,\
@@ -328,7 +328,7 @@ __LINE__, __FILE__)
 #define assert_arr(a, cmp, b) \
   ctf__ea_arr((a), #cmp, (b), sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, 1,\
                   sizeof(*a),\
-                  _Generic((*(b)),\
+                  _Generic((*(a)),\
                            int8_t  : CTF__EA_SIGN_int,\
                            int16_t : CTF__EA_SIGN_int,\
                            int32_t : CTF__EA_SIGN_int,\
