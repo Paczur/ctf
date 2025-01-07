@@ -39,8 +39,9 @@ static void mock_state_init(struct ctf__mock_state *state) {
 void ctf__mock_reset(struct ctf__mock_state *state) {
   state->call_count = 0;
   state->checks_count = 0;
-  memset(state->return_overrides, -1,
-         state->return_overrides_size * sizeof(state->return_overrides[0]));
+  if(state->return_overrides)
+    memset(state->return_overrides, -1,
+           state->return_overrides_size * sizeof(state->return_overrides[0]));
   state->return_overrides_size = 0;
 }
 
@@ -65,15 +66,15 @@ static void mock_states_alloc(struct ctf__mock *mock, int thread_index) {
     }
     ctf__mock_reset(mock->states + thread_index);
     return;
+  } else {
+    if(mock->states_initialized) return;
   }
 init:
   mock->states =
     CTF__MALLOC(sizeof(mock->states[0]) * ctf__opt_threads, thread_index);
   for(int j = 0; j < ctf__opt_threads; j++) mock_state_init(mock->states + j);
   mock->states_initialized = 1;
-  if(ctf__opt_threads > 1) {
-    pthread_rwlock_unlock(&mock_states_lock);
-  }
+  if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
 }
 
 static void mock_returns_alloc(struct ctf__mock *mock, uintptr_t thread_index) {
@@ -183,7 +184,7 @@ void ctf__mock_global(struct ctf__mock *mock, void (*f)(void)) {
   uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   if(ctf__opt_threads > 1) pthread_rwlock_rdlock(&mock_states_lock);
-  if(mock->states == NULL) {
+  if(!mock->states_initialized) {
     if(ctf__opt_threads > 1) pthread_rwlock_unlock(&mock_states_lock);
     mock_states_alloc(mock, thread_index);
   } else {
@@ -290,7 +291,7 @@ void ctf__mock_check_mem(struct ctf__mock_state *state, const void *v,
                 state->checks[i].length, state->checks[i].length, v_print,
                 state->checks[i].print_var,
                 state->checks[i].flags & CTF__MOCK_TYPE_ASSERT, step, sign,
-                CTF__MOCK_CHECK_FLAGS_MEM_TYPE(state->checks[i].flags),
+                CTF__MOCK_CHECK_FLAGS_DATA_TYPE(state->checks[i].flags),
                 state->checks[i].line, state->checks[i].file);
   }
   mock_check_base(state, v_print, 1, in_out);

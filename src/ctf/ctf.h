@@ -8,11 +8,12 @@
 #define CTF__TYPE_STR const char *
 #define CTF__TYPE_FLOAT long double
 
-#define CTF__EA_MEM_TYPE_int (0 << 2)
-#define CTF__EA_MEM_TYPE_uint (1 << 2)
-#define CTF__EA_MEM_TYPE_ptr (2 << 2)
-#define CTF__EA_MEM_TYPE_char (3 << 2)
-#define CTF__EA_MEM_TYPE_float (4 << 2)
+#define CTF__DATA_TYPE_uint (1 << 2)
+#define CTF__DATA_TYPE_int (0 << 2)
+#define CTF__DATA_TYPE_ptr (2 << 2)
+#define CTF__DATA_TYPE_char (3 << 2)
+#define CTF__DATA_TYPE_float (4 << 2)
+#define CTF__DATA_TYPE_str (5 << 2)
 
 #define CTF__MOCK_TYPE_EXPECT 0
 #define CTF__MOCK_TYPE_ASSERT 1
@@ -26,7 +27,7 @@
 #define CTF__MOCK_CHECK_DIR_IN (2 << 5)
 #define CTF__MOCK_CHECK_DIR_INOUT (3 << 5)
 
-#define CTF__MOCK_CHECK_FLAGS_MEM_TYPE(x) ((x) & (4 << 2))
+#define CTF__MOCK_CHECK_FLAGS_DATA_TYPE(x) ((x) & (7 << 2))
 #define CTF__MOCK_CHECK_FLAGS_TYPE(x) ((x) & 3)
 #define CTF__MOCK_CHECK_FLAGS_DIR(x) ((x) & (3 << 5))
 

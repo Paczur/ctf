@@ -221,10 +221,10 @@ static void print_arr(struct ctf__state *state, const void *data,
     };
   } iterator;
   iterator.u8 = data;
-  const char *format = (type == CTF__EA_MEM_TYPE_int)     ? "%jd, "
-                       : (type == CTF__EA_MEM_TYPE_uint)  ? "%ju, "
-                       : (type == CTF__EA_MEM_TYPE_ptr)   ? "%p, "
-                       : (type == CTF__EA_MEM_TYPE_float) ? "%Lg, "
+  const char *format = (type == CTF__DATA_TYPE_int)     ? "%jd, "
+                       : (type == CTF__DATA_TYPE_uint)  ? "%ju, "
+                       : (type == CTF__DATA_TYPE_ptr)   ? "%p, "
+                       : (type == CTF__DATA_TYPE_float) ? "%Lg, "
                                                           : "";
   if(sign == 2) {
     if(step == sizeof(float)) {
@@ -240,7 +240,7 @@ static void print_arr(struct ctf__state *state, const void *data,
   } else {
     switch(step) {
     case 1:
-      if(type == CTF__EA_MEM_TYPE_char) {
+      if(type == CTF__DATA_TYPE_char) {
         for(uintmax_t i = 0; i < size; i++) {
           MSG_SPRINTF_APPEND(state->msg, "%c", '\'');
           escaped_char(state, (char)iterator.u8[i]);

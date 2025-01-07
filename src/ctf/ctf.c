@@ -174,11 +174,10 @@ static void err(void) {
   exit(0);
 }
 
-static void test_cleanup(void) {
-  uintptr_t thread_index = (uintptr_t)pthread_getspecific(ctf__thread_index);
+static void test_cleanup(uintptr_t thread_index) {
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++) {
-    thread_data->mock_reset_stack[i]->states->mock_f = NULL;
+    thread_data->mock_reset_stack[i]->states[thread_index].mock_f = NULL;
   }
   thread_data->mock_reset_stack_size = 0;
 }
@@ -208,7 +207,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
     group.test_setup();
     if(!setjmp(ctf__assert_jmp_buff[thread_index])) group.tests[i].f();
     group.test_teardown();
-    test_cleanup();
+    test_cleanup(thread_index);
     buff->size -= temp_size;
     status = test_status(thread_index);
 

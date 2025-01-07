@@ -1,4 +1,5 @@
 #define CTF_CONST_MOCK_GROUP_SIZE 64
+#define CTF_CONST_MOCK_CHECKABLES_SIZE 32
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -120,7 +121,7 @@ struct ctf__mock_bind {
           ctf__mock_struct_##name.states + thread_index, 1, &out,              \
           CTF__MACRO_VA args);                                                 \
       } else {                                                                 \
-        if(_mock_f == NULL && temp_set)                                        \
+        if(_mock_f == NULL)                                                    \
           ctf__error(                                                          \
             "Mock return value not overriden and function not selected");      \
         out = _mock_f args;                                                    \
@@ -135,6 +136,7 @@ struct ctf__mock_bind {
     struct ctf__mock_state *ctf__mock_check_state, int ctf__mock_out,          \
     ret_type *ctf__mock_return_value, CTF__MACRO_VA typed)
 #define CTF__MOCK_VOID_TEMPLATE(mod, wrapped, real, name, typed, args)         \
+  CTF__MOCK_CHECKABLES_TEMPLATE(mod, name);                                    \
   mod void ctf__mock_checks_##name(                                            \
     struct ctf__mock_state *ctf__mock_check_state, int, CTF__MACRO_VA typed);  \
   mod struct ctf__mock ctf__mock_struct_##name;                                \
@@ -164,7 +166,9 @@ struct ctf__mock_bind {
   mod void ctf__mock_checks_##name(                                            \
     struct ctf__mock_state *ctf__mock_check_state, int ctf__mock_out,          \
     CTF__MACRO_VA typed)
+
 #define CTF__MOCK_EXTERN_TEMPLATE(wrapped, real, ret_type, name, typed) \
+  CTF__MOCK_CHECKABLES_TEMPLATE(extern, name);                          \
   extern struct ctf__mock ctf__mock_struct_##name;                      \
   extern struct ctf__mock_struct_##name **ctf__mock_return_##name;      \
   extern void ctf__mock_checks_##name(                                  \
@@ -172,15 +176,16 @@ struct ctf__mock_bind {
     ret_type *ctf__mock_return_value, CTF__MACRO_VA typed);             \
   ret_type ctf__mock_fn_real_##name typed;                              \
   ret_type real typed;                                                  \
-  ret_type wrapped typed;
+  ret_type wrapped typed
 #define CTF__MOCK_VOID_RET_EXTERN_TEMPLATE(wrapped, real, name, typed)        \
+  CTF__MOCK_CHECKABLES_TEMPLATE(extern, name);                                \
   extern struct ctf__mock ctf__mock_struct_##name;                            \
   extern struct ctf__mock_struct_##name **ctf__mock_return_##name;            \
   extern void ctf__mock_fn_real_##name typed;                                 \
   extern void ctf__mock_checks_##name(                                        \
     struct ctf__mock_state *ctf__mock_check_state, int, CTF__MACRO_VA typed); \
   void real typed;                                                            \
-  void wrapped typed;
+  void wrapped typed
 
 #define CTF_MOCK_CUSTOM(real, ret_type, name, typed, args) \
   CTF__MOCK_TEMPLATE(, name, real, ret_type, name, typed, args)
@@ -347,19 +352,19 @@ define(`MOCK_EA_MEM_GENERIC',
   ctf__mock_ea_mem(CTF__MOCK_STRUCT_SELECTED, %s, #var, #cmp, val, %s, #val, \
                    CTF__MOCK_TYPE_$2 | CTF__MOCK_CHECK_DIR_%s |     \
                      _Generic(*(val),                                      \
-                       char: CTF__EA_MEM_TYPE_char,                        \
-                       int8_t: CTF__EA_MEM_TYPE_int,                       \
-                       int16_t: CTF__EA_MEM_TYPE_int,                      \
-                       int32_t: CTF__EA_MEM_TYPE_int,                      \
-                       int64_t: CTF__EA_MEM_TYPE_int,                      \
-                       uint8_t: CTF__EA_MEM_TYPE_uint,                     \
-                       uint16_t: CTF__EA_MEM_TYPE_uint,                    \
-                       uint32_t: CTF__EA_MEM_TYPE_uint,                    \
-                       uint64_t: CTF__EA_MEM_TYPE_uint,                    \
-                       float: CTF__EA_MEM_TYPE_float,                      \
-                       double: CTF__EA_MEM_TYPE_float,                     \
-                       long double: CTF__EA_MEM_TYPE_float,                \
-                       default: CTF__EA_MEM_TYPE_ptr),                     \
+                       char: CTF__DATA_TYPE_char,                        \
+                       int8_t: CTF__DATA_TYPE_int,                       \
+                       int16_t: CTF__DATA_TYPE_int,                      \
+                       int32_t: CTF__DATA_TYPE_int,                      \
+                       int64_t: CTF__DATA_TYPE_int,                      \
+                       uint8_t: CTF__DATA_TYPE_uint,                     \
+                       uint16_t: CTF__DATA_TYPE_uint,                    \
+                       uint32_t: CTF__DATA_TYPE_uint,                    \
+                       uint64_t: CTF__DATA_TYPE_uint,                    \
+                       float: CTF__DATA_TYPE_float,                      \
+                       double: CTF__DATA_TYPE_float,                     \
+                       long double: CTF__DATA_TYPE_float,                \
+                       default: CTF__DATA_TYPE_ptr),                     \
                        __LINE__, __FILE__)',
     ifelse(`$4', `_nth', ``n, '', `'),
     ifelse(`$5', `mem', ``, l'', `'),
@@ -393,7 +398,7 @@ define(`MOCK_EA_MEM_TEMPLATE',
 `format(
 `#define $1mock_$2$3$4_$5_$6(%svar, cmp, val%s)\
 ctf__mock_ea_mem(CTF__MOCK_STRUCT_SELECTED, %s, #var, #cmp, val, %s, #val, \
-CTF__EA_FLAG_$2 | CTF__EA_MEM_TYPE_$1 | CTF__MOCK_CHECK_DIR_%s, __LINE__, \
+CTF__EA_FLAG_$2 | CTF__DATA_TYPE_$1 | CTF__MOCK_CHECK_DIR_%s, __LINE__, \
 __FILE__);',
     ifelse(`$4', `_nth', ``n, '', `'),
     ifelse(`$5', `mem', ``, l'', `'),

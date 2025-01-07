@@ -53,9 +53,9 @@ define(`EA_FUNCTION',
 `format(`int ctf__$3_$1_$2(%s, %s, const char *, const char *, int, const char *);',TYPE(`$1'),TYPE(`$1'))')dnl
 define(`EA_TEMPLATE', `#define $3$2_$1(a, cmp, b) ctf__ea_$1(a, #cmp, b, #a, #b, CTF__EA_FLAG_$2, __LINE__, __FILE__)')dnl
 define(`EA_MEM_TEMPLATE',
-`#define $3$2_mem_$1(a, cmp, b, length) ctf__ea_arr((const void *)a, #cmp, (const void *)b, length, length, #a, #b, CTF__EA_FLAG_$2, sizeof(*(a)), CTF__EA_SIGN_$1, CTF__EA_MEM_TYPE_$1, __LINE__, __FILE__)')dnl
+`#define $3$2_mem_$1(a, cmp, b, length) ctf__ea_arr((const void *)a, #cmp, (const void *)b, length, length, #a, #b, CTF__EA_FLAG_$2, sizeof(*(a)), CTF__EA_SIGN_$1, CTF__DATA_TYPE_$1, __LINE__, __FILE__)')dnl
 define(`EA_ARR_TEMPLATE',
-`#define $3$2_arr_$1(a, cmp, b) ctf__ea_arr((const void *)a, #cmp, (const void *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, CTF__EA_FLAG_$2, sizeof(*(a)), CTF__EA_SIGN_$1, CTF__EA_MEM_TYPE_$1, __LINE__, __FILE__)')dnl
+`#define $3$2_arr_$1(a, cmp, b) ctf__ea_arr((const void *)a, #cmp, (const void *)b, sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, CTF__EA_FLAG_$2, sizeof(*(a)), CTF__EA_SIGN_$1, CTF__DATA_TYPE_$1, __LINE__, __FILE__)')dnl
 define(`EA_FUNCTION', `format(`int ctf__$2_$1(%s, const char *, %s, const char *, const char *, int, const char*);',TYPE(`$1'),TYPE(`$1'))')
 define(`EA_FACTORY', `foreach(`type', `$2',
 `
@@ -114,19 +114,19 @@ COMB2(`RUN1', `(CTF__EA_FUN)', `(PRIMITIVE_TYPES, str)')
                            long double   : CTF__EA_SIGN_float,\
                            default : CTF__EA_SIGN_uint), \
                            _Generic((*(b)),\
-           char     : CTF__EA_MEM_TYPE_char,\
-           int8_t   : CTF__EA_MEM_TYPE_int,\
-           int16_t  : CTF__EA_MEM_TYPE_int,\
-           int32_t  : CTF__EA_MEM_TYPE_int,\
-           int64_t  : CTF__EA_MEM_TYPE_int,\
-           uint8_t  : CTF__EA_MEM_TYPE_uint,\
-           uint16_t : CTF__EA_MEM_TYPE_uint,\
-           uint32_t : CTF__EA_MEM_TYPE_uint,\
-           uint64_t : CTF__EA_MEM_TYPE_uint,\
-           float: CTF__EA_MEM_TYPE_float,\
-           double: CTF__EA_MEM_TYPE_float,\
-           long double: CTF__EA_MEM_TYPE_float,\
-           default    : CTF__EA_MEM_TYPE_ptr),\
+           char     : CTF__DATA_TYPE_char,\
+           int8_t   : CTF__DATA_TYPE_int,\
+           int16_t  : CTF__DATA_TYPE_int,\
+           int32_t  : CTF__DATA_TYPE_int,\
+           int64_t  : CTF__DATA_TYPE_int,\
+           uint8_t  : CTF__DATA_TYPE_uint,\
+           uint16_t : CTF__DATA_TYPE_uint,\
+           uint32_t : CTF__DATA_TYPE_uint,\
+           uint64_t : CTF__DATA_TYPE_uint,\
+           float: CTF__DATA_TYPE_float,\
+           double: CTF__DATA_TYPE_float,\
+           long double: CTF__DATA_TYPE_float,\
+           default    : CTF__DATA_TYPE_ptr),\
 __LINE__, __FILE__)
 #define ctf_assert_mem(a, cmp, b, l) \
   ctf__ea_arr((a), #cmp, (b), l, l, #a, #b, 1,\
@@ -141,19 +141,19 @@ __LINE__, __FILE__)
                            long double   : CTF__EA_SIGN_float,\
                            default : CTF__EA_SIGN_uint), \
                            _Generic((*(b)),\
-           char     : CTF__EA_MEM_TYPE_char,\
-           int8_t   : CTF__EA_MEM_TYPE_int,\
-           int16_t  : CTF__EA_MEM_TYPE_int,\
-           int32_t  : CTF__EA_MEM_TYPE_int,\
-           int64_t  : CTF__EA_MEM_TYPE_int,\
-           uint8_t  : CTF__EA_MEM_TYPE_uint,\
-           uint16_t : CTF__EA_MEM_TYPE_uint,\
-           uint32_t : CTF__EA_MEM_TYPE_uint,\
-           uint64_t : CTF__EA_MEM_TYPE_uint,\
-           float: CTF__EA_MEM_TYPE_float,\
-           double: CTF__EA_MEM_TYPE_float,\
-           long double: CTF__EA_MEM_TYPE_float,\
-           default    : CTF__EA_MEM_TYPE_ptr),\
+           char     : CTF__DATA_TYPE_char,\
+           int8_t   : CTF__DATA_TYPE_int,\
+           int16_t  : CTF__DATA_TYPE_int,\
+           int32_t  : CTF__DATA_TYPE_int,\
+           int64_t  : CTF__DATA_TYPE_int,\
+           uint8_t  : CTF__DATA_TYPE_uint,\
+           uint16_t : CTF__DATA_TYPE_uint,\
+           uint32_t : CTF__DATA_TYPE_uint,\
+           uint64_t : CTF__DATA_TYPE_uint,\
+           float: CTF__DATA_TYPE_float,\
+           double: CTF__DATA_TYPE_float,\
+           long double: CTF__DATA_TYPE_float,\
+           default    : CTF__DATA_TYPE_ptr),\
 __LINE__, __FILE__)
 #define ctf_expect_arr(a, cmp, b) \
   ctf__ea_arr((a), #cmp, (b), sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, 0,\
@@ -168,19 +168,19 @@ __LINE__, __FILE__)
                            long double   : CTF__EA_SIGN_float,\
                            default : CTF__EA_SIGN_uint), \
                            _Generic((*(b)),\
-           char     : CTF__EA_MEM_TYPE_char,\
-           int8_t   : CTF__EA_MEM_TYPE_int,\
-           int16_t  : CTF__EA_MEM_TYPE_int,\
-           int32_t  : CTF__EA_MEM_TYPE_int,\
-           int64_t  : CTF__EA_MEM_TYPE_int,\
-           uint8_t  : CTF__EA_MEM_TYPE_uint,\
-           uint16_t : CTF__EA_MEM_TYPE_uint,\
-           uint32_t : CTF__EA_MEM_TYPE_uint,\
-           uint64_t : CTF__EA_MEM_TYPE_uint,\
-           float: CTF__EA_MEM_TYPE_float,\
-           double: CTF__EA_MEM_TYPE_float,\
-           long double: CTF__EA_MEM_TYPE_float,\
-           default    : CTF__EA_MEM_TYPE_ptr),\
+           char     : CTF__DATA_TYPE_char,\
+           int8_t   : CTF__DATA_TYPE_int,\
+           int16_t  : CTF__DATA_TYPE_int,\
+           int32_t  : CTF__DATA_TYPE_int,\
+           int64_t  : CTF__DATA_TYPE_int,\
+           uint8_t  : CTF__DATA_TYPE_uint,\
+           uint16_t : CTF__DATA_TYPE_uint,\
+           uint32_t : CTF__DATA_TYPE_uint,\
+           uint64_t : CTF__DATA_TYPE_uint,\
+           float: CTF__DATA_TYPE_float,\
+           double: CTF__DATA_TYPE_float,\
+           long double: CTF__DATA_TYPE_float,\
+           default    : CTF__DATA_TYPE_ptr),\
 __LINE__, __FILE__)
 #define ctf_assert_arr(a, cmp, b) \
   ctf__ea_arr((a), #cmp, (b), sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, 1,\
@@ -195,19 +195,19 @@ __LINE__, __FILE__)
                            long double   : CTF__EA_SIGN_float,\
                            default : CTF__EA_SIGN_uint), \
                            _Generic((*(b)),\
-           char     : CTF__EA_MEM_TYPE_char,\
-           int8_t   : CTF__EA_MEM_TYPE_int,\
-           int16_t  : CTF__EA_MEM_TYPE_int,\
-           int32_t  : CTF__EA_MEM_TYPE_int,\
-           int64_t  : CTF__EA_MEM_TYPE_int,\
-           uint8_t  : CTF__EA_MEM_TYPE_uint,\
-           uint16_t : CTF__EA_MEM_TYPE_uint,\
-           uint32_t : CTF__EA_MEM_TYPE_uint,\
-           uint64_t : CTF__EA_MEM_TYPE_uint,\
-           float: CTF__EA_MEM_TYPE_float,\
-           double: CTF__EA_MEM_TYPE_float,\
-           long double: CTF__EA_MEM_TYPE_float,\
-           default    : CTF__EA_MEM_TYPE_ptr),\
+           char     : CTF__DATA_TYPE_char,\
+           int8_t   : CTF__DATA_TYPE_int,\
+           int16_t  : CTF__DATA_TYPE_int,\
+           int32_t  : CTF__DATA_TYPE_int,\
+           int64_t  : CTF__DATA_TYPE_int,\
+           uint8_t  : CTF__DATA_TYPE_uint,\
+           uint16_t : CTF__DATA_TYPE_uint,\
+           uint32_t : CTF__DATA_TYPE_uint,\
+           uint64_t : CTF__DATA_TYPE_uint,\
+           float: CTF__DATA_TYPE_float,\
+           double: CTF__DATA_TYPE_float,\
+           long double: CTF__DATA_TYPE_float,\
+           default    : CTF__DATA_TYPE_ptr),\
 __LINE__, __FILE__)
 #endif
 #if CTF_EA_ALIASES == CTF_ON
@@ -257,19 +257,19 @@ __LINE__, __FILE__)
                            long double   : CTF__EA_SIGN_float,\
                            default : CTF__EA_SIGN_uint), \
                            _Generic((*(b)),\
-           char     : CTF__EA_MEM_TYPE_char,\
-           int8_t   : CTF__EA_MEM_TYPE_int,\
-           int16_t  : CTF__EA_MEM_TYPE_int,\
-           int32_t  : CTF__EA_MEM_TYPE_int,\
-           int64_t  : CTF__EA_MEM_TYPE_int,\
-           uint8_t  : CTF__EA_MEM_TYPE_uint,\
-           uint16_t : CTF__EA_MEM_TYPE_uint,\
-           uint32_t : CTF__EA_MEM_TYPE_uint,\
-           uint64_t : CTF__EA_MEM_TYPE_uint,\
-           float: CTF__EA_MEM_TYPE_float,\
-           double: CTF__EA_MEM_TYPE_float,\
-           long double: CTF__EA_MEM_TYPE_float,\
-           default    : CTF__EA_MEM_TYPE_ptr),\
+           char     : CTF__DATA_TYPE_char,\
+           int8_t   : CTF__DATA_TYPE_int,\
+           int16_t  : CTF__DATA_TYPE_int,\
+           int32_t  : CTF__DATA_TYPE_int,\
+           int64_t  : CTF__DATA_TYPE_int,\
+           uint8_t  : CTF__DATA_TYPE_uint,\
+           uint16_t : CTF__DATA_TYPE_uint,\
+           uint32_t : CTF__DATA_TYPE_uint,\
+           uint64_t : CTF__DATA_TYPE_uint,\
+           float: CTF__DATA_TYPE_float,\
+           double: CTF__DATA_TYPE_float,\
+           long double: CTF__DATA_TYPE_float,\
+           default    : CTF__DATA_TYPE_ptr),\
 __LINE__, __FILE__)
 #define assert_mem(a, cmp, b, l) \
   ctf__ea_arr((a), #cmp, (b), l, l, #a, #b, 1,\
@@ -284,19 +284,19 @@ __LINE__, __FILE__)
                            long double   : CTF__EA_SIGN_float,\
                            default : CTF__EA_SIGN_uint), \
                            _Generic((*(b)),\
-           char     : CTF__EA_MEM_TYPE_char,\
-           int8_t   : CTF__EA_MEM_TYPE_int,\
-           int16_t  : CTF__EA_MEM_TYPE_int,\
-           int32_t  : CTF__EA_MEM_TYPE_int,\
-           int64_t  : CTF__EA_MEM_TYPE_int,\
-           uint8_t  : CTF__EA_MEM_TYPE_uint,\
-           uint16_t : CTF__EA_MEM_TYPE_uint,\
-           uint32_t : CTF__EA_MEM_TYPE_uint,\
-           uint64_t : CTF__EA_MEM_TYPE_uint,\
-           float: CTF__EA_MEM_TYPE_float,\
-           double: CTF__EA_MEM_TYPE_float,\
-           long double: CTF__EA_MEM_TYPE_float,\
-           default    : CTF__EA_MEM_TYPE_ptr),\
+           char     : CTF__DATA_TYPE_char,\
+           int8_t   : CTF__DATA_TYPE_int,\
+           int16_t  : CTF__DATA_TYPE_int,\
+           int32_t  : CTF__DATA_TYPE_int,\
+           int64_t  : CTF__DATA_TYPE_int,\
+           uint8_t  : CTF__DATA_TYPE_uint,\
+           uint16_t : CTF__DATA_TYPE_uint,\
+           uint32_t : CTF__DATA_TYPE_uint,\
+           uint64_t : CTF__DATA_TYPE_uint,\
+           float: CTF__DATA_TYPE_float,\
+           double: CTF__DATA_TYPE_float,\
+           long double: CTF__DATA_TYPE_float,\
+           default    : CTF__DATA_TYPE_ptr),\
 __LINE__, __FILE__)
 #define expect_arr(a, cmp, b) \
   ctf__ea_arr((a), #cmp, (b), sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, 0,\
@@ -311,19 +311,19 @@ __LINE__, __FILE__)
                            long double   : CTF__EA_SIGN_float,\
                            default : CTF__EA_SIGN_uint), \
                            _Generic((*(b)),\
-           char     : CTF__EA_MEM_TYPE_char,\
-           int8_t   : CTF__EA_MEM_TYPE_int,\
-           int16_t  : CTF__EA_MEM_TYPE_int,\
-           int32_t  : CTF__EA_MEM_TYPE_int,\
-           int64_t  : CTF__EA_MEM_TYPE_int,\
-           uint8_t  : CTF__EA_MEM_TYPE_uint,\
-           uint16_t : CTF__EA_MEM_TYPE_uint,\
-           uint32_t : CTF__EA_MEM_TYPE_uint,\
-           uint64_t : CTF__EA_MEM_TYPE_uint,\
-           float: CTF__EA_MEM_TYPE_float,\
-           double: CTF__EA_MEM_TYPE_float,\
-           long double: CTF__EA_MEM_TYPE_float,\
-           default    : CTF__EA_MEM_TYPE_ptr),\
+           char     : CTF__DATA_TYPE_char,\
+           int8_t   : CTF__DATA_TYPE_int,\
+           int16_t  : CTF__DATA_TYPE_int,\
+           int32_t  : CTF__DATA_TYPE_int,\
+           int64_t  : CTF__DATA_TYPE_int,\
+           uint8_t  : CTF__DATA_TYPE_uint,\
+           uint16_t : CTF__DATA_TYPE_uint,\
+           uint32_t : CTF__DATA_TYPE_uint,\
+           uint64_t : CTF__DATA_TYPE_uint,\
+           float: CTF__DATA_TYPE_float,\
+           double: CTF__DATA_TYPE_float,\
+           long double: CTF__DATA_TYPE_float,\
+           default    : CTF__DATA_TYPE_ptr),\
 __LINE__, __FILE__)
 #define assert_arr(a, cmp, b) \
   ctf__ea_arr((a), #cmp, (b), sizeof(a)/sizeof(*(a)), sizeof(b)/sizeof(*(b)), #a, #b, 1,\
@@ -338,19 +338,19 @@ __LINE__, __FILE__)
                            long double   : CTF__EA_SIGN_float,\
                            default : CTF__EA_SIGN_uint), \
                            _Generic((*(b)),\
-           char     : CTF__EA_MEM_TYPE_char,\
-           int8_t   : CTF__EA_MEM_TYPE_int,\
-           int16_t  : CTF__EA_MEM_TYPE_int,\
-           int32_t  : CTF__EA_MEM_TYPE_int,\
-           int64_t  : CTF__EA_MEM_TYPE_int,\
-           uint8_t  : CTF__EA_MEM_TYPE_uint,\
-           uint16_t : CTF__EA_MEM_TYPE_uint,\
-           uint32_t : CTF__EA_MEM_TYPE_uint,\
-           uint64_t : CTF__EA_MEM_TYPE_uint,\
-           float: CTF__EA_MEM_TYPE_float,\
-           double: CTF__EA_MEM_TYPE_float,\
-           long double: CTF__EA_MEM_TYPE_float,\
-           default    : CTF__EA_MEM_TYPE_ptr),\
+           char     : CTF__DATA_TYPE_char,\
+           int8_t   : CTF__DATA_TYPE_int,\
+           int16_t  : CTF__DATA_TYPE_int,\
+           int32_t  : CTF__DATA_TYPE_int,\
+           int64_t  : CTF__DATA_TYPE_int,\
+           uint8_t  : CTF__DATA_TYPE_uint,\
+           uint16_t : CTF__DATA_TYPE_uint,\
+           uint32_t : CTF__DATA_TYPE_uint,\
+           uint64_t : CTF__DATA_TYPE_uint,\
+           float: CTF__DATA_TYPE_float,\
+           double: CTF__DATA_TYPE_float,\
+           long double: CTF__DATA_TYPE_float,\
+           default    : CTF__DATA_TYPE_ptr),\
 __LINE__, __FILE__)
 #endif
 #define assert_true(a) \
