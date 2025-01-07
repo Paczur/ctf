@@ -1,5 +1,4 @@
 #define CTF_CONST_MOCK_GROUP_SIZE 64
-#define CTF_CONST_MOCK_CHECKABLES_SIZE 32
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -136,7 +135,6 @@ struct ctf__mock_bind {
     struct ctf__mock_state *ctf__mock_check_state, int ctf__mock_out,          \
     ret_type *ctf__mock_return_value, CTF__MACRO_VA typed)
 #define CTF__MOCK_VOID_TEMPLATE(mod, wrapped, real, name, typed, args)         \
-  CTF__MOCK_CHECKABLES_TEMPLATE(mod, name);                                    \
   mod void ctf__mock_checks_##name(                                            \
     struct ctf__mock_state *ctf__mock_check_state, int, CTF__MACRO_VA typed);  \
   mod struct ctf__mock ctf__mock_struct_##name;                                \
@@ -168,7 +166,6 @@ struct ctf__mock_bind {
     CTF__MACRO_VA typed)
 
 #define CTF__MOCK_EXTERN_TEMPLATE(wrapped, real, ret_type, name, typed) \
-  CTF__MOCK_CHECKABLES_TEMPLATE(extern, name);                          \
   extern struct ctf__mock ctf__mock_struct_##name;                      \
   extern struct ctf__mock_struct_##name **ctf__mock_return_##name;      \
   extern void ctf__mock_checks_##name(                                  \
@@ -178,7 +175,6 @@ struct ctf__mock_bind {
   ret_type real typed;                                                  \
   ret_type wrapped typed
 #define CTF__MOCK_VOID_RET_EXTERN_TEMPLATE(wrapped, real, name, typed)        \
-  CTF__MOCK_CHECKABLES_TEMPLATE(extern, name);                                \
   extern struct ctf__mock ctf__mock_struct_##name;                            \
   extern struct ctf__mock_struct_##name **ctf__mock_return_##name;            \
   extern void ctf__mock_fn_real_##name typed;                                 \
