@@ -35,6 +35,10 @@ CTF_MOCK_CUSTOM(memcmp, int, wrapped_memcmp,
   }
 }
 
+// tests void returns and arguments
+void empty_f(void) {};
+CTF_MOCK_VOID_CUSTOM(empty_f, empty_wrapper) {}
+
 int mock_add(int a, int b) {
   (void)(a - b);
   return 0;

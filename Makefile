@@ -16,7 +16,7 @@ DEBUG_FLAGS=$(WARN_FLAGS) $(SANITIZER_FLAGS) $(MEMORY_DEBUG_FLAGS) -Og -ggdb3 -M
 OPTIMIZE_FLAGS=-march=x86-64-v3 -O2 -pipe -D NDEBUG
 TEST_LINK_FLAGS=$(LINK_FLAGS) -lpthread
 LINK_FLAGS=$(BASE_CFLAGS) -flto=4 -fwhole-program
-TEST_FLAGS=$(CFLAGS) -Ibuild/src -Wno-shadow
+TEST_FLAGS=$(CFLAGS) -Ibuild/src -Wno-shadow -Wno-unused-parameter
 BASE_CFLAGS=-std=gnu11
 CFLAGS=$(BASE_CFLAGS)
 

@@ -119,6 +119,7 @@ struct ctf__thread_data {
 };
 
 #define CTF__MACRO_VA(...) __VA_ARGS__
+#define CTF__MACRO_VA_COMMA(...) , ##__VA_ARGS__
 
 extern struct ctf__thread_data *restrict ctf__thread_data;
 extern int ctf_exit_code;
