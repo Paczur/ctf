@@ -225,7 +225,7 @@ static void print_arr(struct ctf__state *state, const void *data,
                        : (type == CTF__DATA_TYPE_uint)  ? "%ju, "
                        : (type == CTF__DATA_TYPE_ptr)   ? "%p, "
                        : (type == CTF__DATA_TYPE_float) ? "%Lg, "
-                                                          : "";
+                                                        : "";
   if(sign == 2) {
     if(step == sizeof(float)) {
       for(uintmax_t i = 0; i < size; i++)
@@ -401,11 +401,16 @@ void ctf_assert_hide(uintmax_t count) {
 
 void ctf_assert_barrier(void) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__states *states = states_last(thread_index);
-  for(uintmax_t i = 0; i < states->size; i++) {
-    if(states->states[i].status) {
-      longjmp(ctf__assert_jmp_buff[thread_index], 1);
+  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
+  int status;
+  for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
+    if(thread_data->test_elements[i].issubtest) {
+      status = subtest_status_fill(subtest_stack + thread_index,
+                                   thread_data->test_elements[i].el.subtest);
+    } else {
+      status = states_status(thread_data->test_elements[i].el.states);
     }
+    if(status) longjmp(ctf__assert_jmp_buff[thread_index], 1);
   }
 }
 
