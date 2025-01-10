@@ -300,7 +300,7 @@ static uintmax_t print_test(struct buff *buff, const struct ctf__test *test,
 
 void ctf__print_error(char *msg, uintmax_t msg_size, int line,
                       const char *file) {
-  struct buff buff;
+  struct buff buff = {0};
   const struct ctf__state state = {.status = 1,
                                    .line = line,
                                    .file = file,

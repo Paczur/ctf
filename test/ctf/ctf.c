@@ -9,6 +9,7 @@ CTF_MOCK(int, sub, (int a, int b), (a, b)) {
   } else {
     mock_check(mock_return_value);
   }
+  return a - b;
 }
 CTF_MOCK(int, add, (int a, int b), (a, b)) {
   if(mock_in) {
@@ -17,12 +18,14 @@ CTF_MOCK(int, add, (int a, int b), (a, b)) {
   } else {
     mock_check(mock_return_value);
   }
+  return a + b;
 }
 CTF_MOCK_CUSTOM(strcmp, int, wrapped_strcmp, (const char *a, const char *b),
                 (a, b)) {
   mock_check_str(a);
   mock_check_str(b);
   if(mock_out) mock_check(mock_return_value);
+  return mock_real(wrapped_strcmp)(a, b);
 }
 CTF_MOCK_CUSTOM(memcmp, int, wrapped_memcmp,
                 (const void *a, const void *b, size_t l), (a, b, l)) {
@@ -33,9 +36,11 @@ CTF_MOCK_CUSTOM(memcmp, int, wrapped_memcmp,
   } else {
     mock_check(mock_return_value);
   }
+  return mock_real(wrapped_memcmp)(a, b, l);
 }
 
 // tests void returns and arguments
+CTF_MOCK_VOID_CUSTOM_EXTERN(empty_f, empty_wrapper);
 void empty_f(void) {};
 CTF_MOCK_VOID_CUSTOM(empty_f, empty_wrapper) {}
 
