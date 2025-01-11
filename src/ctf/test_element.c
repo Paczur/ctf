@@ -105,26 +105,6 @@ static int subtest_status_fill(struct subtest_vec *stack,
   return subtest->status;
 }
 
-static int test_status(uintptr_t thread_index) {
-  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  struct ctf__test_element *el;
-  int test_status = 0;
-  for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
-    el = thread_data->test_elements + i;
-    if(el->issubtest) {
-      if(el->el.subtest->status == 2) {
-        test_status |=
-          subtest_status_fill(subtest_stack + thread_index, el->el.subtest);
-      } else {
-        test_status |= el->el.subtest->status;
-      }
-    } else {
-      test_status |= states_status(el->el.states);
-    }
-  }
-  return test_status;
-}
-
 static void state_init(struct ctf__state *state) {
   state->msg = NULL;
   state->msg_capacity = 0;
@@ -219,9 +199,21 @@ static struct ctf__subtest *subtest_new(struct subtest_vec *allocated) {
   return subtest;
 }
 
+static void subtest_flat_delete(uintptr_t thread_index,
+                                struct ctf__subtest *subtest) {
+  struct subtest_vec *allocated_subtests = subtests_allocated + thread_index;
+  allocated_subtests->size++;
+  if(allocated_subtests->size >= allocated_subtests->capacity) {
+    allocated_subtests->capacity *= 2;
+    allocated_subtests->subtests = realloc(
+      allocated_subtests->subtests,
+      sizeof(*allocated_subtests->subtests) * allocated_subtests->capacity);
+  }
+  allocated_subtests->subtests[allocated_subtests->size - 1] = subtest;
+}
+
 static void subtest_delete(uintptr_t thread_index,
                            struct ctf__subtest *subtest) {
-  struct subtest_vec *allocated_subtests = subtests_allocated + thread_index;
   struct subtest_vec *stack = subtest_stack + thread_index;
   do {
     for(uintmax_t i = 0; i < subtest->size; i++) {
@@ -231,14 +223,7 @@ static void subtest_delete(uintptr_t thread_index,
         states_delete(thread_index, subtest->elements[i].el.states);
       }
     }
-    allocated_subtests->size++;
-    if(allocated_subtests->size >= allocated_subtests->capacity) {
-      allocated_subtests->capacity *= 2;
-      allocated_subtests->subtests = realloc(
-        allocated_subtests->subtests,
-        sizeof(*allocated_subtests->subtests) * allocated_subtests->capacity);
-    }
-    allocated_subtests->subtests[allocated_subtests->size - 1] = subtest;
+    subtest_flat_delete(thread_index, subtest);
     subtest = subtest_stack_pop(stack);
   } while(subtest != NULL);
 }
@@ -249,6 +234,36 @@ static void subtest_increment(struct ctf__subtest *subtest) {
     subtest->capacity *= 2;
     subtest->elements = realloc(subtest->elements,
                                 sizeof(*subtest->elements) * subtest->capacity);
+  }
+}
+
+static void subtest_reduce(uintptr_t thread_index,
+                           struct ctf__subtest *subtest) {
+  struct ctf__subtest *sub = subtest;
+  struct ctf__subtest *parent_sub;
+  struct subtest_vec *stack = subtest_stack + thread_index;
+  while(1) {
+    for(uintmax_t i = 0; i < sub->size; i++) {
+      if(sub->elements[i].issubtest)
+        subtest_stack_push(stack, sub->elements[i].el.subtest);
+    }
+    sub = subtest_stack_pop(stack);
+    if(sub == NULL) break;
+    if(sub->size == 0) {
+      parent_sub = sub->parent;
+      if(parent_sub == NULL) break;
+      for(uintmax_t i = 0; i < parent_sub->size; i++) {
+        if(parent_sub->elements[i].issubtest &&
+           parent_sub->elements[i].el.subtest == sub) {
+          subtest_flat_delete(thread_index, sub);
+          for(uintmax_t j = i; j < parent_sub->size - 1; j++) {
+            parent_sub->elements[j] = parent_sub->elements[j + 1];
+          }
+          parent_sub->size--;
+          break;
+        }
+      }
+    }
   }
 }
 
@@ -324,6 +339,27 @@ static void test_elements_deinit(void) {
   subtests_allocated = NULL;
   subtest_stack = NULL;
   level_stack = NULL;
+}
+
+static int test_status(uintptr_t thread_index) {
+  struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
+  struct ctf__test_element *el;
+  int test_status = 0;
+  for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
+    el = thread_data->test_elements + i;
+    if(el->issubtest) {
+      subtest_reduce(thread_index, el->el.subtest);
+      if(el->el.subtest->status == 2) {
+        test_status |=
+          subtest_status_fill(subtest_stack + thread_index, el->el.subtest);
+      } else {
+        test_status |= el->el.subtest->status;
+      }
+    } else {
+      test_status |= states_status(el->el.states);
+    }
+  }
+  return test_status;
 }
 
 void ctf__subtest_enter(uintptr_t thread_index, const char *name) {
