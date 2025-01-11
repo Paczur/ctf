@@ -76,11 +76,7 @@ struct ctf__mock_bind {
   mod ret_type real typed;                                                     \
   mod ret_type ctf__mock_fn_real_##name typed { return real args; }            \
   mod struct ctf__mock ctf__mock_struct_##name;                                \
-  mod struct ctf__mock_struct_##name {                                         \
-    ret_type *values;                                                          \
-    uintmax_t size;                                                            \
-    uintmax_t capacity;                                                        \
-  } **ctf__mock_return_##name =                                                \
+  mod struct ctf__mock_struct_##name **ctf__mock_return_##name =               \
     (struct ctf__mock_struct_##name **)&(ctf__mock_struct_##name.returns);     \
   mod ret_type wrapped typed {                                                 \
     uintptr_t thread_index =                                                   \
@@ -123,12 +119,15 @@ struct ctf__mock_bind {
       } else {                                                                 \
         if(_mock_f != NULL) {                                                  \
           out = _mock_f args;                                                  \
+          ctf_subtest(out) ctf__mock_checks_##name(                            \
+            ctf__mock_struct_##name.states + thread_index, 1,                  \
+            &out CTF__MACRO_VA_COMMA args);                                    \
         } else {                                                               \
           temp_set = 1;                                                        \
+          ctf_subtest(out) temp = ctf__mock_checks_##name(                     \
+            ctf__mock_struct_##name.states + thread_index, 1,                  \
+            &out CTF__MACRO_VA_COMMA args);                                    \
         }                                                                      \
-        ctf_subtest(out) temp = ctf__mock_checks_##name(                       \
-          ctf__mock_struct_##name.states + thread_index, 1,                    \
-          &out CTF__MACRO_VA_COMMA args);                                      \
       }                                                                        \
     }                                                                          \
     return (temp_set) ? temp : out;                                            \
@@ -142,11 +141,7 @@ struct ctf__mock_bind {
     struct ctf__mock_state *ctf__mock_check_state,                             \
     int CTF__MACRO_VA_COMMA typed_comb);                                       \
   mod struct ctf__mock ctf__mock_struct_##name;                                \
-  mod struct ctf__mock_struct_##name {                                         \
-    void *values;                                                              \
-    uintmax_t size;                                                            \
-    uintmax_t capacity;                                                        \
-  } **ctf__mock_return_##name =                                                \
+  mod struct ctf__mock_struct_##name **ctf__mock_return_##name =               \
     (struct ctf__mock_struct_##name **)&(ctf__mock_struct_##name.returns);     \
   mod void ctf__mock_fn_real_##name typed { real args; }                       \
   mod void wrapped typed {                                                     \
@@ -176,6 +171,11 @@ struct ctf__mock_bind {
 
 #define CTF__MOCK_EXTERN_TEMPLATE(wrapped, real, ret_type, name, typed_comb, \
                                   typed)                                     \
+  struct ctf__mock_struct_##name {                                           \
+    ret_type *values;                                                        \
+    uintmax_t size;                                                          \
+    uintmax_t capacity;                                                      \
+  };                                                                         \
   extern struct ctf__mock ctf__mock_struct_##name;                           \
   extern struct ctf__mock_struct_##name **ctf__mock_return_##name;           \
   extern ret_type ctf__mock_checks_##name(                                   \
@@ -186,6 +186,11 @@ struct ctf__mock_bind {
   ret_type wrapped typed
 #define CTF__MOCK_VOID_RET_EXTERN_TEMPLATE(wrapped, real, name, typed_comb, \
                                            typed)                           \
+  struct ctf__mock_struct_##name {                                          \
+    void *values;                                                           \
+    uintmax_t size;                                                         \
+    uintmax_t capacity;                                                     \
+  };                                                                        \
   extern struct ctf__mock ctf__mock_struct_##name;                          \
   extern struct ctf__mock_struct_##name **ctf__mock_return_##name;          \
   extern void ctf__mock_fn_real_##name typed;                               \

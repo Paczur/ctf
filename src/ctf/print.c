@@ -227,7 +227,7 @@ static uintmax_t print_states(struct buff *buff,
                               int parent_status) {
   uintmax_t full_size = 0;
   if(!parent_status && level > opt_verbosity && !states_status(states))
-    return full_size;
+    return 0;
   for(uintmax_t i = 0; i < states->size; i++)
     full_size += print_state(buff, states->states + i, level, detail);
   return full_size;
@@ -236,10 +236,11 @@ static uintmax_t print_states(struct buff *buff,
 static uintmax_t print_subtest(struct buff *buff, uintptr_t thread_index,
                                struct ctf__subtest *subtest, int test_status) {
   uintmax_t full_size = 0;
-  uintmax_t level = 2;
-  uintmax_t t;
+  int level = 2;
+  int t;
   const int status = subtest->status;
-  if(!test_status && !status && opt_verbosity < 3) return full_size;
+  if(subtest->size == 0 || (!test_status && !status && opt_verbosity < 3))
+    return full_size;
 
   full_size += print_name_status(buff, subtest->name, strlen(subtest->name),
                                  subtest->status, 2);
@@ -268,7 +269,8 @@ static uintmax_t print_subtest(struct buff *buff, uintptr_t thread_index,
     subtest = subtest_stack_pop(subtest_stack + thread_index);
     if(subtest == NULL) break;
     t = level_stack_pop(level_stack + thread_index);
-    if(status)
+    if(subtest->size > 0 && (subtest->status || t < opt_verbosity ||
+                             (subtest->parent && subtest->parent->status)))
       full_size += print_name_status(buff, subtest->name, strlen(subtest->name),
                                      subtest->status, t);
     level = t;

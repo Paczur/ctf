@@ -2,6 +2,12 @@
 
 #include "add.h"
 
+CTF_MOCK_EXTERN(int, sub, (int a, int b));
+CTF_MOCK_EXTERN(int, add, (int a, int b));
+CTF_MOCK_CUSTOM_EXTERN(strcmp, int, wrapped_strcmp,
+                       (const char *a, const char *b));
+CTF_MOCK_CUSTOM_EXTERN(memcmp, int, wrapped_memcmp,
+                       (const void *a, const void *b, size_t l));
 CTF_MOCK(int, sub, (int a, int b), (a, b)) {
   if(mock_in) {
     mock_check(a);
@@ -1513,8 +1519,11 @@ CTF_TEST(subtests) {
   subtest(sub_fail) ctf_fail("fail");
   subtest(sub_pass) ctf_pass("pass");
   subtest(sub_with_nesting) {
-    subtest(nested_pass) ctf_pass("pass");
     subtest(nested_fail) ctf_fail("fail");
+    subtest(nested_pass) ctf_pass("pass");
+    subtest(again_sub_pass_with_nesting) {
+      subtest(nested_pass) ctf_pass("pass");
+    }
   }
   subtest(sub_pass_with_nesting) { subtest(nested_pass) ctf_pass("pass"); }
 }
