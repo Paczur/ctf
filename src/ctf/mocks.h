@@ -159,7 +159,7 @@ struct ctf__mock_bind {
       ctf_subtest(in)                                                          \
         ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index, \
                                 0 CTF__MACRO_VA_COMMA args);                   \
-      _mock_f args;                                                            \
+      if(_mock_f != NULL) _mock_f args;                                        \
       ctf_subtest(out)                                                         \
         ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index, \
                                 1 CTF__MACRO_VA_COMMA args);                   \
