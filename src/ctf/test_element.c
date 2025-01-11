@@ -237,36 +237,6 @@ static void subtest_increment(struct ctf__subtest *subtest) {
   }
 }
 
-static void subtest_reduce(uintptr_t thread_index,
-                           struct ctf__subtest *subtest) {
-  struct ctf__subtest *sub = subtest;
-  struct ctf__subtest *parent_sub;
-  struct subtest_vec *stack = subtest_stack + thread_index;
-  while(1) {
-    for(uintmax_t i = 0; i < sub->size; i++) {
-      if(sub->elements[i].issubtest)
-        subtest_stack_push(stack, sub->elements[i].el.subtest);
-    }
-    sub = subtest_stack_pop(stack);
-    if(sub == NULL) break;
-    if(sub->size == 0) {
-      parent_sub = sub->parent;
-      if(parent_sub == NULL) break;
-      for(uintmax_t i = 0; i < parent_sub->size; i++) {
-        if(parent_sub->elements[i].issubtest &&
-           parent_sub->elements[i].el.subtest == sub) {
-          subtest_flat_delete(thread_index, sub);
-          for(uintmax_t j = i; j < parent_sub->size - 1; j++) {
-            parent_sub->elements[j] = parent_sub->elements[j + 1];
-          }
-          parent_sub->size--;
-          break;
-        }
-      }
-    }
-  }
-}
-
 static void test_elements_increment(uintptr_t thread_index) {
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   thread_data->test_elements_size++;
@@ -348,7 +318,6 @@ static int test_status(uintptr_t thread_index) {
   for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
     el = thread_data->test_elements + i;
     if(el->issubtest) {
-      subtest_reduce(thread_index, el->el.subtest);
       if(el->el.subtest->status == 2) {
         test_status |=
           subtest_status_fill(subtest_stack + thread_index, el->el.subtest);
@@ -387,8 +356,35 @@ void ctf__subtest_enter(uintptr_t thread_index, const char *name) {
 }
 
 void ctf__subtest_leave(uintptr_t thread_index) {
+  struct ctf__subtest *sub;
+  struct ctf__subtest *parent;
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
-  thread_data->subtest_current = thread_data->subtest_current->parent;
+  sub = thread_data->subtest_current;
+  parent = sub->parent;
+  thread_data->subtest_current = parent;
+  if(sub->size > 0) return;
+  if(parent == NULL) {
+    for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
+      if(thread_data->test_elements[i].issubtest &&
+         thread_data->test_elements[i].el.subtest == sub) {
+        for(uintmax_t j = i; j < thread_data->test_elements_size - 1; j++)
+          thread_data->test_elements[j] = thread_data->test_elements[j + 1];
+        thread_data->test_elements_size--;
+        subtest_flat_delete(thread_index, sub);
+        break;
+      }
+    }
+    return;
+  }
+  for(uintmax_t i = 0; i < parent->size; i++) {
+    if(parent->elements[i].issubtest && parent->elements[i].el.subtest == sub) {
+      for(uintmax_t j = i; j < parent->size - 1; j++)
+        parent->elements[j] = parent->elements[j + 1];
+      parent->size--;
+      subtest_flat_delete(thread_index, sub);
+      break;
+    }
+  }
 }
 
 static struct ctf__states *states_last(uintptr_t thread_index) {

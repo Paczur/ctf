@@ -93,11 +93,16 @@ CTF_TEST(mock_multiple) {
   }
 }
 CTF_TEST(mock_return) {
-  mock(add, NULL) {
-    mock_return(2);
+  subtest(once) mock(add, NULL) {
+    mock_return_nth(1, 2);
     mock_return_nth(2, 3);
     expect(2, ==, add(1, 3));
     expect(3, ==, add(1, 3));
+  }
+  subtest(always) mock(add, NULL) {
+    mock_return(2);
+    expect(2, ==, add(1, 3));
+    expect(2, ==, add(1, 3));
   }
 }
 

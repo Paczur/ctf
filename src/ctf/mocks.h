@@ -108,6 +108,9 @@ struct ctf__mock_bind {
           }                                                                    \
           _data[thread_index].return_overrides_size--;                         \
           (*ctf__mock_return_##name)[thread_index].size--;                     \
+        } else if(_data[thread_index].return_overrides[i] == 0) {              \
+          temp = (*ctf__mock_return_##name)[thread_index].values[i];           \
+          temp_set = 1;                                                        \
           break;                                                               \
         }                                                                      \
       }                                                                        \
@@ -329,7 +332,7 @@ void ctf__mock_ea_mem(struct ctf__mock_state *state, uintmax_t call_count,
 void ctf_unmock(void);
 #define ctf_unmock_group(name) ctf__unmock_group(ctf__mock_group_st_##name)
 #define ctf_mock_call_count ((CTF__MOCK_STRUCT_SELECTED)->call_count)
-#define ctf_mock_return(val) ctf_mock_return_nth(1, val)
+#define ctf_mock_return(val) ctf_mock_return_nth(0, val)
 #define ctf_mock_return_nth(n, val)                                           \
   do {                                                                        \
     ctf__mock_returns_ensure_allocated(CTF__MOCK_SELECTED,                    \
