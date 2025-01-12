@@ -1,6 +1,7 @@
 #define DEFAULT_PRINT_BUFF_SIZE 1024
 #define MIN_DIGITS_FOR_LINE 4
 #define INDENT_PER_LEVEL 4
+#define PRINT_INDICATOR_LENGTH 3
 
 struct buff {
   char *buff;
@@ -132,15 +133,68 @@ static uintmax_t print_indicator(struct buff *buff, int status) {
   return 0;
 }
 
+static uintmax_t print_name_converted(struct buff *buff, const char *name,
+                                      uintmax_t name_len) {
+  uintmax_t last_index = 0;
+  if(buff == NULL) return name_len + 1;
+  for(uintmax_t i = 0; i < name_len; i++) {
+    if(name[i] == '_') {
+      memcpy(buff->buff + buff->size, name + last_index, i - last_index);
+      buff->size += i - last_index;
+      buff->buff[buff->size++] = ' ';
+      last_index = i + 1;
+    }
+  }
+  memcpy(buff->buff + buff->size, name + last_index, name_len - last_index);
+  buff->size += name_len - last_index;
+  buff->buff[buff->size++] = '\n';
+  return 0;
+}
+
+static uintmax_t print_wrapped_name(struct buff *buff, const char *name,
+                                    uintmax_t name_len, uintmax_t indent) {
+  uintmax_t after_indent;
+  uintmax_t times;
+  uintmax_t full_size = 0;
+  after_indent = opt_wrap - indent;
+  times = name_len / after_indent;
+  if(buff == NULL) {
+    full_size += times * (indent + after_indent + 1) - indent;  // '\n' char
+    if(name_len % after_indent > 0)
+      full_size += indent + name_len % after_indent + 1;  // '\n' char
+    return full_size;
+  }
+  print_name_converted(buff, name, after_indent);
+  for(uintmax_t i = 1; i < times; i++) {
+    memset(buff->buff + buff->size, ' ', indent);
+    buff->size += indent;
+    print_name_converted(buff, name + i * after_indent, after_indent);
+  }
+  if(name_len % after_indent > 0) {
+    memset(buff->buff + buff->size, ' ', indent);
+    buff->size += indent;
+    print_name_converted(buff, name + times * after_indent,
+                         name_len % after_indent);
+  }
+  return 0;
+}
+
 static uintmax_t print_name_status(struct buff *buff, const char *name,
                                    uintmax_t name_len, int status,
                                    uintmax_t level) {
   uintmax_t full_size = 0;
+  const uintmax_t indent =
+    level * INDENT_PER_LEVEL + PRINT_INDICATOR_LENGTH + 1;
+
   if(buff == NULL) {
     full_size += level * INDENT_PER_LEVEL;
     full_size += print_indicator(NULL, status);
-    full_size += 2;  // ' ' '\n' chars
-    full_size += name_len;
+    full_size++;  // ' ' char
+    if(opt_wrap > 0 && full_size + name_len > opt_wrap) {
+      full_size += print_wrapped_name(NULL, name, name_len, indent);
+    } else {
+      full_size += print_name_converted(NULL, name, name_len);
+    }
     return full_size;
   }
   memset(buff->buff + buff->size, ' ', level * INDENT_PER_LEVEL);
@@ -148,21 +202,11 @@ static uintmax_t print_name_status(struct buff *buff, const char *name,
   print_indicator(buff, status);
   buff->buff[buff->size++] = ' ';
 
-  {
-    uintmax_t last_index = 0;
-    for(uintmax_t i = 0; i < name_len; i++) {
-      if(name[i] == '_') {
-        memcpy(buff->buff + buff->size, name + last_index, i - last_index);
-        buff->size += i - last_index;
-        buff->buff[buff->size++] = ' ';
-        last_index = i + 1;
-      }
-    }
-    memcpy(buff->buff + buff->size, name + last_index, name_len - last_index);
-    buff->size += name_len - last_index;
+  if(opt_wrap > 0 && indent + name_len > opt_wrap) {
+    print_wrapped_name(buff, name, name_len, indent);
+  } else {
+    print_name_converted(buff, name, name_len);
   }
-
-  buff->buff[buff->size++] = '\n';
   return 0;
 }
 
@@ -226,8 +270,7 @@ static uintmax_t print_states(struct buff *buff,
                               const struct ctf__states *states, int level,
                               int parent_status) {
   uintmax_t full_size = 0;
-  if(!parent_status && level > opt_verbosity && !states_status(states))
-    return 0;
+  if(!parent_status && !states_status(states)) return 0;
   for(uintmax_t i = 0; i < states->size; i++)
     full_size += print_state(buff, states->states + i, level, detail);
   return full_size;
@@ -236,8 +279,8 @@ static uintmax_t print_states(struct buff *buff,
 static uintmax_t print_subtest(struct buff *buff, uintptr_t thread_index,
                                struct ctf__subtest *subtest, int test_status) {
   uintmax_t full_size = 0;
-  int level = 2;
-  int t;
+  unsigned level = 2;
+  unsigned t;
   const int status = subtest->status;
   if(subtest->size == 0 || (!test_status && !status && opt_verbosity < 3))
     return full_size;

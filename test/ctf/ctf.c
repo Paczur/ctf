@@ -614,11 +614,19 @@ CTF_TEST(msg_limit) {
 CTF_TEST(print_buff_limit) { ctf_pass("%1048576s", "long"); }
 CTF_TEST(not_mocked) { expect(3, ==, add(1, 2)); }
 CTF_TEST(empty_subtest) { subtest(test) subtest(test2) subtest(test3); }
+CTF_TEST(
+  really_long_test_name_that_spans_over_multiple_lines_in_order_to_test_wrapping) {
+  ctf_subtest(
+    really_long_subtest_name_that_spans_over_multiple_lines_in_order_to_test_wrapping) {
+    ctf_fail("fail");
+  }
+}
 CTF_GROUP(misc) = {
   msg_limit,
   print_buff_limit,
   not_mocked,
   empty_subtest,
+  really_long_test_name_that_spans_over_multiple_lines_in_order_to_test_wrapping,
 };
 
 CTF_TEST(char_expect_success) {

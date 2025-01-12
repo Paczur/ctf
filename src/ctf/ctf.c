@@ -60,10 +60,11 @@ include(`base.m4')
   ((ctf__opt_cleanup) ? ctf__cleanup_realloc(ptr, size, thread_index) \
                       : realloc(ptr, size))
 
-static int opt_unicode = BRANDED;
-static int opt_color = AUTO;
-static int opt_detail = AUTO;
-static int opt_verbosity = 1;
+static unsigned opt_unicode = BRANDED;
+static unsigned opt_color = AUTO;
+static unsigned opt_detail = AUTO;
+static unsigned opt_verbosity = 1;
+static unsigned opt_wrap = 80;
 int ctf__opt_cleanup = 0;
 int ctf__opt_threads = 1;
 static int opt_statistics = 1;
@@ -208,7 +209,6 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
     if(!setjmp(ctf__assert_jmp_buff[thread_index])) group.tests[i].f();
     group.test_teardown();
     test_cleanup(thread_index);
-    buff->size -= temp_size;
     status = test_status(thread_index);
 
     if(status) {
@@ -218,6 +218,7 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
       if(opt_statistics) thread_data->stats.tests_passed++;
     }
 
+    buff->size -= temp_size;
     buff_reserve(
       buff, print_test(NULL, group.tests + i, test_name_len, thread_index));
     print_test(buff, group.tests + i, test_name_len, thread_index);
@@ -380,6 +381,10 @@ int main(int argc, char *argv[]) {
       if(i >= argc) err();
       sscanf(argv[i], "%u", &ctf__opt_threads);
       if(ctf__opt_threads < 1) ctf__opt_threads = 1;
+    } else if(!strcmp(argv[i] + 1, "w") || !strcmp(argv[i] + 1, "-wrap")) {
+      i++;
+      if(i >= argc) err();
+      sscanf(argv[i], "%u", &opt_wrap);
     } else if(!strcmp(argv[i] + 1, "s") ||
               !strcmp(argv[i] + 1, "-statistics")) {
       opt_statistics = 0;
