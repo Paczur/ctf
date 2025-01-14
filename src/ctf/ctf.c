@@ -128,6 +128,8 @@ static void stats_init(struct ctf__stats *stats) {
   stats->asserts_failed = 0;
   stats->expects_passed = 0;
   stats->expects_failed = 0;
+  stats->subtests_passed = 0;
+  stats->subtests_failed = 0;
 }
 
 static void test_element_init(struct ctf__test_element *el) {
@@ -465,6 +467,10 @@ int main(int argc, char *argv[]) {
         ctf__thread_data[j].stats.expects_passed;
       ctf__thread_data[0].stats.expects_failed +=
         ctf__thread_data[j].stats.expects_failed;
+      ctf__thread_data[0].stats.subtests_passed +=
+        ctf__thread_data[j].stats.subtests_passed;
+      ctf__thread_data[0].stats.subtests_failed +=
+        ctf__thread_data[j].stats.subtests_failed;
     }
     print_stats(&ctf__thread_data[0].stats);
   }

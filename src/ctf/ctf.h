@@ -106,6 +106,8 @@ struct ctf__stats {
   uintmax_t asserts_failed;
   uintmax_t expects_passed;
   uintmax_t expects_failed;
+  uintmax_t subtests_passed;
+  uintmax_t subtests_failed;
 };
 struct ctf__thread_data {
   struct ctf__test_element *test_elements;

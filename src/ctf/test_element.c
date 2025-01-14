@@ -362,27 +362,38 @@ void ctf__subtest_leave(uintptr_t thread_index) {
   sub = thread_data->subtest_current;
   parent = sub->parent;
   thread_data->subtest_current = parent;
-  if(sub->size > 0) return;
-  if(parent == NULL) {
-    for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
-      if(thread_data->test_elements[i].issubtest &&
-         thread_data->test_elements[i].el.subtest == sub) {
-        for(uintmax_t j = i; j < thread_data->test_elements_size - 1; j++)
-          thread_data->test_elements[j] = thread_data->test_elements[j + 1];
-        thread_data->test_elements_size--;
-        subtest_flat_delete(thread_index, sub);
-        break;
+  if(sub->size > 0) {
+    if(opt_statistics) {
+      subtest_status_fill(subtest_stack + thread_index, sub);
+      if(sub->status) {
+        thread_data->stats.subtests_failed++;
+      } else {
+        thread_data->stats.subtests_passed++;
       }
     }
-    return;
-  }
-  for(uintmax_t i = 0; i < parent->size; i++) {
-    if(parent->elements[i].issubtest && parent->elements[i].el.subtest == sub) {
-      for(uintmax_t j = i; j < parent->size - 1; j++)
-        parent->elements[j] = parent->elements[j + 1];
-      parent->size--;
-      subtest_flat_delete(thread_index, sub);
-      break;
+  } else {
+    if(parent == NULL) {
+      for(uintmax_t i = 0; i < thread_data->test_elements_size; i++) {
+        if(thread_data->test_elements[i].issubtest &&
+           thread_data->test_elements[i].el.subtest == sub) {
+          for(uintmax_t j = i; j < thread_data->test_elements_size - 1; j++)
+            thread_data->test_elements[j] = thread_data->test_elements[j + 1];
+          thread_data->test_elements_size--;
+          subtest_flat_delete(thread_index, sub);
+          break;
+        }
+      }
+    } else {
+      for(uintmax_t i = 0; i < parent->size; i++) {
+        if(parent->elements[i].issubtest &&
+           parent->elements[i].el.subtest == sub) {
+          for(uintmax_t j = i; j < parent->size - 1; j++)
+            parent->elements[j] = parent->elements[j + 1];
+          parent->size--;
+          subtest_flat_delete(thread_index, sub);
+          break;
+        }
+      }
     }
   }
 }
