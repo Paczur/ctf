@@ -27,6 +27,13 @@ static void buff_reserve(struct buff *buff, uintmax_t size) {
   if(buff->size + size >= buff->capacity) buff_resize(buff, buff->size + size);
 }
 
+static uintmax_t print_indent(struct buff *buff, int count) {
+  if(buff == NULL) return count;
+  memset(buff->buff + buff->size, ' ', count);
+  buff->size += count;
+  return 0;
+}
+
 static uintmax_t print_indicator(struct buff *buff, int status) {
   static const char print_unknown_color[] = "\x1b[33m";
   // Padding required in order to replace it with fail indicators easily
@@ -151,32 +158,38 @@ static uintmax_t print_name_converted(struct buff *buff, const char *name,
   return 0;
 }
 
+static uintmax_t find_last_word_boundary(const char *name, uintmax_t name_len) {
+  for(uintmax_t i = name_len - 1; i > 0; i--) {
+    if(name[i] == '_') return i;
+  }
+  return 0;
+}
+
 static uintmax_t print_wrapped_name(struct buff *buff, const char *name,
                                     uintmax_t name_len, uintmax_t indent) {
   uintmax_t after_indent;
-  uintmax_t times;
   uintmax_t full_size = 0;
+  uintmax_t index;
   after_indent = opt_wrap - indent;
-  times = name_len / after_indent;
-  if(buff == NULL) {
-    full_size += times * (indent + after_indent + 1) - indent;  // '\n' char
-    if(name_len % after_indent > 0)
-      full_size += indent + name_len % after_indent + 1;  // '\n' char
-    return full_size;
+
+  index = find_last_word_boundary(name, after_indent);
+  full_size += print_name_converted(buff, name, index);
+  name += index;
+  name_len -= index;
+
+  while(name_len > after_indent) {
+    full_size += print_indent(buff, indent);
+    index = find_last_word_boundary(name, after_indent);
+    full_size += print_name_converted(buff, name, index);
+    name += index;
+    name_len -= index;
   }
-  print_name_converted(buff, name, after_indent);
-  for(uintmax_t i = 1; i < times; i++) {
-    memset(buff->buff + buff->size, ' ', indent);
-    buff->size += indent;
-    print_name_converted(buff, name + i * after_indent, after_indent);
-  }
+
   if(name_len % after_indent > 0) {
-    memset(buff->buff + buff->size, ' ', indent);
-    buff->size += indent;
-    print_name_converted(buff, name + times * after_indent,
-                         name_len % after_indent);
+    full_size += print_indent(buff, indent);
+    full_size += print_name_converted(buff, name, name_len % after_indent);
   }
-  return 0;
+  return full_size;
 }
 
 static uintmax_t print_name_status(struct buff *buff, const char *name,
