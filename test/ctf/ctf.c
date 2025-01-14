@@ -621,12 +621,17 @@ CTF_TEST(
     ctf_fail("fail");
   }
 }
+CTF_TEST(
+  veryloooongonewordidentifierthatshardtoreadandhastobesplittotestwrapping) {
+  ctf_fail("fail");
+}
 CTF_GROUP(misc) = {
   msg_limit,
   print_buff_limit,
   not_mocked,
   empty_subtest,
   really_long_test_name_that_spans_over_multiple_lines_in_order_to_test_wrapping,
+  veryloooongonewordidentifierthatshardtoreadandhastobesplittotestwrapping,
 };
 
 CTF_TEST(char_expect_success) {
