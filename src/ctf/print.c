@@ -140,10 +140,23 @@ static uintmax_t print_indicator(struct buff *buff, int status) {
   return 0;
 }
 
-static uintmax_t print_name_converted(struct buff *buff, const char *name,
-                                      uintmax_t name_len) {
+static uintmax_t print_char(struct buff *buff, char c) {
+  if(buff == NULL) return 1;
+  buff->buff[buff->size++] = c;
+  return 0;
+}
+
+static uintmax_t print_string(struct buff *buff, const char *s, uintmax_t len) {
+  if(buff == NULL) return len;
+  memcpy(buff->buff + buff->size, s, len);
+  buff->size += len;
+  return 0;
+}
+
+static uintmax_t print_raw_name_converted(struct buff *buff, const char *name,
+                                          uintmax_t name_len) {
   uintmax_t last_index = 0;
-  if(buff == NULL) return name_len + 1;
+  if(buff == NULL) return name_len;
   for(uintmax_t i = 0; i < name_len; i++) {
     if(name[i] == '_') {
       memcpy(buff->buff + buff->size, name + last_index, i - last_index);
@@ -154,6 +167,14 @@ static uintmax_t print_name_converted(struct buff *buff, const char *name,
   }
   memcpy(buff->buff + buff->size, name + last_index, name_len - last_index);
   buff->size += name_len - last_index;
+  return 0;
+}
+
+static uintmax_t print_name_converted(struct buff *buff, const char *name,
+                                      uintmax_t name_len) {
+  uintmax_t full_size = 0;
+  full_size += print_raw_name_converted(buff, name, name_len);
+  if(buff == NULL) return full_size + 1;
   buff->buff[buff->size++] = '\n';
   return 0;
 }
@@ -172,15 +193,25 @@ static uintmax_t print_wrapped_name(struct buff *buff, const char *name,
   uintmax_t index;
   after_indent = opt_wrap - indent;
 
-  index = find_last_word_boundary(name, after_indent);
-  full_size += print_name_converted(buff, name, index);
+  if(!(index = find_last_word_boundary(name, after_indent))) {
+    index = after_indent - 1;
+    full_size += print_raw_name_converted(buff, name, index);
+    full_size += print_string(buff, "-\n", sizeof("-\n") - 1);
+  } else {
+    full_size += print_name_converted(buff, name, index);
+  }
   name += index;
   name_len -= index;
 
   while(name_len > after_indent) {
     full_size += print_indent(buff, indent);
-    index = find_last_word_boundary(name, after_indent);
-    full_size += print_name_converted(buff, name, index);
+    if(!(index = find_last_word_boundary(name, after_indent))) {
+      index = after_indent - 1;
+      full_size += print_raw_name_converted(buff, name, index);
+      full_size += print_string(buff, "-\n", sizeof("-\n") - 1);
+    } else {
+      full_size += print_name_converted(buff, name, index);
+    }
     name += index;
     name_len -= index;
   }
