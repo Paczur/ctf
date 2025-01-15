@@ -199,6 +199,7 @@ static uintmax_t print_wrapped_name(struct buff *buff, const char *name,
     full_size += print_string(buff, "-\n", sizeof("-\n") - 1);
   } else {
     full_size += print_name_converted(buff, name, index);
+    index++;
   }
   name += index;
   name_len -= index;
@@ -211,6 +212,7 @@ static uintmax_t print_wrapped_name(struct buff *buff, const char *name,
       full_size += print_string(buff, "-\n", sizeof("-\n") - 1);
     } else {
       full_size += print_name_converted(buff, name, index);
+      index++;
     }
     name += index;
     name_len -= index;
