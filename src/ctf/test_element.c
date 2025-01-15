@@ -154,6 +154,8 @@ static void states_increment(struct ctf__states *states) {
     states->capacity *= 2;
     states->states =
       realloc(states->states, sizeof(states->states[0]) * states->capacity);
+    for(uintmax_t i = states->size; i < states->capacity; i++)
+      state_init(states->states + i);
   }
 }
 

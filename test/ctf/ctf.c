@@ -405,9 +405,6 @@ CTF_TEST(mock_str_expect_success) {
   const char a[] = "a";
   const char b[] = "b";
   mock_spy(wrapped_strcmp) {
-    mock_expect_str(b, >=, a);
-    mock_expect_str(a, >=, a);
-    mock_expect_str(a, <=, b);
     mock_expect_nth_str(1, a, ==, a);
     mock_expect_nth_str(1, b, ==, b);
     mock_expect_nth_str(1, a, !=, b);
@@ -415,6 +412,9 @@ CTF_TEST(mock_str_expect_success) {
     mock_expect_nth_str(1, b, >, a);
     mock_expect_nth_str(1, a, <, b);
     mock_expect_nth_str(1, a, <=, a);
+    mock_expect_nth_str(1, b, >=, a);
+    mock_expect_nth_str(1, a, >=, a);
+    mock_expect_nth_str(1, a, <=, b);
     mock_expect_nth_str(2, b, ==, a);
     mock_expect_nth_str(2, a, ==, b);
     mock_expect_nth_str(2, a, !=, a);

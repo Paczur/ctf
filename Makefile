@@ -23,10 +23,10 @@ CFLAGS=$(BASE_CFLAGS)
 all: release
 
 release: CFLAGS += $(OPTIMIZE_FLAGS)
-release: dist doc
+release: dist
 
 debug: CFLAGS += $(DEBUG_FLAGS)
-debug: dist $(TEST_RUN)
+debug: $(TEST_RUN)
 
 check: $(TEST_RUN)
 

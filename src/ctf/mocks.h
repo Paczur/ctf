@@ -67,7 +67,6 @@ struct ctf__mock_bind {
   struct ctf__mock *mock;
   const void *f;
 };
-
 #define CTF__MOCK_TEMPLATE(mod, wrapped, real, ret_type, name, typed_comb,     \
                            typed, args)                                        \
   mod ret_type ctf__mock_checks_##name(                                        \
@@ -89,48 +88,42 @@ struct ctf__mock_bind {
     if(_data == NULL || !_data[thread_index].enabled) return real args;        \
     _mock_f = (ret_type(*) typed)_data[thread_index].mock_f;                   \
     _data[thread_index].call_count++;                                          \
-    ctf_subtest(name) {                                                        \
-      ctf_subtest(in)                                                          \
-        ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index, \
-                                0, NULL CTF__MACRO_VA_COMMA args);             \
-      for(uintmax_t i = 0; i < _data[thread_index].return_overrides_size;      \
-          i++) {                                                               \
-        if(_data[thread_index].return_overrides[i] ==                          \
-           _data[thread_index].call_count) {                                   \
-          temp = (*ctf__mock_return_##name)[thread_index].values[i];           \
-          temp_set = 1;                                                        \
-          for(uintmax_t j = i;                                                 \
-              j < _data[thread_index].return_overrides_size - 1; j++) {        \
-            (*ctf__mock_return_##name)[thread_index].values[j] =               \
-              (*ctf__mock_return_##name)[thread_index].values[j + 1];          \
-            _data[thread_index].return_overrides[j] =                          \
-              _data[thread_index].return_overrides[j + 1];                     \
-          }                                                                    \
-          _data[thread_index].return_overrides_size--;                         \
-          (*ctf__mock_return_##name)[thread_index].size--;                     \
-        } else if(_data[thread_index].return_overrides[i] == 0) {              \
-          temp = (*ctf__mock_return_##name)[thread_index].values[i];           \
-          temp_set = 1;                                                        \
-          break;                                                               \
+    ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index, 0,  \
+                            NULL CTF__MACRO_VA_COMMA args);                    \
+    for(uintmax_t i = 0; i < _data[thread_index].return_overrides_size; i++) { \
+      if(_data[thread_index].return_overrides[i] ==                            \
+         _data[thread_index].call_count) {                                     \
+        temp = (*ctf__mock_return_##name)[thread_index].values[i];             \
+        temp_set = 1;                                                          \
+        for(uintmax_t j = i;                                                   \
+            j < _data[thread_index].return_overrides_size - 1; j++) {          \
+          (*ctf__mock_return_##name)[thread_index].values[j] =                 \
+            (*ctf__mock_return_##name)[thread_index].values[j + 1];            \
+          _data[thread_index].return_overrides[j] =                            \
+            _data[thread_index].return_overrides[j + 1];                       \
         }                                                                      \
+        _data[thread_index].return_overrides_size--;                           \
+        (*ctf__mock_return_##name)[thread_index].size--;                       \
+      } else if(_data[thread_index].return_overrides[i] == 0) {                \
+        temp = (*ctf__mock_return_##name)[thread_index].values[i];             \
+        temp_set = 1;                                                          \
+        break;                                                                 \
       }                                                                        \
-      if(temp_set) {                                                           \
-        if(_mock_f != NULL) _mock_f args;                                      \
-        ctf_subtest(out) ctf__mock_checks_##name(                              \
+    }                                                                          \
+    if(temp_set) {                                                             \
+      if(_mock_f != NULL) _mock_f args;                                        \
+      ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index,   \
+                              1, &out CTF__MACRO_VA_COMMA args);               \
+    } else {                                                                   \
+      if(_mock_f != NULL) {                                                    \
+        out = _mock_f args;                                                    \
+        ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index, \
+                                1, &out CTF__MACRO_VA_COMMA args);             \
+      } else {                                                                 \
+        temp_set = 1;                                                          \
+        temp = ctf__mock_checks_##name(                                        \
           ctf__mock_struct_##name.states + thread_index, 1,                    \
           &out CTF__MACRO_VA_COMMA args);                                      \
-      } else {                                                                 \
-        if(_mock_f != NULL) {                                                  \
-          out = _mock_f args;                                                  \
-          ctf_subtest(out) ctf__mock_checks_##name(                            \
-            ctf__mock_struct_##name.states + thread_index, 1,                  \
-            &out CTF__MACRO_VA_COMMA args);                                    \
-        } else {                                                               \
-          temp_set = 1;                                                        \
-          ctf_subtest(out) temp = ctf__mock_checks_##name(                     \
-            ctf__mock_struct_##name.states + thread_index, 1,                  \
-            &out CTF__MACRO_VA_COMMA args);                                    \
-        }                                                                      \
       }                                                                        \
     }                                                                          \
     return (temp_set) ? temp : out;                                            \
@@ -138,38 +131,34 @@ struct ctf__mock_bind {
   mod ret_type ctf__mock_checks_##name(                                        \
     struct ctf__mock_state *ctf__mock_check_state, int ctf__mock_out,          \
     ret_type *ctf__mock_return_value CTF__MACRO_VA_COMMA typed_comb)
-#define CTF__MOCK_VOID_TEMPLATE(mod, wrapped, real, name, typed_comb, typed,   \
-                                args)                                          \
-  mod void ctf__mock_checks_##name(                                            \
-    struct ctf__mock_state *ctf__mock_check_state,                             \
-    int CTF__MACRO_VA_COMMA typed_comb);                                       \
-  mod struct ctf__mock ctf__mock_struct_##name;                                \
-  mod struct ctf__mock_struct_##name **ctf__mock_return_##name =               \
-    (struct ctf__mock_struct_##name **)&(ctf__mock_struct_##name.returns);     \
-  mod void ctf__mock_fn_real_##name typed { real args; }                       \
-  mod void wrapped typed {                                                     \
-    uintptr_t thread_index =                                                   \
-      (uintptr_t)pthread_getspecific(ctf__thread_index);                       \
-    struct ctf__mock_state *_data = ctf__mock_struct_##name.states;            \
-    void(*_mock_f) typed;                                                      \
-    if(_data == NULL || !_data[thread_index].enabled) {                        \
-      real args;                                                               \
-      return;                                                                  \
-    }                                                                          \
-    _mock_f = (void(*) typed)_data[thread_index].mock_f;                       \
-    _data[thread_index].call_count++;                                          \
-    ctf_subtest(name) {                                                        \
-      ctf_subtest(in)                                                          \
-        ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index, \
-                                0 CTF__MACRO_VA_COMMA args);                   \
-      if(_mock_f != NULL) _mock_f args;                                        \
-      ctf_subtest(out)                                                         \
-        ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index, \
-                                1 CTF__MACRO_VA_COMMA args);                   \
-    }                                                                          \
-  }                                                                            \
-  mod void ctf__mock_checks_##name(                                            \
-    struct ctf__mock_state *ctf__mock_check_state,                             \
+#define CTF__MOCK_VOID_TEMPLATE(mod, wrapped, real, name, typed_comb, typed, \
+                                args)                                        \
+  mod void ctf__mock_checks_##name(                                          \
+    struct ctf__mock_state *ctf__mock_check_state,                           \
+    int CTF__MACRO_VA_COMMA typed_comb);                                     \
+  mod struct ctf__mock ctf__mock_struct_##name;                              \
+  mod struct ctf__mock_struct_##name **ctf__mock_return_##name =             \
+    (struct ctf__mock_struct_##name **)&(ctf__mock_struct_##name.returns);   \
+  mod void ctf__mock_fn_real_##name typed { real args; }                     \
+  mod void wrapped typed {                                                   \
+    uintptr_t thread_index =                                                 \
+      (uintptr_t)pthread_getspecific(ctf__thread_index);                     \
+    struct ctf__mock_state *_data = ctf__mock_struct_##name.states;          \
+    void(*_mock_f) typed;                                                    \
+    if(_data == NULL || !_data[thread_index].enabled) {                      \
+      real args;                                                             \
+      return;                                                                \
+    }                                                                        \
+    _mock_f = (void(*) typed)_data[thread_index].mock_f;                     \
+    _data[thread_index].call_count++;                                        \
+    ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index,   \
+                            0 CTF__MACRO_VA_COMMA args);                     \
+    if(_mock_f != NULL) _mock_f args;                                        \
+    ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index,   \
+                            1 CTF__MACRO_VA_COMMA args);                     \
+  }                                                                          \
+  mod void ctf__mock_checks_##name(                                          \
+    struct ctf__mock_state *ctf__mock_check_state,                           \
     int ctf__mock_out CTF__MACRO_VA_COMMA typed_comb)
 
 #define CTF__MOCK_EXTERN_TEMPLATE(wrapped, real, ret_type, name, typed_comb, \
