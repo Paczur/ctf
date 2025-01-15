@@ -449,6 +449,7 @@ int main(int argc, char *argv[]) {
   }
   test_elements_init();
   ctf_main(argc - i, argv + i);
+  ctf_parallel_stop();
   if(opt_statistics) {
     for(int j = 1; j < ctf__opt_threads; j++) {
       ctf__thread_data[0].stats.groups_passed +=

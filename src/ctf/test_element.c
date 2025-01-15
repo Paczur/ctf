@@ -400,7 +400,7 @@ void ctf__subtest_leave(uintptr_t thread_index) {
   }
 }
 
-static struct ctf__states *states_last(uintptr_t thread_index) {
+struct ctf__states *ctf__states_last(uintptr_t thread_index) {
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   struct ctf__subtest *subtest = thread_data->subtest_current;
   if(subtest == NULL) {
@@ -419,7 +419,7 @@ static struct ctf__states *states_last(uintptr_t thread_index) {
 static struct ctf__state *state_next(uintptr_t thread_index) {
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   struct ctf__subtest *const subtest = thread_data->subtest_current;
-  struct ctf__states *states = states_last(thread_index);
+  struct ctf__states *states = ctf__states_last(thread_index);
   if(states == NULL) {
     if(subtest == NULL) {
       test_elements_increment(thread_index);

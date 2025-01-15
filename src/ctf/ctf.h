@@ -246,6 +246,7 @@ void *ctf__cleanup_malloc(uintmax_t size, uintptr_t thread_index);
 void ctf__groups_run(int count, ...);
 void ctf__subtest_enter(uintptr_t thread_index, const char *name);
 void ctf__subtest_leave(uintptr_t thread_index);
+struct ctf__states *ctf__states_last(uintptr_t thread_index);
 
 void ctf_main(int argc, char *argv[]);
 void ctf_group_run(struct ctf__group group);

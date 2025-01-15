@@ -372,31 +372,33 @@ static void print_mem(struct ctf__state *state, const void *a, const char *cmp,
   MSG_SPRINTF_APPEND(state->msg, "})");
 }
 
-void ctf__assert_fold(uintmax_t count, const char *msg, int line,
-                      const char *file) {
-  ctf_assert_hide(count);
-  ctf__pass(msg, line, file);
+int ctf__expect_fold(uintmax_t count, const char *msg, int line,
+                     const char *file) {
+  int ret = ctf_expect_hide(count);
+  if(!ret) ctf__pass(msg, line, file);
+  return ret;
 }
 
-void ctf_assert_hide(uintmax_t count) {
+int ctf_expect_hide(uintmax_t count) {
   intptr_t thread_index = (intptr_t)pthread_getspecific(ctf__thread_index);
-  struct ctf__states *states = states_last(thread_index);
-  if(states == NULL) return;
+  struct ctf__states *states = ctf__states_last(thread_index);
+  if(states == NULL) return 1;
   if(states->size <= count) {
     for(uintmax_t i = 0; i < states->size; i++) {
       if(states->states[i].status) {
-        longjmp(ctf__assert_jmp_buff[thread_index], 1);
+        return 1;
       }
     }
-    states_delete(thread_index, states);
+    states->size = 0;
   } else {
     for(uintmax_t i = states->size - count; i < states->size; i++) {
       if(states->states[i].status) {
-        longjmp(ctf__assert_jmp_buff[thread_index], 1);
+        return 1;
       }
     }
     states->size -= count;
   }
+  return 0;
 }
 
 void ctf_assert_barrier(void) {

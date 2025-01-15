@@ -10,16 +10,16 @@
 int ctf__ea_arr(const void *a, const char *cmp, const void *b, uintmax_t la,
                 uintmax_t lb, const char *a_str, const char *b_str, int assert,
                 uintmax_t step, int sign, int type, int line, const char *file);
-void ctf__assert_fold(uintmax_t count, const char *msg, int line,
-                      const char *file);
+int ctf__expect_fold(uintmax_t count, const char *msg, int line,
+                     const char *file);
 uintmax_t ctf__pass(const char *, int, const char *, ...);
 uintmax_t ctf__fail(const char *, int, const char *, ...);
 uintmax_t ctf__ea_msg(int, const char *, int, int, const char *, ...);
 
 void ctf_assert_barrier(void);
-void ctf_assert_hide(uintmax_t count);
-#define ctf_assert_fold(count, msg) \
-  ctf__assert_fold(count, msg, __LINE__, __FILE__)
+int ctf_expect_hide(uintmax_t count);
+#define ctf_expect_fold(count, msg) \
+  ctf__expect_fold(count, msg, __LINE__, __FILE__)
 #define ctf_pass(m, ...) ctf__pass(m, __LINE__, __FILE__, ##__VA_ARGS__)
 #define ctf_fail(m, ...) ctf__fail(m, __LINE__, __FILE__, ##__VA_ARGS__)
 #define ctf_assert_true(a) \
@@ -374,7 +374,7 @@ __LINE__, __FILE__)
 #define expect_msg(p, m, ...) \
   ctf__ea_msg(p, m, 0, __LINE__, __FILE__, ##__VA_ARGS__)
 
-COMB(`ALIAS', `(assert_barrier(), assert_fold(count, msg))')
+COMB(`ALIAS', `(assert_barrier(), expect_fold(count, msg))')
 
 EA_FACTORY(`EA_TEMPLATE',     `(PRIMITIVE_TYPES, str)', `')
 EA_FACTORY(`EA_MEM_TEMPLATE', `(PRIMITIVE_TYPES)', `')

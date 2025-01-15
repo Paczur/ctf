@@ -233,7 +233,8 @@ static void mock_check_base(struct ctf__mock_state *state, const char *v,
     if(strcmp(state->checks[i].var, v)) continue;
     if(state->checks[i].call_count > 0 &&
        state->checks[i].call_count != state->call_count)
-      state->checks[i].cmp = NULL;
+      continue;
+    state->checks[i].cmp = NULL;
     removed++;
   }
   for(uintmax_t i = 0; i < state->checks_count; i++) {

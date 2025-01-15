@@ -86,6 +86,8 @@ struct ctf__mock_bind {
     ret_type out;                                                              \
     int temp_set = 0;                                                          \
     if(_data == NULL || !_data[thread_index].enabled) return real args;        \
+    struct ctf__states *states = ctf__states_last(thread_index);               \
+    uintmax_t states_size = states ? states->size : 0;                         \
     _mock_f = (ret_type(*) typed)_data[thread_index].mock_f;                   \
     _data[thread_index].call_count++;                                          \
     ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index, 0,  \
@@ -126,6 +128,8 @@ struct ctf__mock_bind {
           &out CTF__MACRO_VA_COMMA args);                                      \
       }                                                                        \
     }                                                                          \
+    if(states == NULL) states = ctf__states_last(thread_index);                \
+    if(states != NULL) ctf_expect_fold(states->size - states_size, #name);     \
     return (temp_set) ? temp : out;                                            \
   }                                                                            \
   mod ret_type ctf__mock_checks_##name(                                        \
@@ -149,6 +153,8 @@ struct ctf__mock_bind {
       real args;                                                             \
       return;                                                                \
     }                                                                        \
+    struct ctf__states *states = ctf__states_last(thread_index);             \
+    uintmax_t states_size = states ? states->size : 0;                       \
     _mock_f = (void(*) typed)_data[thread_index].mock_f;                     \
     _data[thread_index].call_count++;                                        \
     ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index,   \
@@ -156,6 +162,8 @@ struct ctf__mock_bind {
     if(_mock_f != NULL) _mock_f args;                                        \
     ctf__mock_checks_##name(ctf__mock_struct_##name.states + thread_index,   \
                             1 CTF__MACRO_VA_COMMA args);                     \
+    if(states == NULL) states = ctf__states_last(thread_index);              \
+    if(states != NULL) ctf_expect_fold(states->size - states_size, #name);   \
   }                                                                          \
   mod void ctf__mock_checks_##name(                                          \
     struct ctf__mock_state *ctf__mock_check_state,                           \
@@ -450,12 +458,14 @@ __FILE__);',
 define(`MOCK_CHECK', `#define $1mock_check_$2(v) ctf__mock_check_$2(ctf__mock_check_state, v, #v, (ctf_mock_out) ? CTF__MOCK_CHECK_DIR_OUT : CTF__MOCK_CHECK_DIR_IN)')
 define(`MOCK_CHECK_STRING', `#define $1mock_check_str(v) \
 do { \
+if(ctf_mock_in) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v, (ctf_mock_out) ? CTF__MOCK_CHECK_DIR_OUT : CTF__MOCK_CHECK_DIR_IN); \
 ctf__mock_check_str(ctf__mock_check_state, v, #v, (ctf_mock_out) ? CTF__MOCK_CHECK_DIR_OUT : CTF__MOCK_CHECK_DIR_IN); \
 } while(0)')
 define(`MOCK_CHECK_MEM',
 `format(`#define $1mock_check_mem_$2(v) \
 do { \
+if(ctf_mock_in) \
 ctf__mock_check_ptr(ctf__mock_check_state, v, #v, (ctf_mock_out) ? CTF__MOCK_CHECK_DIR_OUT : CTF__MOCK_CHECK_DIR_IN); \
 ctf__mock_check_mem(ctf__mock_check_state, v, #v, (ctf_mock_out) ? CTF__MOCK_CHECK_DIR_OUT : CTF__MOCK_CHECK_DIR_IN, sizeof(*(v)), %d);\
 } while(0)', ifelse(`$2',`int', 1, `$2',`float',2,0))')
