@@ -221,28 +221,6 @@ struct ctf__mock_bind {
 #define CTF_MOCK_VOID(name) \
   CTF__MOCK_VOID_TEMPLATE(, __wrap_##name, __real_##name, name, (), (void), ())
 
-#define CTF_MOCK_CUSTOM_STATIC(real, ret_type, name, typed, args) \
-  CTF__MOCK_TEMPLATE(static, name, real, ret_type, name, typed, typed, args)
-#define CTF_MOCK_VOID_ARG_CUSTOM_STATIC(real, ret_type, name) \
-  CTF__MOCK_TEMPLATE(static, name, real, ret_type, name, (), (void), ())
-#define CTF_MOCK_VOID_RET_CUSTOM_STATIC(real, name, typed, args) \
-  CTF__MOCK_VOID_TEMPLATE(static, name, real, name, typed, typed, args)
-#define CTF_MOCK_VOID_CUSTOM_STATIC(real, name) \
-  CTF__MOCK_VOID_TEMPLATE(static, name, real, name, (), (void), ())
-
-#define CTF_MOCK_STATIC(ret_type, name, typed, args)                       \
-  CTF__MOCK_TEMPLATE(static, __wrap_##name, __real_##name, ret_type, name, \
-                     typed, typed, args)
-#define CTF_MOCK_VOID_ARG_STATIC(ret_type, name)                               \
-  CTF__MOCK_TEMPLATE(static, __wrap_##name, __real_##name, ret_type, name, (), \
-                     (void), ())
-#define CTF_MOCK_VOID_RET_STATIC(name, typed, args)                          \
-  CTF__MOCK_VOID_TEMPLATE(static, __wrap_##name, __real_##name, name, typed, \
-                          typed, args)
-#define CTF_MOCK_VOID_STATIC(name)                                        \
-  CTF__MOCK_VOID_TEMPLATE(static, __wrap_##name, __real_##name, name, (), \
-                          (void), ())
-
 #define CTF_MOCK_EXTERN(ret_type, name, typed)                            \
   CTF__MOCK_EXTERN_TEMPLATE(__wrap_##name, __real_##name, ret_type, name, \
                             typed, typed)
@@ -513,6 +491,7 @@ COMB(`ALIAS',
      `(mock_global(name, f), mock(name, f), mock_spy(name),
        unmock(), mock_select(fn), mock_group(name), unmock_group(name),
        mock_out, mock_return_value,
+       mock_reset(fn),
        mock_in,
        mock_call_count, mock_real(name), mock_check_select(name),
        mock_return(val), mock_return_nth(n, val))')
