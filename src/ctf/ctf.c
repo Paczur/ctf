@@ -229,8 +229,10 @@ static void group_run_helper(struct ctf__group group, struct buff *buff) {
   group.teardown();
   temp_size = buff->size;
   buff->size = 0;
-  print_name_status(buff, group.name, group_name_len, group_status, 0);
-  buff->size = temp_size;
+  if(opt_verbosity > 0 || group_status) {
+    print_name_status(buff, group.name, group_name_len, group_status, 0);
+    buff->size = temp_size;
+  }
   if(opt_statistics) {
     if(group_status) {
       thread_data->stats.groups_failed++;

@@ -33,7 +33,7 @@ check: $(TEST_RUN)
 clean:
 	rm -rf build bin dist
 
-dist: dist/include/ctf/ctf.h dist/lib64/libctf.so dist/share/doc/ctf/ctf.pdf
+dist: dist/include/ctf/ctf.h dist/lib64/libctf.so
 
 install: dist
 	install -D dist/include/ctf/ctf.h /usr/include/ctf/ctf.h
