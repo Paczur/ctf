@@ -232,28 +232,22 @@ static uintmax_t print_name_status(struct buff *buff, const char *name,
   const uintmax_t indent =
     level * INDENT_PER_LEVEL + PRINT_INDICATOR_LENGTH + 1;
 
-  if(buff == NULL) {
-    full_size += level * INDENT_PER_LEVEL;
+  if(buff != NULL) {
+    memset(buff->buff + buff->size, ' ', level * INDENT_PER_LEVEL);
+    buff->size += level * INDENT_PER_LEVEL;
+    print_indicator(buff, status);
+    buff->buff[buff->size++] = ' ';
+  } else {
+    full_size += level * INDENT_PER_LEVEL + 1;
     full_size += print_indicator(NULL, status);
-    full_size++;  // ' ' char
-    if(opt_wrap > 0 && full_size + name_len > opt_wrap) {
-      full_size += print_wrapped_name(NULL, name, name_len, indent);
-    } else {
-      full_size += print_name_converted(NULL, name, name_len);
-    }
-    return full_size;
   }
-  memset(buff->buff + buff->size, ' ', level * INDENT_PER_LEVEL);
-  buff->size += level * INDENT_PER_LEVEL;
-  print_indicator(buff, status);
-  buff->buff[buff->size++] = ' ';
 
   if(opt_wrap > 0 && indent + name_len > opt_wrap) {
-    print_wrapped_name(buff, name, name_len, indent);
+    full_size += print_wrapped_name(buff, name, name_len, indent);
   } else {
-    print_name_converted(buff, name, name_len);
+    full_size += print_name_converted(buff, name, name_len);
   }
-  return 0;
+  return full_size;
 }
 
 static uintmax_t print_state(struct buff *buff, const struct ctf__state *state,
