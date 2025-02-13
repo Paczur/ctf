@@ -181,6 +181,10 @@ static void test_cleanup(uintptr_t thread_index) {
   struct ctf__thread_data *thread_data = ctf__thread_data + thread_index;
   for(uintmax_t i = 0; i < thread_data->mock_reset_stack_size; i++) {
     thread_data->mock_reset_stack[i]->states[thread_index].mock_f = NULL;
+    thread_data->mock_reset_stack[i]->states[thread_index].checks_count = 0;
+    thread_data->mock_reset_stack[i]
+      ->states[thread_index]
+      .return_overrides_size = 0;
   }
   thread_data->mock_reset_stack_size = 0;
 }
